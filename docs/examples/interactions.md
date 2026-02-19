@@ -167,6 +167,29 @@ zchrome scrollintoview "#footer"
 zchrome scrollinto @e15    # Alias
 ```
 
+### Drag and Drop
+
+```bash
+# Drag element to another element
+zchrome drag "#draggable-item" "#drop-zone"
+zchrome drag @e3 @e7
+```
+
+### File Upload
+
+```bash
+# Upload a single file to a file input
+zchrome upload "#file-input" document.pdf
+zchrome upload @e5 ./report.xlsx
+
+# Upload multiple files
+zchrome upload "input[type=file]" file1.txt file2.txt file3.txt
+
+# Note: This only selects files, does not submit the form
+# Click the submit button afterwards if needed
+zchrome click "#upload-btn"
+```
+
 ## Complete Examples
 
 ### Login Flow
@@ -253,6 +276,28 @@ zchrome snapshot -i -s "#results"
 
 # Click first result
 zchrome click @e1
+```
+
+### File Upload Flow
+
+```bash
+# Navigate to upload page
+zchrome navigate https://example.com/upload
+
+# Take snapshot to find the file input
+zchrome snapshot -i
+
+# Upload file(s) - relative paths work
+zchrome upload @e4 ./documents/report.pdf
+
+# Or use CSS selector
+zchrome upload "input[type=file]" invoice.pdf receipt.pdf
+
+# Click submit to complete the upload
+zchrome click "#submit-upload"
+
+# Verify upload success
+zchrome screenshot --output upload-result.png
 ```
 
 ## Getting Information

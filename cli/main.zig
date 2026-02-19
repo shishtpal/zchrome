@@ -98,6 +98,7 @@ const Args = struct {
         scrollintoview,
         drag,
         get,
+        upload,
         help,
     };
 };
@@ -144,7 +145,7 @@ pub fn main(init: std.process.Init) !void {
     const needs_target = switch (args.command) {
         .navigate, .screenshot, .pdf, .evaluate, .dom, .network, .cookies, .snapshot,
         .click, .dblclick, .focus, .@"type", .fill, .select, .hover, .check, .uncheck,
-        .scroll, .scrollintoview, .drag, .get => true,
+        .scroll, .scrollintoview, .drag, .get, .upload => true,
         .version, .list_targets, .pages, .interactive, .open, .connect, .help => false,
     };
     if (needs_target and args.use_target == null and config.last_target != null) {
@@ -226,6 +227,7 @@ pub fn main(init: std.process.Init) !void {
             .scrollintoview => try cmdScrollIntoView(browser, args, allocator),
             .drag => try cmdDrag(browser, args, allocator),
             .get => try cmdGet(browser, args, allocator),
+            .upload => try cmdUpload(browser, args, allocator),
             .open, .connect, .help => unreachable,
         }
     }
@@ -260,6 +262,7 @@ fn executeDirectly(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocat
         .scrollintoview => try cmdScrollIntoViewWithSession(session, args, allocator),
         .drag => try cmdDragWithSession(session, args, allocator),
         .get => try cmdGetWithSession(session, args, allocator),
+        .upload => try cmdUploadWithSession(session, args, allocator),
         .version => try cmdVersion(browser, allocator),
         .list_targets => try cmdListTargets(browser, allocator),
         .pages => try cmdPages(browser, allocator),
@@ -309,6 +312,7 @@ fn executeOnTarget(browser: *cdp.Browser, target_id: []const u8, args: Args, all
         .scrollintoview => try cmdScrollIntoViewWithSession(session, args, allocator),
         .drag => try cmdDragWithSession(session, args, allocator),
         .get => try cmdGetWithSession(session, args, allocator),
+        .upload => try cmdUploadWithSession(session, args, allocator),
         else => std.debug.print("Error: Command not supported with --use\n", .{}),
     }
 }
@@ -1420,6 +1424,44 @@ fn cmdDragWithSession(session: *cdp.Session, args: Args, allocator: std.mem.Allo
     std.debug.print("Dragged: {s} -> {s}\n", .{ args.positional[0], args.positional[1] });
 }
 
+/// Upload command - upload files to file input element
+fn cmdUpload(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
+    const pages = try browser.pages();
+    defer {
+        for (pages) |*p| {
+            var page_info = p.*;
+            page_info.deinit(allocator);
+        }
+        allocator.free(pages);
+    }
+
+    const page = findFirstRealPage(pages) orelse {
+        std.debug.print("Error: No pages open\n", .{});
+        return error.NoPages;
+    };
+
+    var target = cdp.Target.init(browser.connection);
+    const session_id = try target.attachToTarget(allocator, page.target_id, true);
+    var session = try cdp.Session.init(session_id, browser.connection, allocator);
+    defer session.deinit();
+
+    try cmdUploadWithSession(session, args, allocator);
+}
+
+fn cmdUploadWithSession(session: *cdp.Session, args: Args, allocator: std.mem.Allocator) !void {
+    if (args.positional.len < 2) {
+        std.debug.print("Usage: zchrome upload <selector> <file1> [file2...]\n", .{});
+        return;
+    }
+
+    var resolved = try actions_mod.resolveSelector(allocator, args.io, args.positional[0]);
+    defer resolved.deinit();
+
+    const files = args.positional[1..];
+    try actions_mod.uploadFiles(session, allocator, args.io, &resolved, files);
+    std.debug.print("Uploaded {} file(s) to: {s}\n", .{ files.len, args.positional[0] });
+}
+
 /// Get command - retrieve information from elements and page
 fn cmdGet(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
     const pages = try browser.pages();
@@ -1900,6 +1942,7 @@ fn printUsage() void {
         \\  scroll <dir> [px]        Scroll page (up/down/left/right) [default: 300px]
         \\  scrollintoview <sel>     Scroll element into view (alias: scrollinto)
         \\  drag <src> <tgt>         Drag and drop from source to target element
+        \\  upload <sel> <files>     Upload files to file input
         \\
         \\GETTERS:
         \\  get text <sel>           Get text content
@@ -1953,6 +1996,8 @@ fn printUsage() void {
         \\  zchrome scroll down 500
         \\  zchrome scrollinto "#footer"
         \\  zchrome drag @e3 @e7                    # Drag element to another
+        \\  zchrome upload "#file-input" /path/to/file.pdf  # Upload file
+        \\  zchrome upload @e5 doc1.txt doc2.txt   # Upload multiple files
         \\
         \\  # Get element information
         \\  zchrome get text @e3                   # Get text content by ref

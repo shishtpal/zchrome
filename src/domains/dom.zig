@@ -134,6 +134,14 @@ pub const DOM = struct {
         });
     }
 
+    /// Set files for file input element (for file uploads)
+    pub fn setFileInputFiles(self: *Self, node_id: i64, files: []const []const u8) !void {
+        _ = try self.session.sendCommand("DOM.setFileInputFiles", .{
+            .node_id = node_id,
+            .files = files,
+        });
+    }
+
     /// Get box model
     pub fn getBoxModel(self: *Self, allocator: std.mem.Allocator, node_id: i64) !BoxModel {
         const result = try self.session.sendCommand("DOM.getBoxModel", .{

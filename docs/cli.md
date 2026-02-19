@@ -579,6 +579,49 @@ zchrome scrollintoview "#footer"
 zchrome scrollinto @e15
 ```
 
+### drag
+
+Drag an element to another element.
+
+```bash
+zchrome drag <source-selector> <target-selector>
+```
+
+**Example:**
+
+```bash
+zchrome drag "#draggable" "#dropzone"
+zchrome drag @e3 @e7
+```
+
+### upload
+
+Upload files to a file input element. This sets the files on the input without submitting the form.
+
+```bash
+zchrome upload <selector> <file1> [file2...]
+```
+
+**Parameters:**
+- `<selector>` - CSS selector or snapshot ref for the file input element
+- `<file1> [file2...]` - One or more file paths (relative or absolute)
+
+**Example:**
+
+```bash
+# Single file upload
+zchrome upload "#file-input" document.pdf
+zchrome upload "input[type=file]" ./report.xlsx
+
+# Multiple files
+zchrome upload @e5 file1.txt file2.txt file3.txt
+
+# Absolute path
+zchrome upload "#upload" "C:\Users\name\Documents\report.pdf"
+```
+
+**Note:** File paths are automatically converted to absolute paths. The command only selects the files - it does not submit any form. Use `click` on the submit button afterwards if needed.
+
 ## Getters
 
 ### get text

@@ -32,7 +32,8 @@ pub const Session = struct {
         method: []const u8,
         params: anytype,
     ) !std.json.Value {
-        return self.connection.sendCommand(method, params, self.id);
+        const sid = if (self.id.len > 0) self.id else null;
+        return self.connection.sendCommand(method, params, sid);
     }
 
     /// Detach from the target

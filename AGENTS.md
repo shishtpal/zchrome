@@ -242,6 +242,21 @@ zig build test
 1. Add command to `Args.Command` enum in `cli/main.zig`
 2. Implement `cmd<Command>` function
 3. Add to switch statement in `main()`
+4. If command supports `--use` flag, implement `cmd<Command>WithSession` variant
+
+### Using --use Flag
+
+The `--use <target-id>` flag allows commands to run on existing pages:
+```bash
+cdp-cli --url $url pages  # Get target IDs
+cdp-cli --url $url --use <target-id> evaluate "document.title"
+```
+
+Implementation:
+- Parse `--use` flag in `parseArgs()`
+- Store target ID in `Args.use_target`
+- Call `executeOnTarget()` instead of normal command flow
+- Create session from target ID and call `cmd<Command>WithSession()`
 
 ### Fixing Memory Leaks
 

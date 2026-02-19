@@ -204,8 +204,8 @@ defer browser.close();
 zchrome includes a command-line tool for quick tasks:
 
 ```bash
-# Build the CLI
-zig build
+# Build the CLI (use ReleaseFast to avoid debug allocator errors)
+zig build -Doptimize=ReleaseFast
 
 # Navigate and print title
 ./zig-out/bin/cdp-cli navigate https://example.com
@@ -224,6 +224,38 @@ zig build
 
 # Get browser version
 ./zig-out/bin/cdp-cli version
+```
+
+### Working with Existing Pages
+
+Connect to a running Chrome instance and operate on existing pages:
+
+```bash
+# Start Chrome with debugging
+chrome --remote-debugging-port=9222 --user-data-dir=/tmp/chrome-profile
+
+# Get the browser WebSocket URL
+# PowerShell:
+$url = (Invoke-RestMethod http://127.0.0.1:9222/json/version).webSocketDebuggerUrl
+
+# List all open pages
+./zig-out/bin/cdp-cli --url $url pages
+
+# Output:
+# TARGET ID                                 TITLE                          URL
+# --------------------------------------------------------------------------------------------------------------------------
+# F8011F4EDE26C3319EC2D2F8ABEA1D96          DevTools                       devtools://devtools/...
+# 75E5402CE67C63D19659EEFDC1CF292D          Example Domain                 https://example.com/
+# Total: 2 page(s)
+
+# Execute JavaScript on an existing page
+./zig-out/bin/cdp-cli --url $url --use 75E5402CE67C63D19659EEFDC1CF292D evaluate "document.title"
+
+# Navigate an existing page
+./zig-out/bin/cdp-cli --url $url --use 75E5402CE67C63D19659EEFDC1CF292D navigate https://example.org
+
+# Take screenshot of existing page
+./zig-out/bin/cdp-cli --url $url --use 75E5402CE67C63D19659EEFDC1CF292D screenshot --output page.png
 ```
 
 ## Next Steps

@@ -61,13 +61,15 @@ pub const Target = struct {
     }
 
     /// Attach to a target
-    pub fn attachToTarget(self: *Self, target_id: []const u8, flatten: bool) ![]const u8 {
+    /// Returns owned session ID string (caller must free)
+    pub fn attachToTarget(self: *Self, allocator: std.mem.Allocator, target_id: []const u8, flatten: bool) ![]const u8 {
         const result = try self.connection.sendCommand("Target.attachToTarget", .{
-            .target_id = target_id,
+            .targetId = target_id,
             .flatten = flatten,
         }, null);
 
-        return try json_util.getString(result, "sessionId");
+        const session_id = try json_util.getString(result, "sessionId");
+        return try allocator.dupe(u8, session_id);
     }
 
     /// Detach from a target

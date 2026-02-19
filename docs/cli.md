@@ -50,69 +50,97 @@ cdp-cli navigate https://example.com
 
 ### screenshot
 
-Navigate to a URL and capture a PNG screenshot.
+Capture a PNG screenshot.
 
 ```bash
+# Create new page and navigate
 cdp-cli screenshot <url> [--output <path>]
+
+# Or use existing page (no URL needed)
+cdp-cli --url $url --use <target-id> screenshot [--output <path>]
 ```
 
 **Example:**
 
 ```bash
+# Create new page
 cdp-cli screenshot https://example.com --output page.png
+
+# Use existing page
+cdp-cli --url $url --use 75E5402CE67C63D19659EEFDC1CF292D screenshot --output page.png
 ```
 
 ### pdf
 
-Navigate to a URL and generate a PDF.
+Generate a PDF.
 
 ```bash
+# Create new page and navigate
 cdp-cli pdf <url> [--output <path>]
+
+# Or use existing page (no URL needed)
+cdp-cli --url $url --use <target-id> pdf [--output <path>]
 ```
 
 **Example:**
 
 ```bash
+# Create new page
 cdp-cli pdf https://example.com --output page.pdf
+
+# Use existing page
+cdp-cli --url $url --use 75E5402CE67C63D19659EEFDC1CF292D pdf --output page.pdf
 ```
 
 ### evaluate
 
-Navigate to a URL and evaluate a JavaScript expression.
+Evaluate a JavaScript expression.
 
 ```bash
+# Create new page and navigate
 cdp-cli evaluate <url> <expression>
+
+# Or use existing page (no URL needed)
+cdp-cli --url $url --use <target-id> evaluate <expression>
 ```
 
 **Example:**
 
 ```bash
+# Create new page
 cdp-cli evaluate https://example.com "document.title"
 # Output: Example Domain
 
 cdp-cli evaluate https://example.com "document.links.length"
 # Output: 1
 
-cdp-cli evaluate https://example.com "location.href"
-# Output: https://example.com/
+# Use existing page
+cdp-cli --url $url --use 75E5402CE67C63D19659EEFDC1CF292D evaluate "document.title"
+# Output: Result: Example Domain
 ```
 
 ### dom
 
-Navigate to a URL, query a CSS selector, and print the outer HTML.
+Query a CSS selector and print the outer HTML.
 
 ```bash
+# Create new page and navigate
 cdp-cli dom <url> <selector>
+
+# Or use existing page (no URL needed)
+cdp-cli --url $url --use <target-id> dom <selector>
 ```
 
 **Example:**
 
 ```bash
+# Create new page
 cdp-cli dom https://example.com "h1"
 # Output: <h1>Example Domain</h1>
 
-cdp-cli dom https://example.com "p"
-# Output: <p>This domain is...</p>
+# Use existing page
+cdp-cli --url $url --use 75E5402CE67C63D19659EEFDC1CF292D dom "h1"
+# Output: <h1>Example Domain</h1>
 ```
 
 ### network
@@ -129,16 +157,24 @@ Network monitoring is not yet fully implemented in the CLI.
 
 ### cookies
 
-Navigate to a URL and dump cookies.
+Dump cookies from a page.
 
 ```bash
+# Create new page and navigate
 cdp-cli cookies <url>
+
+# Or use existing page (no URL needed)
+cdp-cli --url $url --use <target-id> cookies
 ```
 
 **Example:**
 
 ```bash
+# Create new page
 cdp-cli cookies https://example.com
+
+# Use existing page
+cdp-cli --url $url --use 75E5402CE67C63D19659EEFDC1CF292D cookies
 
 # Output:
 # Name                           Value                                    Domain
@@ -186,6 +222,69 @@ cdp-cli list-targets
 # 1234567890ABCDEF...                      page            New Tab
 # FEDCBA0987654321...                      page            Example Domain
 ```
+
+### pages
+
+List all open pages with their target IDs. This is useful for finding the target ID to use with the `--use` flag.
+
+```bash
+cdp-cli --url <ws-url> pages
+```
+
+**Example:**
+
+```bash
+cdp-cli --url ws://127.0.0.1:9222/devtools/browser/... pages
+
+# Output:
+# TARGET ID                                 TITLE                          URL
+# --------------------------------------------------------------------------------------------------------------------------
+# F8011F4EDE26C3319EC2D2F8ABEA1D96          DevTools                       devtools://devtools/...
+# 75E5402CE67C63D19659EEFDC1CF292D          Example Domain                 https://example.com/
+# Total: 2 page(s)
+```
+
+## Using --use Flag
+
+Execute commands on existing pages by specifying the target ID with the `--use` flag. This allows you to operate on already-open pages instead of creating new ones.
+
+```bash
+cdp-cli --url <ws-url> --use <target-id> <command> [command-args...]
+```
+
+**Key Difference:**
+- **Without `--use`**: Commands like `screenshot <url>` create a new page, navigate to the URL, then execute
+- **With `--use`**: Commands like `screenshot` operate directly on the existing page (no URL parameter needed)
+
+**Parameters:**
+- `--use <target-id>` - Target ID from the `pages` command
+- `<command>` - Any supported command (navigate, screenshot, pdf, evaluate, dom, cookies)
+- `[command-args...]` - Arguments for the command (URL not needed for most commands)
+
+**Examples:**
+
+```bash
+# List pages to get target ID
+cdp-cli --url $url pages
+
+# Evaluate JavaScript on an existing page (no URL needed)
+cdp-cli --url $url --use 75E5402CE67C63D19659EEFDC1CF292D evaluate "document.title"
+# Output: Result: Example Domain
+
+# Navigate an existing page to new URL
+cdp-cli --url $url --use 75E5402CE67C63D19659EEFDC1CF292D navigate https://example.org
+
+# Take screenshot of existing page (no URL needed)
+cdp-cli --url $url --use 75E5402CE67C63D19659EEFDC1CF292D screenshot --output page.png
+
+# Query DOM on existing page (no URL needed)
+cdp-cli --url $url --use 75E5402CE67C63D19659EEFDC1CF292D dom "h1"
+
+# Dump cookies from existing page (no URL needed)
+cdp-cli --url $url --use 75E5402CE67C63D19659EEFDC1CF292D cookies
+```
+
+**Note:** The `--use` flag requires connecting to the browser-level WebSocket URL (`/devtools/browser/...`), not a page-specific URL.
 
 ### interactive
 

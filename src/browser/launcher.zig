@@ -111,11 +111,16 @@ pub const Browser = struct {
         return self;
     }
 
+    pub const ConnectOptions = struct {
+        verbose: bool = false,
+    };
+
     /// Connect to an existing Chrome instance
-    pub fn connect(ws_url: []const u8, allocator: std.mem.Allocator, io: std.Io) !*Self {
+    pub fn connect(ws_url: []const u8, allocator: std.mem.Allocator, io: std.Io, opts: ConnectOptions) !*Self {
         const connection = try Connection.open(ws_url, .{
             .allocator = allocator,
             .io = io,
+            .verbose = opts.verbose,
         });
 
         const self = try allocator.create(Self);

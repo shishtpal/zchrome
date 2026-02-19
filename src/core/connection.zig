@@ -175,7 +175,9 @@ pub const Connection = struct {
         }, null);
 
         const session_id = try json_util.getString(result, "sessionId");
-        return Session.init(session_id, self, self.allocator);
+        // Dupe the session_id since result memory may be invalidated
+        const owned_id = try self.allocator.dupe(u8, session_id);
+        return Session.init(owned_id, self, self.allocator);
     }
 
     /// Destroy a session

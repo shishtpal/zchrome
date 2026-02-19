@@ -75,6 +75,36 @@ cdp-cli --url ws://127.0.0.1:9222/devtools/browser/<guid> screenshot output.png
 cdp-cli --url ws://127.0.0.1:9222/devtools/browser/<guid> evaluate "document.title"
 ```
 
+## CLI Commands
+
+| Command | Description |
+|---------|-------------|
+| `version` | Display browser version info |
+| `navigate <url>` | Navigate to URL |
+| `screenshot <file>` | Take screenshot |
+| `pdf <file>` | Save page as PDF |
+| `evaluate <expr>` | Run JavaScript |
+| `dom <selector>` | Print DOM structure |
+| `network` | Monitor network requests |
+| `cookies` | List cookies |
+| `list-targets` | List all targets |
+| `pages` | List all pages with target IDs |
+| `interactive` | Interactive REPL mode |
+
+### Working with Existing Pages
+
+Use the `--use <target-id>` flag to run commands on existing pages:
+
+```bash
+# List open pages
+cdp-cli --url $url pages
+
+# Run commands on existing page
+cdp-cli --url $url --use <target-id> evaluate "document.title"
+cdp-cli --url $url --use <target-id> navigate https://example.org
+cdp-cli --url $url --use <target-id> screenshot --output page.png
+```
+
 ## Library Usage
 
 ```zig

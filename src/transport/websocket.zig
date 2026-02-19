@@ -60,6 +60,7 @@ pub const WebSocket = struct {
     is_closed: bool,
     stream: std.Io.net.Stream,
     read_buf: [8192]u8,
+    persistent_reader: ?std.Io.net.Stream.Reader,
     write_buf: [8192]u8,
 
     const Self = @This();
@@ -147,6 +148,7 @@ pub const WebSocket = struct {
             .is_closed = false,
             .stream = stream,
             .read_buf = undefined,
+            .persistent_reader = null,
             .write_buf = undefined,
         };
     }
@@ -204,21 +206,50 @@ pub const WebSocket = struct {
         writer.interface.flush() catch return WebSocketError.ConnectionClosed;
     }
 
-    /// Receive a complete message
-    pub fn receiveMessage(self: *Self) WebSocketError!Message {
-        var reader = self.stream.reader(self.io, &self.read_buf);
+    /// Get or initialize the persistent reader.
+    fn getReader(self: *Self) *std.Io.net.Stream.Reader {
+        if (self.persistent_reader == null) {
+            self.persistent_reader = self.stream.reader(self.io, &self.read_buf);
+        }
+        return &self.persistent_reader.?;
+    }
 
+    /// Read exactly `len` bytes into `dest` using the persistent reader.
+    fn readBytes(self: *Self, dest: []u8) WebSocketError!void {
+        var r = self.getReader();
+        var filled: usize = 0;
+        while (filled < dest.len) {
+            // peek(1) ensures at least 1 byte is available (blocks if needed),
+            // then peekGreedy(1) returns ALL buffered bytes without blocking further.
+            _ = r.interface.peek(1) catch return WebSocketError.ConnectionClosed;
+            const chunk = r.interface.peekGreedy(1) catch
+                return WebSocketError.ConnectionClosed;
+            const remaining = dest.len - filled;
+            const n = @min(chunk.len, remaining);
+            @memcpy(dest[filled..][0..n], chunk[0..n]);
+            r.interface.toss(n);
+            filled += n;
+        }
+    }
+
+    /// Read exactly `len` bytes into a newly allocated buffer.
+    fn readBytesAlloc(self: *Self, len: usize) WebSocketError![]u8 {
+        const buf = self.allocator.alloc(u8, len) catch
+            return WebSocketError.OutOfMemory;
+        self.readBytes(buf) catch {
+            self.allocator.free(buf);
+            return WebSocketError.ConnectionClosed;
+        };
+        return buf;
+    }
+
+    /// Read a single WebSocket frame's payload, returning fin, opcode, and data.
+    fn readFrame(self: *Self) WebSocketError!struct { fin: bool, opcode: u4, data: []u8 } {
         // Read frame header (2 bytes)
         var header: [2]u8 = undefined;
-        for (&header) |*byte| {
-            const chunk = reader.interface.peek(1) catch return WebSocketError.ConnectionClosed;
-            if (chunk.len == 0) return WebSocketError.ConnectionClosed;
-            byte.* = chunk[0];
-            _ = reader.interface.discard(.limited(1)) catch return WebSocketError.ConnectionClosed;
-        }
+        try self.readBytes(&header);
 
         const fin = (header[0] & 0x80) != 0;
-        _ = fin;
         const opcode: u4 = @truncate(header[0] & 0x0F);
         const masked = (header[1] & 0x80) != 0;
         var payload_len: usize = header[1] & 0x7F;
@@ -226,21 +257,11 @@ pub const WebSocket = struct {
         // Extended payload length
         if (payload_len == 126) {
             var ext: [2]u8 = undefined;
-            for (&ext) |*byte| {
-                const chunk = reader.interface.peek(1) catch return WebSocketError.ConnectionClosed;
-                if (chunk.len == 0) return WebSocketError.ConnectionClosed;
-                byte.* = chunk[0];
-                _ = reader.interface.discard(.limited(1)) catch return WebSocketError.ConnectionClosed;
-            }
+            try self.readBytes(&ext);
             payload_len = (@as(usize, ext[0]) << 8) | ext[1];
         } else if (payload_len == 127) {
             var ext: [8]u8 = undefined;
-            for (&ext) |*byte| {
-                const chunk = reader.interface.peek(1) catch return WebSocketError.ConnectionClosed;
-                if (chunk.len == 0) return WebSocketError.ConnectionClosed;
-                byte.* = chunk[0];
-                _ = reader.interface.discard(.limited(1)) catch return WebSocketError.ConnectionClosed;
-            }
+            try self.readBytes(&ext);
             payload_len = (@as(usize, ext[4]) << 24) |
                 (@as(usize, ext[5]) << 16) |
                 (@as(usize, ext[6]) << 8) | ext[7];
@@ -253,37 +274,11 @@ pub const WebSocket = struct {
         // Read mask key if present
         var mask_key: [4]u8 = [_]u8{ 0, 0, 0, 0 };
         if (masked) {
-            for (&mask_key) |*byte| {
-                const chunk = reader.interface.peek(1) catch return WebSocketError.ConnectionClosed;
-                if (chunk.len == 0) return WebSocketError.ConnectionClosed;
-                byte.* = chunk[0];
-                _ = reader.interface.discard(.limited(1)) catch return WebSocketError.ConnectionClosed;
-            }
+            try self.readBytes(&mask_key);
         }
 
         // Read payload
-        const payload = self.allocator.alloc(u8, payload_len) catch
-            return WebSocketError.OutOfMemory;
-        errdefer self.allocator.free(payload);
-
-        var bytes_read: usize = 0;
-        while (bytes_read < payload_len) {
-            const chunk = reader.interface.peek(payload_len - bytes_read) catch {
-                self.allocator.free(payload);
-                return WebSocketError.ConnectionClosed;
-            };
-            if (chunk.len == 0) {
-                self.allocator.free(payload);
-                return WebSocketError.ConnectionClosed;
-            }
-            const to_copy = @min(chunk.len, payload_len - bytes_read);
-            @memcpy(payload[bytes_read..][0..to_copy], chunk[0..to_copy]);
-            _ = reader.interface.discard(.limited(to_copy)) catch {
-                self.allocator.free(payload);
-                return WebSocketError.ConnectionClosed;
-            };
-            bytes_read += to_copy;
-        }
+        const payload = try self.readBytesAlloc(payload_len);
 
         // Unmask if needed
         if (masked) {
@@ -292,10 +287,62 @@ pub const WebSocket = struct {
             }
         }
 
-        return .{
-            .opcode = opcode,
-            .data = payload,
-        };
+        return .{ .fin = fin, .opcode = opcode, .data = payload };
+    }
+
+    /// Receive a complete message (handles multi-frame/continuation)
+    pub fn receiveMessage(self: *Self) WebSocketError!Message {
+        // Read first frame
+        const first = try self.readFrame();
+
+        // Handle control frames (ping/pong/close) — always single frame
+        if (first.opcode >= 0x8) {
+            return .{ .opcode = first.opcode, .data = first.data };
+        }
+
+        // If FIN is set, this is a complete single-frame message
+        if (first.fin) {
+            return .{ .opcode = first.opcode, .data = first.data };
+        }
+
+        // Multi-frame message: collect continuation frames
+        var fragments: std.ArrayList([]u8) = .empty;
+        defer {
+            for (fragments.items) |frag| self.allocator.free(frag);
+            fragments.deinit(self.allocator);
+        }
+
+        var total_len: usize = first.data.len;
+        fragments.append(self.allocator, first.data) catch return WebSocketError.OutOfMemory;
+
+        while (true) {
+            const cont = try self.readFrame();
+
+            if (total_len + cont.data.len > self.max_message_size) {
+                self.allocator.free(cont.data);
+                return WebSocketError.FrameTooLarge;
+            }
+
+            total_len += cont.data.len;
+            fragments.append(self.allocator, cont.data) catch {
+                self.allocator.free(cont.data);
+                return WebSocketError.OutOfMemory;
+            };
+
+            if (cont.fin) break;
+        }
+
+        // Assemble complete message
+        const assembled = self.allocator.alloc(u8, total_len) catch
+            return WebSocketError.OutOfMemory;
+
+        var offset: usize = 0;
+        for (fragments.items) |frag| {
+            @memcpy(assembled[offset..][0..frag.len], frag);
+            offset += frag.len;
+        }
+
+        return .{ .opcode = first.opcode, .data = assembled };
     }
 
     /// Close the connection

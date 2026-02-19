@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <!-- Background circle -->
+  <circle cx="64" cy="64" r="60" fill="#1a1a2e" stroke="#4a9eff" stroke-width="4"/>
+
+  <!-- Chrome-like browser circle -->
+  <circle cx="64" cy="58" r="32" fill="#2d2d44" stroke="#6b7280" stroke-width="2"/>
+
+  <!-- Chrome colors segments -->
+  <path d="M 64 26 A 32 32 0 0 1 92 50 L 64 58 Z" fill="#ef4444" opacity="0.8"/>
+  <path d="M 92 50 A 32 32 0 0 1 80 84 L 64 58 Z" fill="#22c55e" opacity="0.8"/>
+  <path d="M 80 84 A 32 32 0 0 1 48 84 L 64 58 Z" fill="#f59e0b" opacity="0.8"/>
+  <path d="M 48 84 A 32 32 0 0 1 36 50 L 64 58 Z" fill="#3b82f6" opacity="0.8"/>
+  <path d="M 36 50 A 32 32 0 0 1 64 26 L 64 58 Z" fill="#ef4444" opacity="0.8"/>
+
+  <!-- Center circle (DevTools) -->
+  <circle cx="64" cy="58" r="14" fill="#1a1a2e" stroke="#4a9eff" stroke-width="2"/>
+  <circle cx="64" cy="58" r="8" fill="#4a9eff"/>
+
+  <!-- WebSocket connection lines -->
+  <line x1="64" y1="90" x2="64" y2="100" stroke="#4a9eff" stroke-width="2" stroke-dasharray="2,2"/>
+  <line x1="56" y1="95" x2="72" y2="95" stroke="#4a9eff" stroke-width="2"/>
+
+  <!-- Terminal/code indicator -->
+  <rect x="20" y="100" width="88" height="20" rx="3" fill="#2d2d44" stroke="#6b7280" stroke-width="1"/>
+  <text x="26" y="114" font-family="monospace" font-size="10" fill="#22c55e">cdp</text>
+  <text x="43" y="114" font-family="monospace" font-size="10" fill="#f7b93e">.zig</text>
+  <text x="72" y="114" font-family="monospace" font-size="10" fill="#6b7280">--url</text>
+
+  <!-- Zig zigzag (top right) -->
+  <path d="M 95 18 L 105 12 L 100 12 L 110 6 L 105 6 L 115 0"
+        stroke="#f7b93e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+
+  <!-- Connection dots -->
+  <circle cx="64" cy="58" r="3" fill="#ffffff"/>
+
+  <!-- Protocol arrows -->
+  <path d="M 30 40 L 40 40 L 37 37 M 40 40 L 37 43" stroke="#4a9eff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <path d="M 98 40 L 88 40 L 91 37 M 88 40 L 91 43" stroke="#4a9eff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+
+  <defs>
+    <linearGradient id="chromeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4a9eff;stop-opacity:0.3"/>
+      <stop offset="100%" style="stop-color:#1a1a2e;stop-opacity:0"/>
+    </linearGradient>
+  </defs>
+</svg>

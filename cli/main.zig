@@ -1,5 +1,32 @@
 const std = @import("std");
 const cdp = @import("cdp");
+const config_mod = @import("config.zig");
+const http_mod = @import("http.zig");
+
+/// Save target ID to config file for subsequent commands
+fn saveTargetToConfig(target_id: []const u8, args: Args, allocator: std.mem.Allocator, io: std.Io) void {
+    // Load existing config or create new one
+    var config = config_mod.loadConfig(allocator, io) orelse config_mod.Config{};
+
+    // Update with current values
+    if (config.last_target) |old| allocator.free(old);
+    config.last_target = allocator.dupe(u8, target_id) catch null;
+
+    // Keep other values from args if provided
+    if (args.url != null and config.ws_url == null) {
+        config.ws_url = allocator.dupe(u8, args.url.?) catch null;
+    }
+
+    config_mod.saveConfig(config, allocator, io) catch |err| {
+        std.debug.print("Warning: Could not save target to config: {}\n", .{err});
+    };
+
+    // Clean up config (but not last_target since we just set it)
+    if (config.chrome_path) |p| allocator.free(p);
+    if (config.data_dir) |d| allocator.free(d);
+    if (config.ws_url) |u| allocator.free(u);
+    if (config.last_target) |t| allocator.free(t);
+}
 
 /// Write binary data to a file
 fn writeFile(io: std.Io, path: []const u8, data: []const u8) !void {
@@ -24,8 +51,9 @@ fn extractTargetIdFromUrl(url: []const u8) ?[]const u8 {
 const Args = struct {
     url: ?[]const u8 = null,
     headless: cdp.Headless = .new,
-    port: u16 = 0,
+    port: u16 = 9222,
     chrome_path: ?[]const u8 = null,
+    data_dir: ?[]const u8 = null,
     timeout_ms: u32 = 30_000,
     verbose: bool = false,
     output: ?[]const u8 = null,
@@ -35,6 +63,8 @@ const Args = struct {
     positional: []const []const u8,
 
     const Command = enum {
+        open,
+        connect,
         navigate,
         screenshot,
         pdf,
@@ -63,6 +93,7 @@ pub fn main(init: std.process.Init) !void {
         allocator.free(args.positional);
         if (args.url) |u| allocator.free(u);
         if (args.chrome_path) |p| allocator.free(p);
+        if (args.data_dir) |d| allocator.free(d);
         if (args.output) |o| allocator.free(o);
         if (args.use_target) |t| allocator.free(t);
     }
@@ -70,6 +101,37 @@ pub fn main(init: std.process.Init) !void {
     if (args.command == .help) {
         printUsage();
         return;
+    }
+
+    // Load config file for defaults
+    var config = config_mod.loadConfig(allocator, init.io) orelse config_mod.Config{};
+    defer config.deinit(allocator);
+
+    // Apply config defaults if args not explicitly provided
+    if (args.chrome_path == null and config.chrome_path != null) {
+        args.chrome_path = allocator.dupe(u8, config.chrome_path.?) catch null;
+    }
+    if (args.data_dir == null and config.data_dir != null) {
+        args.data_dir = allocator.dupe(u8, config.data_dir.?) catch null;
+    }
+    if (args.url == null and config.ws_url != null) {
+        args.url = allocator.dupe(u8, config.ws_url.?) catch null;
+    }
+    if (args.use_target == null and config.last_target != null) {
+        args.use_target = allocator.dupe(u8, config.last_target.?) catch null;
+    }
+
+    // Handle commands that don't need browser connection
+    switch (args.command) {
+        .open => {
+            try cmdOpen(args, allocator, init.io);
+            return;
+        },
+        .connect => {
+            try cmdConnect(args, allocator, init.io);
+            return;
+        },
+        else => {},
     }
 
     // Launch or connect to browser
@@ -120,7 +182,7 @@ pub fn main(init: std.process.Init) !void {
             .list_targets => try cmdListTargets(browser, allocator),
             .pages => try cmdPages(browser, allocator),
             .interactive => try cmdInteractive(allocator),
-            .help => unreachable,
+            .open, .connect, .help => unreachable,
         }
     }
 }
@@ -179,7 +241,7 @@ fn executeOnTarget(browser: *cdp.Browser, target_id: []const u8, args: Args, all
     }
 }
 
-/// Navigate command
+/// Navigate command - uses existing page or creates new one, saves target ID
 fn cmdNavigate(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
     if (args.positional.len < 1) {
         std.debug.print("Error: navigate requires a URL\n", .{});
@@ -187,8 +249,52 @@ fn cmdNavigate(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) 
     }
 
     const target_url = args.positional[0];
-    var session = try browser.newPage();
-    defer session.detach() catch {};
+
+    // Get existing pages first
+    const pages = try browser.pages();
+    defer {
+        for (pages) |*p| {
+            var page_info = p.*;
+            page_info.deinit(allocator);
+        }
+        allocator.free(pages);
+    }
+
+    // Use first existing page or create new one
+    var target_id: []const u8 = undefined;
+    var session: *cdp.Session = undefined;
+    var created_new = false;
+
+    if (pages.len > 0) {
+        // Use first existing page
+        target_id = pages[0].target_id;
+        if (args.verbose) {
+            std.debug.print("Using existing page: {s}\n", .{target_id});
+        }
+        var target = cdp.Target.init(browser.connection);
+        const session_id = try target.attachToTarget(allocator, target_id, true);
+        session = try cdp.Session.init(session_id, browser.connection, allocator);
+    } else {
+        // Create new page
+        if (args.verbose) {
+            std.debug.print("Creating new page\n", .{});
+        }
+        session = try browser.newPage();
+        created_new = true;
+        // Get the target ID from the new page
+        const new_pages = try browser.pages();
+        defer {
+            for (new_pages) |*p| {
+                var page_info = p.*;
+                page_info.deinit(allocator);
+            }
+            allocator.free(new_pages);
+        }
+        if (new_pages.len > 0) {
+            target_id = try allocator.dupe(u8, new_pages[0].target_id);
+        }
+    }
+    defer session.deinit();
 
     var page = cdp.Page.init(session);
     try page.enable();
@@ -201,7 +307,7 @@ fn cmdNavigate(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) 
         return;
     }
 
-    // Note: sleep API changed in Zig 0.16, using spinloop hint
+    // Wait for page to load
     var i: u32 = 0;
     while (i < 500000) : (i += 1) {
         std.atomic.spinLoopHint();
@@ -214,6 +320,14 @@ fn cmdNavigate(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) 
 
     std.debug.print("URL: {s}\n", .{target_url});
     std.debug.print("Title: {s}\n", .{title});
+    std.debug.print("Target: {s}\n", .{target_id});
+
+    // Save target ID to config
+    saveTargetToConfig(target_id, args, allocator, args.io);
+
+    if (created_new) {
+        allocator.free(target_id);
+    }
 }
 
 /// Screenshot command
@@ -650,6 +764,155 @@ fn cmdInteractive(allocator: std.mem.Allocator) !void {
     std.debug.print("Use: navigate, screenshot, pdf, evaluate, dom, network, cookies, version, list-targets\n", .{});
 }
 
+/// Open command - launch Chrome with remote debugging
+fn cmdOpen(args: Args, allocator: std.mem.Allocator, io: std.Io) !void {
+    const port = args.port;
+
+    // Check if Chrome is already running on this port
+    if (http_mod.isChromeRunning(io, port)) {
+        std.debug.print("Chrome already running on port {}\n", .{port});
+
+        // Try to get the WebSocket URL
+        const ws_url = http_mod.getChromeWsUrl(allocator, io, port) catch |err| {
+            std.debug.print("Warning: Could not get WebSocket URL: {}\n", .{err});
+            return;
+        };
+        defer allocator.free(ws_url);
+
+        std.debug.print("WebSocket URL: {s}\n", .{ws_url});
+
+        // Save to config
+        const save_config = config_mod.Config{
+            .chrome_path = args.chrome_path,
+            .data_dir = args.data_dir,
+            .port = port,
+            .ws_url = ws_url,
+            .last_target = null,
+        };
+        config_mod.saveConfig(save_config, allocator, io) catch |err| {
+            std.debug.print("Warning: Could not save config: {}\n", .{err});
+        };
+        return;
+    }
+
+    // Get Chrome executable path
+    const chrome_path = args.chrome_path orelse blk: {
+        // Try to find Chrome
+        break :blk cdp.findChrome(allocator) catch {
+            std.debug.print("Error: Chrome not found. Use --chrome to specify path.\n", .{});
+            std.process.exit(1);
+        };
+    };
+
+    // Get data directory
+    const data_dir = args.data_dir orelse "zchrome-profile";
+
+    // Build command arguments
+    var argv_list: std.ArrayList([]const u8) = .empty;
+    defer argv_list.deinit(allocator);
+
+    try argv_list.append(allocator, chrome_path);
+
+    const port_arg = try std.fmt.allocPrint(allocator, "--remote-debugging-port={}", .{port});
+    defer allocator.free(port_arg);
+    try argv_list.append(allocator, port_arg);
+
+    const data_arg = try std.fmt.allocPrint(allocator, "--user-data-dir={s}", .{data_dir});
+    defer allocator.free(data_arg);
+    try argv_list.append(allocator, data_arg);
+
+    // Add headless flag if needed
+    if (args.headless != .off) {
+        const headless_arg: []const u8 = if (args.headless == .new) "--headless=new" else "--headless";
+        try argv_list.append(allocator, headless_arg);
+    }
+
+    // Spawn Chrome
+    std.debug.print("Launching Chrome...\n", .{});
+    std.debug.print("  Executable: {s}\n", .{chrome_path});
+    std.debug.print("  Port: {}\n", .{port});
+    std.debug.print("  Data dir: {s}\n", .{data_dir});
+    if (args.headless != .off) {
+        std.debug.print("  Headless: {s}\n", .{@tagName(args.headless)});
+    }
+
+    _ = std.process.spawn(io, .{
+        .argv = argv_list.items,
+        .stdin = .ignore,
+        .stdout = .ignore,
+        .stderr = .ignore,
+    }) catch |err| {
+        std.debug.print("Error launching Chrome: {}\n", .{err});
+        std.process.exit(1);
+    };
+
+    std.debug.print("\nChrome launched. Run 'zchrome connect' to get WebSocket URL.\n", .{});
+
+    // Save config (without ws_url since we don't have it yet)
+    // Use the actual values being used, not the original args
+    const new_config = config_mod.Config{
+        .chrome_path = chrome_path,
+        .data_dir = data_dir,
+        .port = port,
+        .ws_url = null,
+        .last_target = null,
+    };
+    config_mod.saveConfig(new_config, allocator, io) catch |err| {
+        std.debug.print("Warning: Could not save config: {}\n", .{err});
+    };
+}
+
+/// Connect command - connect to existing Chrome and get WebSocket URL
+fn cmdConnect(args: Args, allocator: std.mem.Allocator, io: std.Io) !void {
+    const port = args.port;
+
+    if (args.verbose) {
+        std.debug.print("Checking if Chrome is running on port {}...\n", .{port});
+    }
+
+    // Check if Chrome is running
+    if (!http_mod.isChromeRunning(io, port)) {
+        std.debug.print("Error: Chrome not running on port {}.\n", .{port});
+        std.debug.print("Run 'zchrome open' to launch Chrome first.\n", .{});
+        std.process.exit(1);
+    }
+
+    if (args.verbose) {
+        std.debug.print("Chrome is running. Fetching WebSocket URL...\n", .{});
+    }
+
+    // Get WebSocket URL
+    const ws_url = http_mod.getChromeWsUrl(allocator, io, port) catch |err| {
+        std.debug.print("Error: Could not get WebSocket URL: {}\n", .{err});
+        std.process.exit(1);
+    };
+
+    std.debug.print("Connected to Chrome on port {}\n", .{port});
+    std.debug.print("WebSocket URL: {s}\n", .{ws_url});
+
+    // Save to config
+    if (args.verbose) {
+        std.debug.print("Saving config to zchrome.json...\n", .{});
+    }
+
+    const save_config = config_mod.Config{
+        .chrome_path = args.chrome_path,
+        .data_dir = args.data_dir,
+        .port = port,
+        .ws_url = ws_url,
+        .last_target = args.use_target,
+    };
+    config_mod.saveConfig(save_config, allocator, io) catch |err| {
+        std.debug.print("Warning: Could not save config: {}\n", .{err});
+    };
+
+    if (args.verbose) {
+        std.debug.print("Config saved successfully.\n", .{});
+    }
+
+    allocator.free(ws_url);
+}
+
 /// Parse command line arguments
 fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
     var iter = try std.process.Args.Iterator.initAllocator(args, allocator);
@@ -663,9 +926,10 @@ fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
 
     var command: Args.Command = .help;
     var url: ?[]const u8 = null;
-    var headless: cdp.Headless = .new;
-    var port: u16 = 0;
+    var headless: cdp.Headless = .off;
+    var port: u16 = 9222;
     var chrome_path: ?[]const u8 = null;
+    var data_dir: ?[]const u8 = null;
     var timeout_ms: u32 = 30_000;
     var verbose: bool = false;
     var output: ?[]const u8 = null;
@@ -695,6 +959,9 @@ fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
             } else if (std.mem.eql(u8, arg, "--chrome")) {
                 const val = iter.next() orelse return error.MissingArgument;
                 chrome_path = try allocator.dupe(u8, val);
+            } else if (std.mem.eql(u8, arg, "--data-dir")) {
+                const val = iter.next() orelse return error.MissingArgument;
+                data_dir = try allocator.dupe(u8, val);
             } else if (std.mem.eql(u8, arg, "--timeout")) {
                 const val = iter.next() orelse return error.MissingArgument;
                 timeout_ms = try std.fmt.parseInt(u32, val, 10);
@@ -721,6 +988,7 @@ fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
         .headless = headless,
         .port = port,
         .chrome_path = chrome_path,
+        .data_dir = data_dir,
         .timeout_ms = timeout_ms,
         .verbose = verbose,
         .output = output,
@@ -733,41 +1001,54 @@ fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
 /// Print usage information
 fn printUsage() void {
     std.debug.print(
-        \\cdp-cli [options] <command> [command-args]
+        \\zchrome [options] <command> [command-args]
         \\
         \\GLOBAL OPTIONS:
         \\  --url <ws-url>           Connect to existing Chrome (ws://...)
-        \\  --use <target-id>        Execute command on existing page (no URL needed)
-        \\  --headless <new|old|off> Headless mode [default: new]
-        \\  --port <port>            Debug port [default: auto]
+        \\  --use <target-id>        Execute command on existing page
+        \\  --headless [new|old]     Enable headless mode (default: off)
+        \\  --port <port>            Debug port [default: 9222]
         \\  --chrome <path>          Chrome binary path
+        \\  --data-dir <path>        User data directory for Chrome profile
         \\  --timeout <ms>           Command timeout [default: 30000]
         \\  --verbose                Print CDP messages
         \\  --output <path>          Output file path (for screenshot/pdf)
         \\
         \\COMMANDS:
+        \\  open                     Launch Chrome with remote debugging
+        \\  connect                  Connect to running Chrome, get WebSocket URL
         \\  navigate <url>           Navigate to URL, print final URL + title
-        \\  screenshot [url]         Capture PNG screenshot (no URL = current page)
-        \\  pdf [url]                Generate PDF (no URL = current page)
-        \\  evaluate [url] <expr>    Evaluate JS expression (no URL = current page)
-        \\  dom [url] <selector>     Query DOM, print outerHTML (no URL = current page)
-        \\  network [url]            Log network requests (no URL = current page)
-        \\  cookies [url]            Dump cookies (no URL = current page)
+        \\  screenshot [url]         Capture PNG screenshot
+        \\  pdf [url]                Generate PDF
+        \\  evaluate [url] <expr>    Evaluate JS expression
+        \\  dom [url] <selector>     Query DOM, print outerHTML
+        \\  network [url]            Log network requests
+        \\  cookies [url]            Dump cookies
         \\  version                  Print browser version info
         \\  list-targets             List all open targets
         \\  pages                    List all open pages with target IDs
         \\  interactive              REPL: enter CDP commands as JSON
         \\  help                     Show this help message
         \\
+        \\CONFIG FILE:
+        \\  zchrome.json is stored alongside the executable for portability.
+        \\  It stores chrome_path, data_dir, port, ws_url, and last_target.
+        \\  Options from command line override config file values.
+        \\
         \\EXAMPLES:
-        \\  # List pages and execute on existing page
-        \\  cdp-cli --url $url pages
-        \\  cdp-cli --url $url --use <target-id> screenshot --output page.png
-        \\  cdp-cli --url $url --use <target-id> evaluate "document.title"
-        \\  
-        \\  # Create new page, navigate, and execute
-        \\  cdp-cli screenshot https://example.com --output page.png
-        \\  cdp-cli evaluate https://example.com "document.title"
+        \\  # Launch Chrome and connect
+        \\  zchrome open --chrome "C:\Program Files\Google\Chrome\Application\chrome.exe"
+        \\  zchrome connect
+        \\
+        \\  # Subsequent commands use saved WebSocket URL
+        \\  zchrome pages
+        \\  zchrome --use <target-id> screenshot --output page.png
+        \\  zchrome evaluate "document.title"
+        \\
+        \\  # Launch headless and take screenshot
+        \\  zchrome open --headless
+        \\  zchrome connect
+        \\  zchrome screenshot https://example.com --output page.png
         \\
     , .{});
 }

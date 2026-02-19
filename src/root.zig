@@ -4,6 +4,7 @@ const std = @import("std");
 
 // Browser launcher
 pub const Browser = @import("browser/launcher.zig").Browser;
+pub const findChrome = @import("browser/launcher.zig").findChrome;
 pub const LaunchOptions = @import("browser/options.zig").LaunchOptions;
 pub const Headless = @import("browser/options.zig").Headless;
 pub const BrowserVersion = @import("browser/launcher.zig").BrowserVersion;

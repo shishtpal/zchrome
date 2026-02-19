@@ -99,6 +99,9 @@ const Args = struct {
         drag,
         get,
         upload,
+        back,
+        forward,
+        reload,
         help,
     };
 };
@@ -145,7 +148,7 @@ pub fn main(init: std.process.Init) !void {
     const needs_target = switch (args.command) {
         .navigate, .screenshot, .pdf, .evaluate, .dom, .network, .cookies, .snapshot,
         .click, .dblclick, .focus, .@"type", .fill, .select, .hover, .check, .uncheck,
-        .scroll, .scrollintoview, .drag, .get, .upload => true,
+        .scroll, .scrollintoview, .drag, .get, .upload, .back, .forward, .reload => true,
         .version, .list_targets, .pages, .interactive, .open, .connect, .help => false,
     };
     if (needs_target and args.use_target == null and config.last_target != null) {
@@ -228,6 +231,9 @@ pub fn main(init: std.process.Init) !void {
             .drag => try cmdDrag(browser, args, allocator),
             .get => try cmdGet(browser, args, allocator),
             .upload => try cmdUpload(browser, args, allocator),
+            .back => try cmdBack(browser, args, allocator),
+            .forward => try cmdForward(browser, args, allocator),
+            .reload => try cmdReload(browser, args, allocator),
             .open, .connect, .help => unreachable,
         }
     }
@@ -263,6 +269,9 @@ fn executeDirectly(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocat
         .drag => try cmdDragWithSession(session, args, allocator),
         .get => try cmdGetWithSession(session, args, allocator),
         .upload => try cmdUploadWithSession(session, args, allocator),
+        .back => try cmdBackWithSession(session),
+        .forward => try cmdForwardWithSession(session),
+        .reload => try cmdReloadWithSession(session),
         .version => try cmdVersion(browser, allocator),
         .list_targets => try cmdListTargets(browser, allocator),
         .pages => try cmdPages(browser, allocator),
@@ -313,6 +322,9 @@ fn executeOnTarget(browser: *cdp.Browser, target_id: []const u8, args: Args, all
         .drag => try cmdDragWithSession(session, args, allocator),
         .get => try cmdGetWithSession(session, args, allocator),
         .upload => try cmdUploadWithSession(session, args, allocator),
+        .back => try cmdBackWithSession(session),
+        .forward => try cmdForwardWithSession(session),
+        .reload => try cmdReloadWithSession(session),
         else => std.debug.print("Error: Command not supported with --use\n", .{}),
     }
 }
@@ -1618,6 +1630,107 @@ fn printGetUsage() void {
     , .{});
 }
 
+/// Back command - navigate back in history
+fn cmdBack(browser: *cdp.Browser, _: Args, allocator: std.mem.Allocator) !void {
+    var target = cdp.Target.init(browser.connection);
+    const pages = try browser.pages();
+    defer {
+        for (pages) |*p| {
+            var page_info = p.*;
+            page_info.deinit(allocator);
+        }
+        allocator.free(pages);
+    }
+
+    if (pages.len == 0) {
+        std.debug.print("Error: No pages open\n", .{});
+        return;
+    }
+
+    const session_id = try target.attachToTarget(allocator, pages[0].target_id, true);
+    defer allocator.free(session_id);
+    var session = try cdp.Session.init(session_id, browser.connection, allocator);
+    defer session.deinit();
+
+    try cmdBackWithSession(session);
+}
+
+fn cmdBackWithSession(session: *cdp.Session) !void {
+    var page = cdp.Page.init(session);
+    const navigated = try page.goBack();
+    if (navigated) {
+        std.debug.print("Navigated back\n", .{});
+    } else {
+        std.debug.print("No previous page in history\n", .{});
+    }
+}
+
+/// Forward command - navigate forward in history
+fn cmdForward(browser: *cdp.Browser, _: Args, allocator: std.mem.Allocator) !void {
+    var target = cdp.Target.init(browser.connection);
+    const pages = try browser.pages();
+    defer {
+        for (pages) |*p| {
+            var page_info = p.*;
+            page_info.deinit(allocator);
+        }
+        allocator.free(pages);
+    }
+
+    if (pages.len == 0) {
+        std.debug.print("Error: No pages open\n", .{});
+        return;
+    }
+
+    const session_id = try target.attachToTarget(allocator, pages[0].target_id, true);
+    defer allocator.free(session_id);
+    var session = try cdp.Session.init(session_id, browser.connection, allocator);
+    defer session.deinit();
+
+    try cmdForwardWithSession(session);
+}
+
+fn cmdForwardWithSession(session: *cdp.Session) !void {
+    var page = cdp.Page.init(session);
+    const navigated = try page.goForward();
+    if (navigated) {
+        std.debug.print("Navigated forward\n", .{});
+    } else {
+        std.debug.print("No next page in history\n", .{});
+    }
+}
+
+/// Reload command - reload current page
+fn cmdReload(browser: *cdp.Browser, _: Args, allocator: std.mem.Allocator) !void {
+    var target = cdp.Target.init(browser.connection);
+    const pages = try browser.pages();
+    defer {
+        for (pages) |*p| {
+            var page_info = p.*;
+            page_info.deinit(allocator);
+        }
+        allocator.free(pages);
+    }
+
+    if (pages.len == 0) {
+        std.debug.print("Error: No pages open\n", .{});
+        return;
+    }
+
+    const session_id = try target.attachToTarget(allocator, pages[0].target_id, true);
+    defer allocator.free(session_id);
+    var session = try cdp.Session.init(session_id, browser.connection, allocator);
+    defer session.deinit();
+
+    try cmdReloadWithSession(session);
+}
+
+fn cmdReloadWithSession(session: *cdp.Session) !void {
+    var page = cdp.Page.init(session);
+    try page.reload(null);
+    std.debug.print("Page reloaded\n", .{});
+}
+
 /// Open command - launch Chrome with remote debugging
 fn cmdOpen(args: Args, allocator: std.mem.Allocator, io: std.Io) !void {
     const port = args.port;
@@ -1928,6 +2041,11 @@ fn printUsage() void {
         \\  pages                    List all open pages with target IDs
         \\  interactive              REPL: enter CDP commands as JSON
         \\  help                     Show this help message
+        \\
+        \\NAVIGATION:
+        \\  back                     Go back in history
+        \\  forward                  Go forward in history
+        \\  reload                   Reload current page
         \\
         \\ELEMENT ACTIONS:
         \\  click <sel>              Click element (CSS selector or @ref)

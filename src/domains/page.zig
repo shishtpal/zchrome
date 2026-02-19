@@ -129,6 +129,58 @@ pub const Page = struct {
         });
     }
 
+    /// Navigate back in history. Returns true if navigation occurred.
+    pub fn goBack(self: *Self) !bool {
+        const result = try self.session.sendCommand("Page.getNavigationHistory", .{});
+        const current_index_val = result.object.get("currentIndex") orelse return error.MissingField;
+        const current_index = switch (current_index_val) {
+            .integer => |i| i,
+            .float => |f| @as(i64, @intFromFloat(f)),
+            else => return error.TypeMismatch,
+        };
+        if (current_index <= 0) return false;
+        _ = try self.session.sendCommand("Page.navigateToHistoryEntry", .{
+            .entryId = blk: {
+                const entries = result.object.get("entries") orelse return error.MissingField;
+                const arr = entries.array.items;
+                const target_entry = arr[@intCast(current_index - 1)];
+                const id_val = target_entry.object.get("id") orelse return error.MissingField;
+                break :blk switch (id_val) {
+                    .integer => |i| i,
+                    .float => |f| @as(i64, @intFromFloat(f)),
+                    else => return error.TypeMismatch,
+                };
+            },
+        });
+        return true;
+    }
+
+    /// Navigate forward in history. Returns true if navigation occurred.
+    pub fn goForward(self: *Self) !bool {
+        const result = try self.session.sendCommand("Page.getNavigationHistory", .{});
+        const current_index_val = result.object.get("currentIndex") orelse return error.MissingField;
+        const current_index = switch (current_index_val) {
+            .integer => |i| i,
+            .float => |f| @as(i64, @intFromFloat(f)),
+            else => return error.TypeMismatch,
+        };
+        const entries = result.object.get("entries") orelse return error.MissingField;
+        const arr = entries.array.items;
+        if (current_index >= @as(i64, @intCast(arr.len)) - 1) return false;
+        _ = try self.session.sendCommand("Page.navigateToHistoryEntry", .{
+            .entryId = blk: {
+                const target_entry = arr[@intCast(current_index + 1)];
+                const id_val = target_entry.object.get("id") orelse return error.MissingField;
+                break :blk switch (id_val) {
+                    .integer => |i| i,
+                    .float => |f| @as(i64, @intFromFloat(f)),
+                    else => return error.TypeMismatch,
+                };
+            },
+        });
+        return true;
+    }
+
     /// Stop loading
     pub fn stopLoading(self: *Self) !void {
         _ = try self.session.sendCommand("Page.stopLoading", .{});

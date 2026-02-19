@@ -999,7 +999,12 @@ fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
             }
         } else {
             if (command == .help) {
-                command = std.meta.stringToEnum(Args.Command, arg) orelse .help;
+                // Handle hyphenated command names
+                if (std.mem.eql(u8, arg, "list-targets")) {
+                    command = .list_targets;
+                } else {
+                    command = std.meta.stringToEnum(Args.Command, arg) orelse .help;
+                }
             } else {
                 try positional.append(allocator, try allocator.dupe(u8, arg));
             }

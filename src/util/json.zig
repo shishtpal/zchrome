@@ -242,7 +242,32 @@ pub fn stringifyValueToString(allocator: std.mem.Allocator, value: anytype) ![]c
         },
         .pointer => |ptr| {
             if (ptr.size == .slice and ptr.child == u8) {
-                return std.fmt.allocPrint(allocator, "\"{s}\"", .{value});
+                // Properly escape the string for JSON
+                var list: std.ArrayList(u8) = .empty;
+                errdefer list.deinit(allocator);
+                try list.append(allocator, '"');
+                for (value) |c| {
+                    switch (c) {
+                        '"' => try list.appendSlice(allocator, "\\\""),
+                        '\\' => try list.appendSlice(allocator, "\\\\"),
+                        '\n' => try list.appendSlice(allocator, "\\n"),
+                        '\r' => try list.appendSlice(allocator, "\\r"),
+                        '\t' => try list.appendSlice(allocator, "\\t"),
+                        else => {
+                            if (c < 0x20) {
+                                // Control character - use unicode escape
+                                const hex = "0123456789abcdef";
+                                try list.appendSlice(allocator, "\\u00");
+                                try list.append(allocator, hex[c >> 4]);
+                                try list.append(allocator, hex[c & 0xf]);
+                            } else {
+                                try list.append(allocator, c);
+                            }
+                        },
+                    }
+                }
+                try list.append(allocator, '"');
+                return list.toOwnedSlice(allocator);
             } else if (ptr.size == .slice) {
                 var list: std.ArrayList(u8) = .empty;
                 errdefer list.deinit(allocator);
@@ -261,8 +286,9 @@ pub fn stringifyValueToString(allocator: std.mem.Allocator, value: anytype) ![]c
         },
         .array => |arr| {
             if (arr.child == u8) {
-                // Treat as string
-                return std.fmt.allocPrint(allocator, "\"{s}\"", .{&value});
+                // Treat as string - use the slice escaping logic
+                const slice: []const u8 = &value;
+                return stringifyValueToString(allocator, slice);
             } else {
                 var list: std.ArrayList(u8) = .empty;
                 errdefer list.deinit(allocator);

@@ -139,3 +139,8 @@ fn appendEscapedString(buf: *std.ArrayList(u8), allocator: std.mem.Allocator, st
         }
     }
 }
+
+/// Get the default snapshot file path
+pub fn getSnapshotPath(allocator: std.mem.Allocator) ![]const u8 {
+    return allocator.dupe(u8, "zsnap.json");
+}

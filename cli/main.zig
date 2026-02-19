@@ -2,6 +2,7 @@ const std = @import("std");
 const cdp = @import("cdp");
 const config_mod = @import("config.zig");
 const http_mod = @import("http.zig");
+const snapshot_mod = @import("snapshot.zig");
 
 /// Save target ID to config file for subsequent commands
 fn saveTargetToConfig(target_id: []const u8, args: Args, allocator: std.mem.Allocator, io: std.Io) void {
@@ -62,6 +63,11 @@ const Args = struct {
     io: std.Io = undefined,
     command: Command,
     positional: []const []const u8,
+    // Snapshot options
+    snap_interactive: bool = false,
+    snap_compact: bool = false,
+    snap_depth: ?usize = null,
+    snap_selector: ?[]const u8 = null,
 
     const Command = enum {
         open,
@@ -77,6 +83,7 @@ const Args = struct {
         list_targets,
         pages,
         interactive,
+        snapshot,
         help,
     };
 };
@@ -97,6 +104,7 @@ pub fn main(init: std.process.Init) !void {
         if (args.data_dir) |d| allocator.free(d);
         if (args.output) |o| allocator.free(o);
         if (args.use_target) |t| allocator.free(t);
+        if (args.snap_selector) |s| allocator.free(s);
     }
 
     if (args.command == .help) {
@@ -120,7 +128,7 @@ pub fn main(init: std.process.Init) !void {
     }
     // Only apply last_target for page-level commands (not version, pages, list_targets, etc.)
     const needs_target = switch (args.command) {
-        .navigate, .screenshot, .pdf, .evaluate, .dom, .network, .cookies => true,
+        .navigate, .screenshot, .pdf, .evaluate, .dom, .network, .cookies, .snapshot => true,
         .version, .list_targets, .pages, .interactive, .open, .connect, .help => false,
     };
     if (needs_target and args.use_target == null and config.last_target != null) {
@@ -188,6 +196,7 @@ pub fn main(init: std.process.Init) !void {
             .list_targets => try cmdListTargets(browser, allocator),
             .pages => try cmdPages(browser, allocator),
             .interactive => try cmdInteractive(allocator),
+            .snapshot => try cmdSnapshot(browser, args, allocator),
             .open, .connect, .help => unreachable,
         }
     }
@@ -208,6 +217,7 @@ fn executeDirectly(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocat
         .dom => try cmdDomWithSession(session, args, allocator),
         .network => try cmdNetworkWithSession(session, args, allocator),
         .cookies => try cmdCookiesWithSession(session, args, allocator),
+        .snapshot => try cmdSnapshotWithSession(session, args, allocator),
         .version => try cmdVersion(browser, allocator),
         .list_targets => try cmdListTargets(browser, allocator),
         .pages => try cmdPages(browser, allocator),
@@ -243,6 +253,7 @@ fn executeOnTarget(browser: *cdp.Browser, target_id: []const u8, args: Args, all
         .dom => try cmdDomWithSession(session, args, allocator),
         .network => try cmdNetworkWithSession(session, args, allocator),
         .cookies => try cmdCookiesWithSession(session, args, allocator),
+        .snapshot => try cmdSnapshotWithSession(session, args, allocator),
         else => std.debug.print("Error: Command not supported with --use\n", .{}),
     }
 }
@@ -784,6 +795,87 @@ fn cmdInteractive(allocator: std.mem.Allocator) !void {
     std.debug.print("Use: navigate, screenshot, pdf, evaluate, dom, network, cookies, version, list-targets\n", .{});
 }
 
+/// Snapshot command - capture accessibility tree and save to zsnap.json
+fn cmdSnapshot(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
+    // Get existing pages first
+    const pages = try browser.pages();
+    defer {
+        for (pages) |*p| {
+            var page_info = p.*;
+            page_info.deinit(allocator);
+        }
+        allocator.free(pages);
+    }
+
+    // Use first existing page or create new one
+    var session: *cdp.Session = undefined;
+    var target_id: []const u8 = undefined;
+
+    if (pages.len > 0) {
+        // Use first existing page
+        target_id = pages[0].target_id;
+        if (args.verbose) {
+            std.debug.print("Using existing page: {s}\n", .{target_id});
+        }
+        var target = cdp.Target.init(browser.connection);
+        const session_id = try target.attachToTarget(allocator, target_id, true);
+        session = try cdp.Session.init(session_id, browser.connection, allocator);
+    } else {
+        // Create new page only if no pages exist
+        if (args.verbose) {
+            std.debug.print("Creating new page\n", .{});
+        }
+        session = try browser.newPage();
+    }
+    defer session.deinit();
+
+    try cmdSnapshotWithSession(session, args, allocator);
+}
+
+/// Snapshot command with existing session
+fn cmdSnapshotWithSession(session: *cdp.Session, args: Args, allocator: std.mem.Allocator) !void {
+    var runtime = cdp.Runtime.init(session);
+    try runtime.enable();
+
+    // Build and execute snapshot JavaScript
+    const js = try snapshot_mod.buildSnapshotJs(allocator, args.snap_selector, args.snap_depth);
+    defer allocator.free(js);
+
+    var result = try runtime.evaluate(allocator, js, .{ .return_by_value = true });
+    defer result.deinit(allocator);
+
+    const aria_tree = result.asString() orelse "(empty)";
+
+    // Process the ARIA tree
+    var processor = snapshot_mod.SnapshotProcessor.init(allocator);
+    defer processor.deinit();
+
+    const options = snapshot_mod.SnapshotOptions{
+        .interactive = args.snap_interactive,
+        .compact = args.snap_compact,
+        .max_depth = args.snap_depth,
+        .selector = args.snap_selector,
+    };
+
+    var snapshot = try processor.processAriaTree(aria_tree, options);
+    defer snapshot.deinit();
+
+    // Print the tree
+    std.debug.print("{s}\n", .{snapshot.tree});
+    std.debug.print("\n--- {} element(s) with refs ---\n", .{snapshot.refs.count()});
+
+    // Save to file
+    const output_path = args.output orelse try config_mod.getSnapshotPath(allocator);
+    defer if (args.output == null) allocator.free(output_path);
+
+    try snapshot_mod.saveSnapshot(allocator, args.io, output_path, &snapshot);
+
+    std.debug.print("\nSnapshot saved to: {s}\n", .{output_path});
+    if (snapshot.refs.count() > 0) {
+        std.debug.print("Use @e<N> refs in subsequent commands\n", .{});
+    }
+}
+
 /// Open command - launch Chrome with remote debugging
 fn cmdOpen(args: Args, allocator: std.mem.Allocator, io: std.Io) !void {
     const port = args.port;
@@ -955,11 +1047,29 @@ fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
     var output: ?[]const u8 = null;
     var use_target: ?[]const u8 = null;
     var full_page: bool = false;
+    // Snapshot options
+    var snap_interactive: bool = false;
+    var snap_compact: bool = false;
+    var snap_depth: ?usize = null;
+    var snap_selector: ?[]const u8 = null;
 
     _ = iter.skip(); // Skip program name
 
     while (iter.next()) |arg| {
-        if (std.mem.startsWith(u8, arg, "--")) {
+        if (std.mem.startsWith(u8, arg, "-") and arg.len > 1 and arg[1] != '-') {
+            // Single-dash short options (-i, -c, -d, -s)
+            if (std.mem.eql(u8, arg, "-i")) {
+                snap_interactive = true;
+            } else if (std.mem.eql(u8, arg, "-c")) {
+                snap_compact = true;
+            } else if (std.mem.eql(u8, arg, "-d")) {
+                const val = iter.next() orelse return error.MissingArgument;
+                snap_depth = try std.fmt.parseInt(usize, val, 10);
+            } else if (std.mem.eql(u8, arg, "-s")) {
+                const val = iter.next() orelse return error.MissingArgument;
+                snap_selector = try allocator.dupe(u8, val);
+            }
+        } else if (std.mem.startsWith(u8, arg, "--")) {
             if (std.mem.eql(u8, arg, "--url")) {
                 const val = iter.next() orelse return error.MissingArgument;
                 url = try allocator.dupe(u8, val);
@@ -996,6 +1106,16 @@ fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
             } else if (std.mem.eql(u8, arg, "--help")) {
                 command = .help;
                 break;
+            } else if (std.mem.eql(u8, arg, "--interactive-only")) {
+                snap_interactive = true;
+            } else if (std.mem.eql(u8, arg, "--compact")) {
+                snap_compact = true;
+            } else if (std.mem.eql(u8, arg, "--depth")) {
+                const val = iter.next() orelse return error.MissingArgument;
+                snap_depth = try std.fmt.parseInt(usize, val, 10);
+            } else if (std.mem.eql(u8, arg, "--selector")) {
+                const val = iter.next() orelse return error.MissingArgument;
+                snap_selector = try allocator.dupe(u8, val);
             }
         } else {
             if (command == .help) {
@@ -1024,6 +1144,10 @@ fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
         .full_page = full_page,
         .command = command,
         .positional = try positional.toOwnedSlice(allocator),
+        .snap_interactive = snap_interactive,
+        .snap_compact = snap_compact,
+        .snap_depth = snap_depth,
+        .snap_selector = snap_selector,
     };
 }
 
@@ -1054,11 +1178,18 @@ fn printUsage() void {
         \\  dom [url] <selector>     Query DOM, print outerHTML
         \\  network [url]            Log network requests
         \\  cookies [url]            Dump cookies
+        \\  snapshot                 Capture accessibility tree of active page, save to zsnap.json
         \\  version                  Print browser version info
         \\  list-targets             List all open targets
         \\  pages                    List all open pages with target IDs
         \\  interactive              REPL: enter CDP commands as JSON
         \\  help                     Show this help message
+        \\
+        \\SNAPSHOT OPTIONS:
+        \\  -i, --interactive-only   Only include interactive elements
+        \\  -c, --compact            Compact output (skip empty structural elements)
+        \\  -d, --depth <n>          Limit tree depth
+        \\  -s, --selector <sel>     Scope snapshot to CSS selector
         \\
         \\CONFIG FILE:
         \\  zchrome.json is stored alongside the executable for portability.
@@ -1079,6 +1210,12 @@ fn printUsage() void {
         \\  zchrome open --headless
         \\  zchrome connect
         \\  zchrome screenshot https://example.com --output page.png
+        \\
+        \\  # Take snapshot of active page's accessibility tree
+        \\  zchrome snapshot                       # Snapshot current page
+        \\  zchrome snapshot -i                    # Interactive elements only
+        \\  zchrome snapshot -c -d 3               # Compact mode, depth 3
+        \\  zchrome snapshot -s "#main-content"    # Scope to selector
         \\
     , .{});
 }

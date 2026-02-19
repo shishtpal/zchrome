@@ -11,6 +11,7 @@ This section contains practical examples demonstrating common use cases for zchr
 | [DOM Manipulation](/examples/dom) | Query and modify the DOM |
 | [JavaScript Evaluation](/examples/javascript) | Execute JavaScript and get results |
 | [Network Interception](/examples/network) | Monitor and modify network traffic |
+| [Browser Interactions](/examples/interactions) | Click, type, fill forms using CLI |
 
 ## Basic Pattern
 

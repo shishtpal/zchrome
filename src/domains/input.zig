@@ -36,7 +36,12 @@ pub const Input = struct {
             .click_count = opts.click_count,
         });
 
-        std.time.sleep(opts.delay_ms * std.time.ns_per_ms);
+        // Sleep using spinloop (Zig 0.16 changed time API)
+        var i: u64 = 0;
+        const loops = opts.delay_ms * 10000;
+        while (i < loops) : (i += 1) {
+            std.atomic.spinLoopHint();
+        }
 
         try self.dispatchMouseEvent(.{
             .type = .mouseReleased,
@@ -64,7 +69,12 @@ pub const Input = struct {
                 .text = &[_]u8{char},
             });
             if (delay_ms) |d| {
-                std.time.sleep(d * std.time.ns_per_ms);
+                // Sleep using spinloop (Zig 0.16 changed time API)
+                var j: u64 = 0;
+                const loops = d * 10000;
+                while (j < loops) : (j += 1) {
+                    std.atomic.spinLoopHint();
+                }
             }
         }
     }
@@ -78,6 +88,24 @@ pub const Input = struct {
         try self.dispatchKeyEvent(.{
             .type = .keyUp,
             .key = key,
+        });
+    }
+
+    /// Convenience: Double click at position
+    pub fn doubleClick(self: *Self, x: f64, y: f64, opts: ClickOptions) !void {
+        var double_opts = opts;
+        double_opts.click_count = 2;
+        try self.click(x, y, double_opts);
+    }
+
+    /// Convenience: Scroll (mouse wheel)
+    pub fn scroll(self: *Self, delta_x: f64, delta_y: f64) !void {
+        try self.dispatchMouseEvent(.{
+            .type = .mouseWheel,
+            .x = 100,
+            .y = 100,
+            .delta_x = delta_x,
+            .delta_y = delta_y,
         });
     }
 };

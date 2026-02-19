@@ -265,6 +265,50 @@ zchrome --use 75E5402CE67C63D19659EEFDC1CF292D navigate https://example.org
 zchrome --use 75E5402CE67C63D19659EEFDC1CF292D screenshot --output page.png --full
 ```
 
+### Browser Automation with Snapshots
+
+zchrome provides powerful element interaction commands using an accessibility tree snapshot:
+
+```bash
+# Navigate to a page
+zchrome navigate https://example.com/login
+
+# Take a snapshot to discover interactive elements
+zchrome snapshot -i
+
+# Output shows elements with refs:
+# - textbox "Email" [ref=e1]
+# - textbox "Password" [ref=e2]
+# - button "Login" [ref=e3]
+
+# Interact using refs (@e1, @e2, etc.)
+zchrome fill @e1 "user@example.com"
+zchrome fill @e2 "password123"
+zchrome click @e3
+
+# Or use CSS selectors
+zchrome fill "#email" "user@example.com"
+zchrome click "button.login"
+```
+
+**Available element actions:**
+
+| Command | Description |
+|---------|-------------|
+| `click <sel>` | Click element |
+| `dblclick <sel>` | Double-click element |
+| `hover <sel>` | Hover over element |
+| `focus <sel>` | Focus element |
+| `type <sel> <text>` | Type text (append) |
+| `fill <sel> <text>` | Clear and type text |
+| `select <sel> <value>` | Select dropdown option |
+| `check <sel>` | Check checkbox |
+| `uncheck <sel>` | Uncheck checkbox |
+| `scroll <dir> [px]` | Scroll page |
+| `scrollintoview <sel>` | Scroll element into view |
+
+See [CLI Reference](/cli) for full documentation.
+
 ## Next Steps
 
 - [Browser Management](/guide/browser-management) - Advanced browser control

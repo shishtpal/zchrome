@@ -76,7 +76,13 @@ try input.click(100, 200, .{
 Double-click at coordinates.
 
 ```zig
-pub fn doubleClick(self: *Input, x: f64, y: f64) !void
+pub fn doubleClick(self: *Input, x: f64, y: f64, opts: ClickOptions) !void
+```
+
+**Example:**
+
+```zig
+try input.doubleClick(100, 200, .{});
 ```
 
 ### moveTo
@@ -89,10 +95,23 @@ pub fn moveTo(self: *Input, x: f64, y: f64) !void
 
 ### scroll
 
-Scroll by delta.
+Scroll by delta (uses mouse wheel event).
 
 ```zig
-pub fn scroll(self: *Input, x: f64, y: f64, delta_x: f64, delta_y: f64) !void
+pub fn scroll(self: *Input, delta_x: f64, delta_y: f64) !void
+```
+
+**Example:**
+
+```zig
+// Scroll down 300 pixels
+try input.scroll(0, 300);
+
+// Scroll up 200 pixels
+try input.scroll(0, -200);
+
+// Scroll right 100 pixels
+try input.scroll(100, 0);
 ```
 
 ## Keyboard Methods

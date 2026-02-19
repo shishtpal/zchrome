@@ -347,6 +347,366 @@ zchrome --url $url --use 75E5402CE67C63D19659EEFDC1CF292D cookies
 
 **Note:** The `--use` flag requires connecting to the browser-level WebSocket URL (`/devtools/browser/...`), not a page-specific URL.
 
+### snapshot
+
+Capture the accessibility tree of the active page and save it to `zsnap.json`. This creates refs (like `@e1`, `@e2`) that can be used in subsequent commands.
+
+```bash
+zchrome snapshot [options]
+```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `-i, --interactive-only` | Only include interactive elements (buttons, links, inputs, etc.) |
+| `-c, --compact` | Skip empty structural elements |
+| `-d, --depth <n>` | Limit tree depth |
+| `-s, --selector <sel>` | Scope snapshot to a CSS selector |
+
+**Example:**
+
+```bash
+# Basic snapshot
+zchrome snapshot
+
+# Interactive elements only (cleaner output)
+zchrome snapshot -i
+
+# Compact mode with depth limit
+zchrome snapshot -c -d 3
+
+# Scope to specific container
+zchrome snapshot -s "#main-content"
+```
+
+**Output:**
+
+```
+- navigation
+  - link "Home" [ref=e1]
+  - link "Products" [ref=e2]
+- main
+  - heading "Welcome" [ref=e3]
+  - textbox "Email" [ref=e4]
+  - button "Submit" [ref=e5]
+
+--- 5 element(s) with refs ---
+
+Snapshot saved to: zsnap.json
+Use @e<N> refs in subsequent commands
+```
+
+## Element Actions
+
+All element action commands accept a `<selector>` which can be:
+- **CSS selector**: `#login-btn`, `.submit`, `input[name="email"]`
+- **Snapshot ref**: `@e3`, `@e15` (from the last `zchrome snapshot`)
+
+### click
+
+Click an element.
+
+```bash
+zchrome click <selector>
+```
+
+**Example:**
+
+```bash
+# By CSS selector
+zchrome click "#login-btn"
+zchrome click "button.submit"
+
+# By snapshot ref
+zchrome click @e5
+```
+
+### dblclick
+
+Double-click an element.
+
+```bash
+zchrome dblclick <selector>
+```
+
+**Example:**
+
+```bash
+zchrome dblclick "#item-row"
+zchrome dblclick @e7
+```
+
+### hover
+
+Hover over an element (move mouse to element center).
+
+```bash
+zchrome hover <selector>
+```
+
+**Example:**
+
+```bash
+zchrome hover "#dropdown-trigger"
+zchrome hover @e3
+```
+
+### focus
+
+Focus an element.
+
+```bash
+zchrome focus <selector>
+```
+
+**Example:**
+
+```bash
+zchrome focus "#email-input"
+zchrome focus @e4
+```
+
+### type
+
+Type text into an element. This appends to existing content.
+
+```bash
+zchrome type <selector> <text>
+```
+
+**Example:**
+
+```bash
+zchrome type "#search" "hello world"
+zchrome type @e4 "user@example.com"
+```
+
+### fill
+
+Clear an element and fill it with text. This is like `type` but clears existing content first.
+
+```bash
+zchrome fill <selector> <text>
+```
+
+**Example:**
+
+```bash
+zchrome fill "#email" "new@example.com"
+zchrome fill @e4 "password123"
+```
+
+### select
+
+Select an option in a dropdown by value.
+
+```bash
+zchrome select <selector> <value>
+```
+
+**Example:**
+
+```bash
+zchrome select "#country" "US"
+zchrome select @e8 "option2"
+```
+
+### check
+
+Check a checkbox (no-op if already checked).
+
+```bash
+zchrome check <selector>
+```
+
+**Example:**
+
+```bash
+zchrome check "#agree-terms"
+zchrome check @e6
+```
+
+### uncheck
+
+Uncheck a checkbox (no-op if already unchecked).
+
+```bash
+zchrome uncheck <selector>
+```
+
+**Example:**
+
+```bash
+zchrome uncheck "#newsletter"
+zchrome uncheck @e6
+```
+
+### scroll
+
+Scroll the page in a direction.
+
+```bash
+zchrome scroll <direction> [pixels]
+```
+
+**Parameters:**
+- `<direction>` - One of: `up`, `down`, `left`, `right`
+- `[pixels]` - Optional scroll amount (default: 300)
+
+**Example:**
+
+```bash
+zchrome scroll down
+zchrome scroll down 500
+zchrome scroll up 200
+zchrome scroll right 100
+```
+
+### scrollintoview
+
+Scroll an element into view (centered in viewport).
+
+```bash
+zchrome scrollintoview <selector>
+zchrome scrollinto <selector>  # alias
+```
+
+**Example:**
+
+```bash
+zchrome scrollintoview "#footer"
+zchrome scrollinto @e15
+```
+
+## Getters
+
+### get text
+
+Get the text content of an element.
+
+```bash
+zchrome get text <selector>
+```
+
+**Example:**
+
+```bash
+zchrome get text "#heading"
+zchrome get text @e3
+```
+
+### get html
+
+Get the innerHTML of an element.
+
+```bash
+zchrome get html <selector>
+```
+
+**Example:**
+
+```bash
+zchrome get html "#content"
+zchrome get html @e5
+```
+
+### get value
+
+Get the value of an input element.
+
+```bash
+zchrome get value <selector>
+```
+
+**Example:**
+
+```bash
+zchrome get value "#email"
+zchrome get value @e4
+```
+
+### get attr
+
+Get an attribute value from an element.
+
+```bash
+zchrome get attr <selector> <attribute>
+```
+
+**Example:**
+
+```bash
+zchrome get attr "#link" href
+zchrome get attr @e3 data-id
+zchrome get attr "img.logo" src
+```
+
+### get title
+
+Get the page title.
+
+```bash
+zchrome get title
+```
+
+### get url
+
+Get the current page URL.
+
+```bash
+zchrome get url
+```
+
+### get count
+
+Count elements matching a selector.
+
+```bash
+zchrome get count <selector>
+```
+
+**Example:**
+
+```bash
+zchrome get count "li.item"
+zchrome get count "button"
+```
+
+### get box
+
+Get the bounding box (position and size) of an element.
+
+```bash
+zchrome get box <selector>
+```
+
+**Output format:** `x=100 y=200 width=300 height=50`
+
+**Example:**
+
+```bash
+zchrome get box "#banner"
+zchrome get box @e5
+```
+
+### get styles
+
+Get all computed styles of an element as JSON.
+
+```bash
+zchrome get styles <selector>
+```
+
+**Example:**
+
+```bash
+zchrome get styles "#button"
+zchrome get styles @e3
+```
+
+**Output:** JSON object with all computed CSS properties.
+
 ### interactive
 
 Start an interactive REPL session.
@@ -444,6 +804,74 @@ zchrome screenshot https://example.com --output example.png
 
 # Generate PDF
 zchrome pdf https://example.com --output example.pdf
+```
+
+### Browser Automation Workflow
+
+A typical workflow using snapshots and element actions:
+
+```bash
+# 1. Launch Chrome and navigate to a page
+zchrome open
+zchrome connect
+zchrome navigate https://example.com/login
+
+# 2. Take a snapshot to see available elements
+zchrome snapshot -i
+
+# Output shows:
+# - textbox "Email" [ref=e1]
+# - textbox "Password" [ref=e2]
+# - button "Login" [ref=e3]
+
+# 3. Fill out the form using refs
+zchrome fill @e1 "user@example.com"
+zchrome fill @e2 "secretpassword"
+zchrome click @e3
+
+# 4. Wait and take a new snapshot
+zchrome snapshot -i
+
+# 5. Continue automation...
+zchrome click @e5
+```
+
+### Form Filling Example
+
+```bash
+# Navigate to form page
+zchrome navigate https://example.com/signup
+
+# Take snapshot to see form fields
+zchrome snapshot -i
+
+# Fill form fields (using CSS selectors)
+zchrome fill "#firstName" "John"
+zchrome fill "#lastName" "Doe"
+zchrome fill "#email" "john@example.com"
+zchrome select "#country" "US"
+zchrome check "#terms"
+zchrome click "#submit"
+```
+
+### Using Snapshot Refs
+
+```bash
+# Snapshot creates refs like @e1, @e2, etc.
+zchrome snapshot
+
+# Refs are stored in zsnap.json with element info:
+# {
+#   "refs": {
+#     "e1": { "role": "link", "name": "Home", "selector": "..." },
+#     "e2": { "role": "button", "name": "Submit", "selector": "..." }
+#   }
+# }
+
+# Use refs in subsequent commands
+zchrome click @e1
+zchrome hover @e2
+zchrome scrollinto @e15
 ```
 
 ## Exit Codes

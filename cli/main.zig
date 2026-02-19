@@ -58,6 +58,7 @@ const Args = struct {
     verbose: bool = false,
     output: ?[]const u8 = null,
     use_target: ?[]const u8 = null,
+    full_page: bool = false,
     io: std.Io = undefined,
     command: Command,
     positional: []const []const u8,
@@ -347,7 +348,10 @@ fn cmdScreenshot(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator
         }
     }
 
-    const screenshot_data = try page.captureScreenshot(allocator, .{ .format = .png });
+    const screenshot_data = try page.captureScreenshot(allocator, .{
+        .format = .png,
+        .capture_beyond_viewport = if (args.full_page) true else null,
+    });
     defer allocator.free(screenshot_data);
 
     const decoded = try cdp.base64.decodeAlloc(allocator, screenshot_data);
@@ -355,7 +359,11 @@ fn cmdScreenshot(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator
 
     const output_path = args.output orelse "screenshot.png";
     try writeFile(args.io, output_path, decoded);
-    std.debug.print("Screenshot saved to {s} ({} bytes)\n", .{ output_path, decoded.len });
+    std.debug.print("Screenshot saved to {s} ({} bytes){s}\n", .{
+        output_path,
+        decoded.len,
+        if (args.full_page) " (full page)" else "",
+    });
 }
 
 /// PDF command
@@ -629,7 +637,10 @@ fn cmdScreenshotWithSession(session: *cdp.Session, args: Args, allocator: std.me
         std.atomic.spinLoopHint();
     }
 
-    const screenshot_data = try page.captureScreenshot(allocator, .{ .format = .png });
+    const screenshot_data = try page.captureScreenshot(allocator, .{
+        .format = .png,
+        .capture_beyond_viewport = if (args.full_page) true else null,
+    });
     defer allocator.free(screenshot_data);
 
     const decoded = try cdp.base64.decodeAlloc(allocator, screenshot_data);
@@ -637,7 +648,11 @@ fn cmdScreenshotWithSession(session: *cdp.Session, args: Args, allocator: std.me
 
     const output_path = args.output orelse "screenshot.png";
     try writeFile(args.io, output_path, decoded);
-    std.debug.print("Screenshot saved to {s} ({} bytes)\n", .{ output_path, decoded.len });
+    std.debug.print("Screenshot saved to {s} ({} bytes){s}\n", .{
+        output_path,
+        decoded.len,
+        if (args.full_page) " (full page)" else "",
+    });
 }
 
 /// PDF command with existing session
@@ -934,6 +949,7 @@ fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
     var verbose: bool = false;
     var output: ?[]const u8 = null;
     var use_target: ?[]const u8 = null;
+    var full_page: bool = false;
 
     _ = iter.skip(); // Skip program name
 
@@ -967,6 +983,8 @@ fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
                 timeout_ms = try std.fmt.parseInt(u32, val, 10);
             } else if (std.mem.eql(u8, arg, "--verbose")) {
                 verbose = true;
+            } else if (std.mem.eql(u8, arg, "--full")) {
+                full_page = true;
             } else if (std.mem.eql(u8, arg, "--output")) {
                 const val = iter.next() orelse return error.MissingArgument;
                 output = try allocator.dupe(u8, val);
@@ -993,6 +1011,7 @@ fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
         .verbose = verbose,
         .output = output,
         .use_target = use_target,
+        .full_page = full_page,
         .command = command,
         .positional = try positional.toOwnedSlice(allocator),
     };
@@ -1013,6 +1032,7 @@ fn printUsage() void {
         \\  --timeout <ms>           Command timeout [default: 30000]
         \\  --verbose                Print CDP messages
         \\  --output <path>          Output file path (for screenshot/pdf)
+        \\  --full                   Capture full page screenshot (not just viewport)
         \\
         \\COMMANDS:
         \\  open                     Launch Chrome with remote debugging

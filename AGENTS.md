@@ -204,7 +204,7 @@ $url = (Invoke-RestMethod http://127.0.0.1:9222/json/version).webSocketDebuggerU
 
 3. Test CLI:
 ```powershell
-.\zig-out\bin\cdp-cli.exe --url $url version
+.\zig-out\bin\zchrome.exe --url $url version
 ```
 
 ### Unit Tests
@@ -248,8 +248,8 @@ zig build test
 
 The `--use <target-id>` flag allows commands to run on existing pages:
 ```bash
-cdp-cli --url $url pages  # Get target IDs
-cdp-cli --url $url --use <target-id> evaluate "document.title"
+zchrome --url $url pages  # Get target IDs
+zchrome --url $url --use <target-id> evaluate "document.title"
 ```
 
 Implementation:
@@ -268,7 +268,7 @@ Implementation:
 
 ### Enable Verbose Output
 ```powershell
-.\cdp-cli.exe --url $url --verbose version
+.\zchrome.exe --url $url --verbose version
 ```
 
 ### Check Chrome is Running

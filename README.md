@@ -63,16 +63,16 @@ curl http://127.0.0.1:9222/json/version
 zig build -Doptimize=ReleaseFast
 
 # Get browser version
-cdp-cli --url ws://127.0.0.1:9222/devtools/browser/<guid> version
+zchrome --url ws://127.0.0.1:9222/devtools/browser/<guid> version
 
 # Navigate to a page
-cdp-cli --url ws://127.0.0.1:9222/devtools/browser/<guid> navigate https://example.com
+zchrome --url ws://127.0.0.1:9222/devtools/browser/<guid> navigate https://example.com
 
 # Take a screenshot
-cdp-cli --url ws://127.0.0.1:9222/devtools/browser/<guid> screenshot output.png
+zchrome --url ws://127.0.0.1:9222/devtools/browser/<guid> screenshot output.png
 
 # Evaluate JavaScript
-cdp-cli --url ws://127.0.0.1:9222/devtools/browser/<guid> evaluate "document.title"
+zchrome --url ws://127.0.0.1:9222/devtools/browser/<guid> evaluate "document.title"
 ```
 
 ## CLI Commands
@@ -97,12 +97,12 @@ Use the `--use <target-id>` flag to run commands on existing pages:
 
 ```bash
 # List open pages
-cdp-cli --url $url pages
+zchrome --url $url pages
 
 # Run commands on existing page
-cdp-cli --url $url --use <target-id> evaluate "document.title"
-cdp-cli --url $url --use <target-id> navigate https://example.org
-cdp-cli --url $url --use <target-id> screenshot --output page.png
+zchrome --url $url --use <target-id> evaluate "document.title"
+zchrome --url $url --use <target-id> navigate https://example.org
+zchrome --url $url --use <target-id> screenshot --output page.png
 ```
 
 ## Library Usage

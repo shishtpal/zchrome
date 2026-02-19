@@ -20,7 +20,7 @@ pub fn build(b: *std.Build) void {
     cli_mod.addImport("cdp", cdp_mod);
 
     const cli = b.addExecutable(.{
-        .name = "cdp-cli",
+        .name = "zchrome",
         .root_module = cli_mod,
     });
     b.installArtifact(cli);

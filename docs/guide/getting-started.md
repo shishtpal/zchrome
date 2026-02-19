@@ -207,55 +207,62 @@ zchrome includes a command-line tool for quick tasks:
 # Build the CLI (use ReleaseFast to avoid debug allocator errors)
 zig build -Doptimize=ReleaseFast
 
-# Navigate and print title
-./zig-out/bin/cdp-cli navigate https://example.com
+# Launch Chrome with remote debugging
+zchrome open --chrome "/path/to/chrome" --data-dir "/tmp/chrome-profile"
 
-# Capture screenshot
-./zig-out/bin/cdp-cli screenshot https://example.com --output page.png
+# Connect and save WebSocket URL to zchrome.json
+zchrome connect
 
-# Generate PDF
-./zig-out/bin/cdp-cli pdf https://example.com --output page.pdf
+# Navigate (uses existing page, saves target ID)
+zchrome navigate https://example.com
 
-# Execute JavaScript
-./zig-out/bin/cdp-cli evaluate https://example.com "document.title"
+# Subsequent commands use saved config automatically
+zchrome evaluate "document.title"
+zchrome screenshot --output page.png
+zchrome screenshot --output full.png --full  # Full page screenshot
+zchrome pdf --output page.pdf
 
 # Query DOM
-./zig-out/bin/cdp-cli dom https://example.com "h1"
+zchrome dom "h1"
 
 # Get browser version
-./zig-out/bin/cdp-cli version
+zchrome version
 ```
 
-### Working with Existing Pages
+### Config File
 
-Connect to a running Chrome instance and operate on existing pages:
+zchrome stores session info in `zchrome.json`:
+
+```json
+{
+  "chrome_path": "/path/to/chrome",
+  "data_dir": "/tmp/chrome-profile",
+  "port": 9222,
+  "ws_url": "ws://127.0.0.1:9222/devtools/browser/...",
+  "last_target": "DC6E72F7B31F6A70C4C2B7A2D5A9ED74"
+}
+```
+
+### Working with Multiple Pages
 
 ```bash
-# Start Chrome with debugging
-chrome --remote-debugging-port=9222 --user-data-dir=/tmp/chrome-profile
-
-# Get the browser WebSocket URL
-# PowerShell:
-$url = (Invoke-RestMethod http://127.0.0.1:9222/json/version).webSocketDebuggerUrl
-
 # List all open pages
-./zig-out/bin/cdp-cli --url $url pages
+zchrome pages
 
 # Output:
 # TARGET ID                                 TITLE                          URL
 # --------------------------------------------------------------------------------------------------------------------------
-# F8011F4EDE26C3319EC2D2F8ABEA1D96          DevTools                       devtools://devtools/...
 # 75E5402CE67C63D19659EEFDC1CF292D          Example Domain                 https://example.com/
-# Total: 2 page(s)
+# Total: 1 page(s)
 
-# Execute JavaScript on an existing page
-./zig-out/bin/cdp-cli --url $url --use 75E5402CE67C63D19659EEFDC1CF292D evaluate "document.title"
+# Execute on a specific page
+zchrome --use 75E5402CE67C63D19659EEFDC1CF292D evaluate "document.title"
 
-# Navigate an existing page
-./zig-out/bin/cdp-cli --url $url --use 75E5402CE67C63D19659EEFDC1CF292D navigate https://example.org
+# Navigate a specific page
+zchrome --use 75E5402CE67C63D19659EEFDC1CF292D navigate https://example.org
 
-# Take screenshot of existing page
-./zig-out/bin/cdp-cli --url $url --use 75E5402CE67C63D19659EEFDC1CF292D screenshot --output page.png
+# Take full page screenshot of specific page
+zchrome --use 75E5402CE67C63D19659EEFDC1CF292D screenshot --output page.png --full
 ```
 
 ## Next Steps

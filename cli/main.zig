@@ -118,7 +118,12 @@ pub fn main(init: std.process.Init) !void {
     if (args.url == null and config.ws_url != null) {
         args.url = allocator.dupe(u8, config.ws_url.?) catch null;
     }
-    if (args.use_target == null and config.last_target != null) {
+    // Only apply last_target for page-level commands (not version, pages, list_targets, etc.)
+    const needs_target = switch (args.command) {
+        .navigate, .screenshot, .pdf, .evaluate, .dom, .network, .cookies => true,
+        .version, .list_targets, .pages, .interactive, .open, .connect, .help => false,
+    };
+    if (needs_target and args.use_target == null and config.last_target != null) {
         args.use_target = allocator.dupe(u8, config.last_target.?) catch null;
     }
 

@@ -180,6 +180,30 @@ Focus an element.
 pub fn focus(self: *DOM, node_id: i64) !void
 ```
 
+### setFileInputFiles
+
+Set files for a file input element. Used for file uploads.
+
+```zig
+pub fn setFileInputFiles(self: *DOM, node_id: i64, files: []const []const u8) !void
+```
+
+**Parameters:**
+- `node_id` - Node ID of the file input element
+- `files` - Array of absolute file paths
+
+**Note:** File paths must be absolute paths on the local filesystem. This method only sets the files on the input element - it does not submit any form.
+
+**Example:**
+
+```zig
+const file_input_id = try dom.querySelector(doc.node_id, "input[type=file]");
+try dom.setFileInputFiles(file_input_id, &[_][]const u8{
+    "/path/to/document.pdf",
+    "/path/to/image.png",
+});
+```
+
 ### getBoxModel
 
 Get element's box model dimensions.

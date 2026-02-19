@@ -431,6 +431,67 @@ pub fn scrollIntoView(
     _ = try runtime.evaluate(allocator, js, .{});
 }
 
+/// Drag from source element to target element
+pub fn dragElement(
+    session: *cdp.Session,
+    allocator: std.mem.Allocator,
+    src_resolved: *const ResolvedElement,
+    tgt_resolved: *const ResolvedElement,
+) !void {
+    // Get center positions of source and target elements
+    const src_center = try getElementCenter(session, allocator, src_resolved);
+    const tgt_center = try getElementCenter(session, allocator, tgt_resolved);
+
+    var input = cdp.Input.init(session);
+
+    // Move to source element
+    try input.moveTo(src_center.x, src_center.y);
+
+    // Small delay
+    var i: u32 = 0;
+    while (i < 100000) : (i += 1) {
+        std.atomic.spinLoopHint();
+    }
+
+    // Mouse down at source
+    try input.dispatchMouseEvent(.{
+        .type = .mousePressed,
+        .x = src_center.x,
+        .y = src_center.y,
+        .button = .left,
+        .click_count = 1,
+    });
+
+    // Small delay
+    i = 0;
+    while (i < 100000) : (i += 1) {
+        std.atomic.spinLoopHint();
+    }
+
+    // Move to target element (drag)
+    try input.dispatchMouseEvent(.{
+        .type = .mouseMoved,
+        .x = tgt_center.x,
+        .y = tgt_center.y,
+        .button = .left,
+    });
+
+    // Small delay
+    i = 0;
+    while (i < 100000) : (i += 1) {
+        std.atomic.spinLoopHint();
+    }
+
+    // Mouse up at target (drop)
+    try input.dispatchMouseEvent(.{
+        .type = .mouseReleased,
+        .x = tgt_center.x,
+        .y = tgt_center.y,
+        .button = .left,
+        .click_count = 1,
+    });
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 fn escapeJsString(allocator: std.mem.Allocator, s: []const u8) ![]const u8 {

@@ -1,0 +1,14 @@
+.{
+    .name = .cdp,
+    .version = "0.1.0",
+    .fingerprint = 0xe44473f4cb6efb81,
+    .minimum_zig_version = "0.16.0-dev.2535+b5bd49460",
+    .paths = .{
+        "src",
+        "cli",
+        "tests",
+        "protocol",
+        "build.zig",
+        "build.zig.zon",
+    },
+}

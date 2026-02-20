@@ -1,10 +1,10 @@
 const std = @import("std");
-const protocol = @import("cdp");
+const cdp = @import("cdp");
 const fixtures = @import("helpers/fixtures.zig");
 
 test "parseMessage - response with result" {
     const raw = "{\"id\":1,\"result\":{\"frameId\":\"F1\"}}";
-    var msg = protocol.protocol.parseMessage(std.testing.allocator, raw) catch return;
+    var msg = cdp.protocol.parseMessage(std.testing.allocator, raw) catch return;
     defer msg.deinit(std.testing.allocator);
 
     try std.testing.expect(msg == .response);
@@ -13,7 +13,7 @@ test "parseMessage - response with result" {
 
 test "parseMessage - response with session id" {
     const raw = "{\"id\":2,\"result\":{},\"sessionId\":\"S1\"}";
-    var msg = try protocol.protocol.parseMessage(std.testing.allocator, raw);
+    var msg = try cdp.protocol.parseMessage(std.testing.allocator, raw);
     defer msg.deinit(std.testing.allocator);
 
     try std.testing.expect(msg == .response);
@@ -22,7 +22,7 @@ test "parseMessage - response with session id" {
 
 test "parseMessage - error response" {
     const raw = "{\"id\":3,\"error\":{\"code\":-32601,\"message\":\"Method not found\"}}";
-    var msg = try protocol.protocol.parseMessage(std.testing.allocator, raw);
+    var msg = try cdp.protocol.parseMessage(std.testing.allocator, raw);
     defer msg.deinit(std.testing.allocator);
 
     try std.testing.expect(msg == .error_response);
@@ -32,7 +32,7 @@ test "parseMessage - error response" {
 
 test "parseMessage - event" {
     const raw = fixtures.page_load_event_fired;
-    var msg = try protocol.protocol.parseMessage(std.testing.allocator, raw);
+    var msg = try cdp.protocol.parseMessage(std.testing.allocator, raw);
     defer msg.deinit(std.testing.allocator);
 
     try std.testing.expect(msg == .event);
@@ -40,12 +40,12 @@ test "parseMessage - event" {
 }
 
 test "parseMessage - invalid json" {
-    const result = protocol.protocol.parseMessage(std.testing.allocator, "not json{{{");
+    const result = cdp.protocol.parseMessage(std.testing.allocator, "not json{{{");
     try std.testing.expectError(error.InvalidMessage, result);
 }
 
 test "serializeCommand - with params" {
-    const result = try protocol.protocol.serializeCommand(
+    const result = try cdp.protocol.serializeCommand(
         std.testing.allocator,
         1,
         "Page.navigate",
@@ -60,7 +60,7 @@ test "serializeCommand - with params" {
 }
 
 test "serializeCommand - with session id" {
-    const result = try protocol.protocol.serializeCommand(
+    const result = try cdp.protocol.serializeCommand(
         std.testing.allocator,
         2,
         "Page.enable",
@@ -73,7 +73,7 @@ test "serializeCommand - with session id" {
 }
 
 test "IdAllocator - monotonic" {
-    var alloc = protocol.protocol.IdAllocator.init();
+    var alloc = cdp.protocol.IdAllocator.init();
     try std.testing.expectEqual(@as(u64, 1), alloc.next());
     try std.testing.expectEqual(@as(u64, 2), alloc.next());
     try std.testing.expectEqual(@as(u64, 3), alloc.next());

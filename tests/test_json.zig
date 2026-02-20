@@ -75,7 +75,7 @@ test "decode struct from json value" {
 
     var result = try json.decode(TestStruct, parsed.value, std.testing.allocator);
     defer std.testing.allocator.free(result.frame_id);
-    if (result.loader_id) |l| std.testing.allocator.free(l);
+    defer if (result.loader_id) |l| std.testing.allocator.free(l);
 
     try std.testing.expectEqualStrings("F1", result.frame_id);
     try std.testing.expectEqualStrings("L1", result.loader_id.?);

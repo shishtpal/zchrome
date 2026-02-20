@@ -13,6 +13,7 @@ pub const TargetInfo = @import("browser/launcher.zig").TargetInfo;
 // Core protocol
 pub const Connection = @import("core/connection.zig").Connection;
 pub const Session = @import("core/session.zig").Session;
+pub const protocol = @import("core/protocol.zig");
 pub const Event = @import("core/protocol.zig").Event;
 pub const Response = @import("core/protocol.zig").Response;
 pub const ErrorResponse = @import("core/protocol.zig").ErrorResponse;

@@ -48,10 +48,7 @@ pub const Response = struct {
     session_id: ?[]const u8 = null,
 
     pub fn deinit(self: *Response, allocator: std.mem.Allocator) void {
-        _ = self;
-        _ = allocator;
-        // std.json.Value doesn't need explicit deallocation
-        // if it was parsed with arena allocator
+        if (self.session_id) |sid| allocator.free(sid);
     }
 };
 

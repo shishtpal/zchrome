@@ -1,9 +1,20 @@
 const std = @import("std");
 
+/// Comptime compute the length of snake_case converted to camelCase
+fn SnakeToCamelLen(comptime snake: []const u8) comptime_int {
+    var count: usize = 0;
+    for (snake) |c| {
+        if (c != '_') count += 1;
+    }
+    return count;
+}
+
 /// Convert snake_case to camelCase (comptime version)
-pub fn comptimeSnakeToCamel(comptime snake: []const u8) []const u8 {
-    comptime {
-        var result: [snake.len]u8 = undefined;
+/// Returns a pointer to a static comptime-known array
+pub fn comptimeSnakeToCamel(comptime snake: []const u8) *const [SnakeToCamelLen(snake)]u8 {
+    const len = comptime SnakeToCamelLen(snake);
+    const result = comptime blk: {
+        var buf: [len]u8 = undefined;
         var j: usize = 0;
         var capitalize_next = false;
 
@@ -11,14 +22,15 @@ pub fn comptimeSnakeToCamel(comptime snake: []const u8) []const u8 {
             if (c == '_') {
                 capitalize_next = true;
             } else {
-                result[j] = if (capitalize_next) std.ascii.toUpper(c) else c;
+                buf[j] = if (capitalize_next) std.ascii.toUpper(c) else c;
                 j += 1;
                 capitalize_next = false;
             }
         }
 
-        return result[0..j];
-    }
+        break :blk buf;
+    };
+    return &result;
 }
 
 /// Convert snake_case to camelCase (runtime version)
@@ -182,18 +194,18 @@ pub fn decode(
             };
 
             inline for (struct_info.fields) |field| {
-                const camel_key = comptimeSnakeToCamel(field.name);
+                const camel_key: []const u8 = comptimeSnakeToCamel(field.name);
                 const json_val = value.object.get(camel_key);
 
                 const is_optional = @typeInfo(field.type) == .optional;
-                const has_default = field.default_value != null;
+                const has_default = field.default_value_ptr != null;
 
                 if (json_val) |jv| {
                     @field(result, field.name) = try decode(field.type, jv, allocator);
                 } else if (is_optional) {
                     @field(result, field.name) = null;
                 } else if (has_default) {
-                    @field(result, field.name) = @as(*const field.type, @ptrCast(field.default_value.?)).*;
+                    @field(result, field.name) = @as(*const field.type, @ptrCast(field.default_value_ptr.?)).*;
                 } else {
                     return error.MissingField;
                 }

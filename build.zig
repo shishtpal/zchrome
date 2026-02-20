@@ -45,6 +45,10 @@ pub fn build(b: *std.Build) void {
         "tests/test_domains_network.zig",
         "tests/test_domains_dom.zig",
         "tests/test_domains_target.zig",
+        // New comprehensive tests
+        "tests/test_helpers.zig",
+        "tests/test_config.zig",
+        "tests/test_snapshot.zig",
     };
 
     const test_step = b.step("test", "Run unit tests");

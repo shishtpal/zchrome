@@ -4,3 +4,6 @@ zig-out/
 *.exe
 *.o
 *.obj
+
+zchrome.json
+zsnap.json

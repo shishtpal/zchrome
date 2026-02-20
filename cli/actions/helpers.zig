@@ -38,11 +38,14 @@ pub const FIND_BY_ROLE_JS =
     \\    implicit = implicit.filter(function(el) { return !el.hasAttribute('role'); });
     \\    els = els.concat(implicit);
     \\  }
+    \\  function getLabel(el) {
+    \\    var a = el.getAttribute('aria-label'); if (a) return a;
+    \\    var p = el.getAttribute('placeholder'); if (p) return p;
+    \\    var id = el.id; if (id) { var l = document.querySelector('label[for="'+id+'"]'); if (l) return l.textContent.trim(); }
+    \\    return el.textContent.trim();
+    \\  }
     \\  if (name) {
-    \\    els = els.filter(function(el) {
-    \\      var label = el.getAttribute('aria-label') || el.getAttribute('placeholder') || el.textContent.trim();
-    \\      return label === name;
-    \\    });
+    \\    els = els.filter(function(el) { return getLabel(el) === name; });
     \\  }
     \\  var el = els[nth || 0];
     \\  if (!el) return null;
@@ -78,11 +81,14 @@ pub const FIND_AND_FOCUS_JS =
     \\    implicit = implicit.filter(function(el) { return !el.hasAttribute('role'); });
     \\    els = els.concat(implicit);
     \\  }
+    \\  function getLabel(el) {
+    \\    var a = el.getAttribute('aria-label'); if (a) return a;
+    \\    var p = el.getAttribute('placeholder'); if (p) return p;
+    \\    var id = el.id; if (id) { var l = document.querySelector('label[for="'+id+'"]'); if (l) return l.textContent.trim(); }
+    \\    return el.textContent.trim();
+    \\  }
     \\  if (name) {
-    \\    els = els.filter(function(el) {
-    \\      var label = el.getAttribute('aria-label') || el.getAttribute('placeholder') || el.textContent.trim();
-    \\      return label === name;
-    \\    });
+    \\    els = els.filter(function(el) { return getLabel(el) === name; });
     \\  }
     \\  var el = els[nth || 0];
     \\  if (el) el.focus();
@@ -110,11 +116,14 @@ pub const FIND_AND_FILL_JS =
     \\    implicit = implicit.filter(function(el) { return !el.hasAttribute('role'); });
     \\    els = els.concat(implicit);
     \\  }
+    \\  function getLabel(el) {
+    \\    var a = el.getAttribute('aria-label'); if (a) return a;
+    \\    var p = el.getAttribute('placeholder'); if (p) return p;
+    \\    var id = el.id; if (id) { var l = document.querySelector('label[for="'+id+'"]'); if (l) return l.textContent.trim(); }
+    \\    return el.textContent.trim();
+    \\  }
     \\  if (name) {
-    \\    els = els.filter(function(el) {
-    \\      var label = el.getAttribute('aria-label') || el.getAttribute('placeholder') || el.textContent.trim();
-    \\      return label === name;
-    \\    });
+    \\    els = els.filter(function(el) { return getLabel(el) === name; });
     \\  }
     \\  var el = els[nth || 0];
     \\  if (!el) return false;
@@ -155,11 +164,14 @@ pub const FIND_AND_SELECT_JS =
     \\    implicit = implicit.filter(function(el) { return !el.hasAttribute('role'); });
     \\    els = els.concat(implicit);
     \\  }
+    \\  function getLabel(el) {
+    \\    var a = el.getAttribute('aria-label'); if (a) return a;
+    \\    var p = el.getAttribute('placeholder'); if (p) return p;
+    \\    var id = el.id; if (id) { var l = document.querySelector('label[for="'+id+'"]'); if (l) return l.textContent.trim(); }
+    \\    return el.textContent.trim();
+    \\  }
     \\  if (name) {
-    \\    els = els.filter(function(el) {
-    \\      var label = el.getAttribute('aria-label') || el.getAttribute('placeholder') || el.textContent.trim();
-    \\      return label === name;
-    \\    });
+    \\    els = els.filter(function(el) { return getLabel(el) === name; });
     \\  }
     \\  var el = els[nth || 0];
     \\  if (el) { el.value = value; el.dispatchEvent(new Event('change', {bubbles: true})); }
@@ -187,11 +199,14 @@ pub const FIND_AND_CHECK_JS =
     \\    implicit = implicit.filter(function(el) { return !el.hasAttribute('role'); });
     \\    els = els.concat(implicit);
     \\  }
+    \\  function getLabel(el) {
+    \\    var a = el.getAttribute('aria-label'); if (a) return a;
+    \\    var p = el.getAttribute('placeholder'); if (p) return p;
+    \\    var id = el.id; if (id) { var l = document.querySelector('label[for="'+id+'"]'); if (l) return l.textContent.trim(); }
+    \\    return el.textContent.trim();
+    \\  }
     \\  if (name) {
-    \\    els = els.filter(function(el) {
-    \\      var label = el.getAttribute('aria-label') || el.textContent.trim();
-    \\      return label === name;
-    \\    });
+    \\    els = els.filter(function(el) { return getLabel(el) === name; });
     \\  }
     \\  var el = els[nth || 0];
     \\  if (el && el.checked !== checked) el.click();
@@ -226,11 +241,14 @@ pub const FIND_AND_SCROLL_JS =
     \\    implicit = implicit.filter(function(el) { return !el.hasAttribute('role'); });
     \\    els = els.concat(implicit);
     \\  }
+    \\  function getLabel(el) {
+    \\    var a = el.getAttribute('aria-label'); if (a) return a;
+    \\    var p = el.getAttribute('placeholder'); if (p) return p;
+    \\    var id = el.id; if (id) { var l = document.querySelector('label[for="'+id+'"]'); if (l) return l.textContent.trim(); }
+    \\    return el.textContent.trim();
+    \\  }
     \\  if (name) {
-    \\    els = els.filter(function(el) {
-    \\      var label = el.getAttribute('aria-label') || el.getAttribute('placeholder') || el.textContent.trim();
-    \\      return label === name;
-    \\    });
+    \\    els = els.filter(function(el) { return getLabel(el) === name; });
     \\  }
     \\  var el = els[nth || 0];
     \\  if (el) el.scrollIntoView({block: 'center', behavior: 'smooth'});
@@ -297,7 +315,7 @@ pub fn buildGetterJs(
         const nth = resolved.nth orelse 0;
 
         return try std.fmt.allocPrint(allocator,
-            "(function(role,name,nth){{var IMPLICIT_ROLES={{'link':'a[href]','button':'button,input[type=\"button\"],input[type=\"submit\"],input[type=\"reset\"]','textbox':'input:not([type]),input[type=\"text\"],input[type=\"email\"],input[type=\"password\"],input[type=\"search\"],input[type=\"tel\"],input[type=\"url\"],input[type=\"number\"],textarea,[contenteditable=\"true\"],[contenteditable=\"\"]','checkbox':'input[type=\"checkbox\"]','radio':'input[type=\"radio\"]','combobox':'select','heading':'h1,h2,h3,h4,h5,h6'}};var els=Array.from(document.querySelectorAll('[role=\"'+role+'\"]'));if(IMPLICIT_ROLES[role]){{var implicit=Array.from(document.querySelectorAll(IMPLICIT_ROLES[role])).filter(function(e){{return !e.hasAttribute('role')}});els=els.concat(implicit)}}if(name)els=els.filter(function(e){{var label=e.getAttribute('aria-label')||e.getAttribute('placeholder')||e.textContent.trim();return label===name}});var el=els[nth||0];if(!el)return null;return {s}}})(\"{s}\",{s},{d})"
+            "(function(role,name,nth){{var IMPLICIT_ROLES={{'link':'a[href]','button':'button,input[type=\"button\"],input[type=\"submit\"],input[type=\"reset\"]','textbox':'input:not([type]),input[type=\"text\"],input[type=\"email\"],input[type=\"password\"],input[type=\"search\"],input[type=\"tel\"],input[type=\"url\"],input[type=\"number\"],textarea,[contenteditable=\"true\"],[contenteditable=\"\"]','checkbox':'input[type=\"checkbox\"]','radio':'input[type=\"radio\"]','combobox':'select','heading':'h1,h2,h3,h4,h5,h6'}};function queryAll(root,sel){{var r=Array.from(root.querySelectorAll(sel));root.querySelectorAll('*').forEach(function(e){{if(e.shadowRoot)r=r.concat(queryAll(e.shadowRoot,sel))}});return r}}var els=queryAll(document,'[role=\"'+role+'\"]');if(IMPLICIT_ROLES[role]){{var implicit=queryAll(document,IMPLICIT_ROLES[role]).filter(function(e){{return !e.hasAttribute('role')}});els=els.concat(implicit)}}function getLabel(e){{var a=e.getAttribute('aria-label');if(a)return a;var p=e.getAttribute('placeholder');if(p)return p;var id=e.id;if(id){{var l=document.querySelector('label[for=\"'+id+'\"]');if(l)return l.textContent.trim()}}return e.textContent.trim()}}if(name)els=els.filter(function(e){{return getLabel(e)===name}});var el=els[nth||0];if(!el)return null;return {s}}})(\"{s}\",{s},{d})"
         , .{ getter_expr, role, name_arg, nth });
     }
 }

@@ -89,6 +89,51 @@ pub const FIND_AND_FOCUS_JS =
     \\})
 ;
 
+/// JavaScript to find element by role and fill with value (Vue/React compatible)
+pub const FIND_AND_FILL_JS =
+    \\(function(role, name, nth, value) {
+    \\  var IMPLICIT_ROLES = {
+    \\    'textbox': 'input:not([type]), input[type="text"], input[type="email"], input[type="password"], input[type="search"], input[type="tel"], input[type="url"], input[type="number"], textarea, [contenteditable="true"], [contenteditable=""]',
+    \\    'combobox': 'select',
+    \\    'spinbutton': 'input[type="number"]'
+    \\  };
+    \\  function queryAll(root, sel) {
+    \\    var results = Array.from(root.querySelectorAll(sel));
+    \\    root.querySelectorAll('*').forEach(function(el) {
+    \\      if (el.shadowRoot) results = results.concat(queryAll(el.shadowRoot, sel));
+    \\    });
+    \\    return results;
+    \\  }
+    \\  var els = queryAll(document, '[role="' + role + '"]');
+    \\  if (IMPLICIT_ROLES[role]) {
+    \\    var implicit = queryAll(document, IMPLICIT_ROLES[role]);
+    \\    implicit = implicit.filter(function(el) { return !el.hasAttribute('role'); });
+    \\    els = els.concat(implicit);
+    \\  }
+    \\  if (name) {
+    \\    els = els.filter(function(el) {
+    \\      var label = el.getAttribute('aria-label') || el.getAttribute('placeholder') || el.textContent.trim();
+    \\      return label === name;
+    \\    });
+    \\  }
+    \\  var el = els[nth || 0];
+    \\  if (!el) return false;
+    \\  el.focus();
+    \\  if (el.contentEditable === 'true' || el.contentEditable === '') {
+    \\    el.textContent = '';
+    \\    el.dispatchEvent(new Event('input', {bubbles: true}));
+    \\    el.textContent = value;
+    \\  } else {
+    \\    el.value = '';
+    \\    el.dispatchEvent(new Event('input', {bubbles: true}));
+    \\    el.value = value;
+    \\  }
+    \\  el.dispatchEvent(new Event('input', {bubbles: true}));
+    \\  el.dispatchEvent(new Event('change', {bubbles: true}));
+    \\  return true;
+    \\})
+;
+
 /// JavaScript to find element by role and select option
 pub const FIND_AND_SELECT_JS =
     \\(function(role, name, nth, value) {

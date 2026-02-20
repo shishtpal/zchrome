@@ -133,45 +133,48 @@ pub fn typeText(
     try input.typeText(text, 10);
 }
 
-/// Clear input field (select all + delete)
-pub fn clearField(session: *cdp.Session) !void {
-    var input = cdp.Input.init(session);
-    // Ctrl+A to select all
-    try input.dispatchKeyEvent(.{
-        .type = .keyDown,
-        .key = "a",
-        .code = "KeyA",
-        .modifiers = 2, // Ctrl
-    });
-    try input.dispatchKeyEvent(.{
-        .type = .keyUp,
-        .key = "a",
-        .code = "KeyA",
-        .modifiers = 2,
-    });
-    // Delete
-    try input.press("Backspace");
-}
-
-/// Fill input field (clear + type)
+/// Clear and fill input field using JavaScript (works with Vue/React reactive fields)
 pub fn fillElement(
     session: *cdp.Session,
     allocator: std.mem.Allocator,
     resolved: *const ResolvedElement,
     text: []const u8,
 ) !void {
-    try focusElement(session, allocator, resolved);
-    // Sleep using spinloop (Zig 0.16 changed time API)
-    var i: u32 = 0;
-    while (i < 500000) : (i += 1) {
-        std.atomic.spinLoopHint();
+    var runtime = cdp.Runtime.init(session);
+    try runtime.enable();
+
+    const escaped_text = try helpers.escapeJsString(allocator, text);
+    defer allocator.free(escaped_text);
+
+    var js: []const u8 = undefined;
+    defer allocator.free(js);
+
+    if (resolved.css_selector) |css| {
+        const escaped_css = try helpers.escapeJsString(allocator, css);
+        defer allocator.free(escaped_css);
+        js = try std.fmt.allocPrint(allocator,
+            \\(function(sel, val) {{
+            \\  var el = document.querySelector(sel);
+            \\  if (!el) return false;
+            \\  el.focus();
+            \\  el.value = '';
+            \\  el.dispatchEvent(new Event('input', {{bubbles: true}}));
+            \\  el.value = val;
+            \\  el.dispatchEvent(new Event('input', {{bubbles: true}}));
+            \\  el.dispatchEvent(new Event('change', {{bubbles: true}}));
+            \\  return true;
+            \\}})({s}, {s})
+        , .{ escaped_css, escaped_text });
+    } else {
+        const role = resolved.role orelse return error.InvalidSelector;
+        const name_arg = if (resolved.name) |n| try helpers.escapeJsString(allocator, n) else try allocator.dupe(u8, "null");
+        defer allocator.free(name_arg);
+        const nth = resolved.nth orelse 0;
+
+        js = try std.fmt.allocPrint(allocator, "{s}('{s}',{s},{},{s});", .{ helpers.FIND_AND_FILL_JS, role, name_arg, nth, escaped_text });
     }
-    try clearField(session);
-    i = 0;
-    while (i < 500000) : (i += 1) {
-        std.atomic.spinLoopHint();
-    }
-    try typeText(session, text);
+
+    _ = try runtime.evaluate(allocator, js, .{});
 }
 
 /// Hover over an element

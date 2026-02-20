@@ -17,23 +17,33 @@ pub const Config = struct {
     }
 };
 
+const config_filename = "zchrome.json";
+
 /// Get the path to zchrome.json (alongside the executable)
 pub fn getConfigPath(allocator: std.mem.Allocator, io: std.Io) ![]const u8 {
-    _ = io;
-    // For portability, use "zchrome.json" in the current working directory
-    // This allows the config to be placed alongside the executable
-    return allocator.dupe(u8, "zchrome.json");
+    // Get the directory containing the executable
+    const exe_dir = std.process.executableDirPathAlloc(io, allocator) catch {
+        // Fallback to current directory if we can't get exe path
+        return allocator.dupe(u8, config_filename);
+    };
+    defer allocator.free(exe_dir);
+    return std.fs.path.join(allocator, &.{ exe_dir, config_filename });
 }
 
 /// Load configuration from zchrome.json
 pub fn loadConfig(allocator: std.mem.Allocator, io: std.Io) ?Config {
-    const config_path = getConfigPath(allocator, io) catch return null;
-    defer allocator.free(config_path);
+    // Try to get exe directory, fall back to cwd
+    const exe_dir_path = std.process.executableDirPathAlloc(io, allocator) catch null;
+    defer if (exe_dir_path) |p| allocator.free(p);
+
+    const dir = if (exe_dir_path) |p|
+        std.Io.Dir.openDirAbsolute(io, p, .{}) catch std.Io.Dir.cwd()
+    else
+        std.Io.Dir.cwd();
 
     // Read the file
-    const dir = std.Io.Dir.cwd();
     var file_buf: [64 * 1024]u8 = undefined;
-    const content = dir.readFile(io, config_path, &file_buf) catch return null;
+    const content = dir.readFile(io, config_filename, &file_buf) catch return null;
 
     // Parse JSON
     const parsed = std.json.parseFromSlice(std.json.Value, allocator, content, .{}) catch return null;
@@ -63,9 +73,6 @@ pub fn loadConfig(allocator: std.mem.Allocator, io: std.Io) ?Config {
 
 /// Save configuration to zchrome.json
 pub fn saveConfig(config: Config, allocator: std.mem.Allocator, io: std.Io) !void {
-    const config_path = try getConfigPath(allocator, io);
-    defer allocator.free(config_path);
-
     // Build JSON string
     var json_buf: std.ArrayList(u8) = .empty;
     defer json_buf.deinit(allocator);
@@ -115,10 +122,18 @@ pub fn saveConfig(config: Config, allocator: std.mem.Allocator, io: std.Io) !voi
 
     try json_buf.appendSlice(allocator, "\n}\n");
 
+    // Try to get exe directory, fall back to cwd
+    const exe_dir_path = std.process.executableDirPathAlloc(io, allocator) catch null;
+    defer if (exe_dir_path) |p| allocator.free(p);
+
+    const dir = if (exe_dir_path) |p|
+        std.Io.Dir.openDirAbsolute(io, p, .{}) catch std.Io.Dir.cwd()
+    else
+        std.Io.Dir.cwd();
+
     // Write to file
-    const dir = std.Io.Dir.cwd();
     dir.writeFile(io, .{
-        .sub_path = config_path,
+        .sub_path = config_filename,
         .data = json_buf.items,
     }) catch |err| {
         std.debug.print("Error writing config: {}\n", .{err});
@@ -140,7 +155,13 @@ fn appendEscapedString(buf: *std.ArrayList(u8), allocator: std.mem.Allocator, st
     }
 }
 
-/// Get the default snapshot file path
-pub fn getSnapshotPath(allocator: std.mem.Allocator) ![]const u8 {
-    return allocator.dupe(u8, "zsnap.json");
+/// Get the default snapshot file path (alongside the executable)
+pub fn getSnapshotPath(allocator: std.mem.Allocator, io: std.Io) ![]const u8 {
+    // Get the directory containing the executable
+    const exe_dir = std.process.executableDirPathAlloc(io, allocator) catch {
+        // Fallback to current directory if we can't get exe path
+        return allocator.dupe(u8, "zsnap.json");
+    };
+    defer allocator.free(exe_dir);
+    return std.fs.path.join(allocator, &.{ exe_dir, "zsnap.json" });
 }

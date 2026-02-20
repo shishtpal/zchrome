@@ -11,7 +11,7 @@ pub fn resolveSelector(allocator: std.mem.Allocator, io: std.Io, selector: []con
     if (selector.len > 0 and selector[0] == '@') {
         // Ref-based selector: load from snapshot
         const ref_id = selector[1..];
-        const snapshot_path = try config_mod.getSnapshotPath(allocator);
+        const snapshot_path = try config_mod.getSnapshotPath(allocator, io);
         defer allocator.free(snapshot_path);
 
         var snapshot_data = snapshot_mod.loadSnapshot(allocator, io, snapshot_path) catch |err| {

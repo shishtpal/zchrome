@@ -936,7 +936,7 @@ fn cmdSnapshotWithSession(session: *cdp.Session, args: Args, allocator: std.mem.
     std.debug.print("\n--- {} element(s) with refs ---\n", .{snapshot.refs.count()});
 
     // Save to file
-    const output_path = args.output orelse try config_mod.getSnapshotPath(allocator);
+    const output_path = args.output orelse try config_mod.getSnapshotPath(allocator, args.io);
     defer if (args.output == null) allocator.free(output_path);
 
     try snapshot_mod.saveSnapshot(allocator, args.io, output_path, &snapshot);

@@ -117,9 +117,8 @@ pub fn focusElement(
         defer allocator.free(name_arg);
         const nth = resolved.nth orelse 0;
 
-        js = try std.fmt.allocPrint(allocator,
-            \\(function(role,name,nth){{var els=Array.from(document.querySelectorAll('[role="'+role+'"]'));if(name)els=els.filter(function(e){{return(e.getAttribute('aria-label')||e.textContent.trim())===name}});var el=els[nth];if(el)el.focus()}})('{s}',{s},{})
-        , .{ role, name_arg, nth });
+        // Use helper that handles both explicit roles and native elements
+        js = try std.fmt.allocPrint(allocator, "{s}('{s}',{s},{});", .{ helpers.FIND_AND_FOCUS_JS, role, name_arg, nth });
     }
 
     _ = try runtime.evaluate(allocator, js, .{});
@@ -215,9 +214,7 @@ pub fn selectOption(
         defer allocator.free(name_arg);
         const nth = resolved.nth orelse 0;
 
-        js = try std.fmt.allocPrint(allocator,
-            \\(function(role,name,nth,v){{var els=Array.from(document.querySelectorAll('[role="'+role+'"]'));if(name)els=els.filter(function(e){{return(e.getAttribute('aria-label')||e.textContent.trim())===name}});var el=els[nth];if(el){{el.value=v;el.dispatchEvent(new Event('change',{{bubbles:true}}))}}}})('{s}',{s},{},{s})
-        , .{ role, name_arg, nth, escaped_val });
+        js = try std.fmt.allocPrint(allocator, "{s}('{s}',{s},{},{s});", .{ helpers.FIND_AND_SELECT_JS, role, name_arg, nth, escaped_val });
     }
 
     _ = try runtime.evaluate(allocator, js, .{});
@@ -250,9 +247,7 @@ pub fn setChecked(
         defer allocator.free(name_arg);
         const nth = resolved.nth orelse 0;
 
-        js = try std.fmt.allocPrint(allocator,
-            \\(function(role,name,nth,c){{var els=Array.from(document.querySelectorAll('[role="'+role+'"]'));if(name)els=els.filter(function(e){{return(e.getAttribute('aria-label')||e.textContent.trim())===name}});var el=els[nth];if(el&&el.checked!==c)el.click()}})('{s}',{s},{},{s})
-        , .{ role, name_arg, nth, check_str });
+        js = try std.fmt.allocPrint(allocator, "{s}('{s}',{s},{},{s});", .{ helpers.FIND_AND_CHECK_JS, role, name_arg, nth, check_str });
     }
 
     _ = try runtime.evaluate(allocator, js, .{});
@@ -298,9 +293,7 @@ pub fn scrollIntoView(
         defer allocator.free(name_arg);
         const nth = resolved.nth orelse 0;
 
-        js = try std.fmt.allocPrint(allocator,
-            \\(function(role,name,nth){{var els=Array.from(document.querySelectorAll('[role="'+role+'"]'));if(name)els=els.filter(function(e){{return(e.getAttribute('aria-label')||e.textContent.trim())===name}});var el=els[nth];if(el)el.scrollIntoView({{block:'center',behavior:'smooth'}})}})('{s}',{s},{})
-        , .{ role, name_arg, nth });
+        js = try std.fmt.allocPrint(allocator, "{s}('{s}',{s},{});", .{ helpers.FIND_AND_SCROLL_JS, role, name_arg, nth });
     }
 
     _ = try runtime.evaluate(allocator, js, .{});

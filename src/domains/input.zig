@@ -28,6 +28,16 @@ pub const Input = struct {
 
     /// Convenience: Click at position
     pub fn click(self: *Self, x: f64, y: f64, opts: ClickOptions) !void {
+        // Move mouse to target first — required for sites that track mousemove
+        // (e.g. Google search result links use JS event handlers that need
+        // a mousemove before mousedown to register the click correctly)
+        try self.dispatchMouseEvent(.{
+            .type = .mouseMoved,
+            .x = x,
+            .y = y,
+            .button = .none,
+        });
+
         try self.dispatchMouseEvent(.{
             .type = .mousePressed,
             .x = x,

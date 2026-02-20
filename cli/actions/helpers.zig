@@ -8,6 +8,7 @@ pub const FIND_AND_FILL_JS = @embedFile("../js/find-and-fill.js");
 pub const FIND_AND_SELECT_JS = @embedFile("../js/find-and-select.js");
 pub const FIND_AND_CHECK_JS = @embedFile("../js/find-and-check.js");
 pub const FIND_AND_SCROLL_JS = @embedFile("../js/find-and-scroll.js");
+pub const FIND_AND_CLICK_JS = @embedFile("../js/find-and-click.js");
 
 /// JavaScript to find element by CSS selector, returns bounding rect
 pub const FIND_BY_CSS_JS =
@@ -59,9 +60,7 @@ pub fn buildGetterJs(
     if (resolved.css_selector) |css| {
         const escaped_css = try escapeJsString(allocator, css);
         defer allocator.free(escaped_css);
-        return try std.fmt.allocPrint(allocator,
-            "(function(s){{var el=document.querySelector(s);if(!el)return null;return {s}}})({s})"
-        , .{ getter_expr, escaped_css });
+        return try std.fmt.allocPrint(allocator, "(function(s){{var el=document.querySelector(s);if(!el)return null;return {s}}})({s})", .{ getter_expr, escaped_css });
     } else {
         const role = resolved.role orelse return error.InvalidSelector;
         const name_arg = if (resolved.name) |n| try escapeJsString(allocator, n) else try allocator.dupe(u8, "null");

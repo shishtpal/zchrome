@@ -1,259 +1,13 @@
 const std = @import("std");
 const types = @import("types.zig");
 
-/// JavaScript to find element by role and name, returns bounding rect
-/// Handles both explicit role attributes and implicit roles from HTML elements
-pub const FIND_BY_ROLE_JS =
-    \\(function(role, name, nth) {
-    \\  var IMPLICIT_ROLES = {
-    \\    'link': 'a[href]',
-    \\    'button': 'button, input[type="button"], input[type="submit"], input[type="reset"]',
-    \\    'textbox': 'input:not([type]), input[type="text"], input[type="email"], input[type="password"], input[type="search"], input[type="tel"], input[type="url"], input[type="number"], textarea, [contenteditable="true"], [contenteditable=""]',
-    \\    'checkbox': 'input[type="checkbox"]',
-    \\    'radio': 'input[type="radio"]',
-    \\    'combobox': 'select',
-    \\    'listbox': 'select[multiple]',
-    \\    'heading': 'h1, h2, h3, h4, h5, h6',
-    \\    'img': 'img',
-    \\    'list': 'ul, ol',
-    \\    'listitem': 'li',
-    \\    'navigation': 'nav',
-    \\    'main': 'main',
-    \\    'form': 'form',
-    \\    'table': 'table',
-    \\    'row': 'tr',
-    \\    'cell': 'td',
-    \\    'columnheader': 'th'
-    \\  };
-    \\  function queryAll(root, sel) {
-    \\    var results = Array.from(root.querySelectorAll(sel));
-    \\    root.querySelectorAll('*').forEach(function(el) {
-    \\      if (el.shadowRoot) results = results.concat(queryAll(el.shadowRoot, sel));
-    \\    });
-    \\    return results;
-    \\  }
-    \\  var els = queryAll(document, '[role="' + role + '"]');
-    \\  if (IMPLICIT_ROLES[role]) {
-    \\    var implicit = queryAll(document, IMPLICIT_ROLES[role]);
-    \\    implicit = implicit.filter(function(el) { return !el.hasAttribute('role'); });
-    \\    els = els.concat(implicit);
-    \\  }
-    \\  function getLabel(el) {
-    \\    var a = el.getAttribute('aria-label'); if (a) return a;
-    \\    var p = el.getAttribute('placeholder'); if (p) return p;
-    \\    var id = el.id; if (id) { var l = document.querySelector('label[for="'+id+'"]'); if (l) return l.textContent.trim(); }
-    \\    return el.textContent.trim();
-    \\  }
-    \\  if (name) {
-    \\    els = els.filter(function(el) { return getLabel(el) === name; });
-    \\  }
-    \\  var el = els[nth || 0];
-    \\  if (!el) return null;
-    \\  var rect = el.getBoundingClientRect();
-    \\  return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
-    \\})
-;
-
-/// JavaScript to find element by role and focus it
-/// Handles both explicit role attributes and implicit roles from HTML elements
-pub const FIND_AND_FOCUS_JS =
-    \\(function(role, name, nth) {
-    \\  var IMPLICIT_ROLES = {
-    \\    'link': 'a[href]',
-    \\    'button': 'button, input[type="button"], input[type="submit"], input[type="reset"]',
-    \\    'textbox': 'input:not([type]), input[type="text"], input[type="email"], input[type="password"], input[type="search"], input[type="tel"], input[type="url"], input[type="number"], textarea, [contenteditable="true"], [contenteditable=""]',
-    \\    'checkbox': 'input[type="checkbox"]',
-    \\    'radio': 'input[type="radio"]',
-    \\    'combobox': 'select',
-    \\    'listbox': 'select[multiple]',
-    \\    'heading': 'h1, h2, h3, h4, h5, h6'
-    \\  };
-    \\  function queryAll(root, sel) {
-    \\    var results = Array.from(root.querySelectorAll(sel));
-    \\    root.querySelectorAll('*').forEach(function(el) {
-    \\      if (el.shadowRoot) results = results.concat(queryAll(el.shadowRoot, sel));
-    \\    });
-    \\    return results;
-    \\  }
-    \\  var els = queryAll(document, '[role="' + role + '"]');
-    \\  if (IMPLICIT_ROLES[role]) {
-    \\    var implicit = queryAll(document, IMPLICIT_ROLES[role]);
-    \\    implicit = implicit.filter(function(el) { return !el.hasAttribute('role'); });
-    \\    els = els.concat(implicit);
-    \\  }
-    \\  function getLabel(el) {
-    \\    var a = el.getAttribute('aria-label'); if (a) return a;
-    \\    var p = el.getAttribute('placeholder'); if (p) return p;
-    \\    var id = el.id; if (id) { var l = document.querySelector('label[for="'+id+'"]'); if (l) return l.textContent.trim(); }
-    \\    return el.textContent.trim();
-    \\  }
-    \\  if (name) {
-    \\    els = els.filter(function(el) { return getLabel(el) === name; });
-    \\  }
-    \\  var el = els[nth || 0];
-    \\  if (el) el.focus();
-    \\})
-;
-
-/// JavaScript to find element by role and fill with value (Vue/React compatible)
-pub const FIND_AND_FILL_JS =
-    \\(function(role, name, nth, value) {
-    \\  var IMPLICIT_ROLES = {
-    \\    'textbox': 'input:not([type]), input[type="text"], input[type="email"], input[type="password"], input[type="search"], input[type="tel"], input[type="url"], input[type="number"], textarea, [contenteditable="true"], [contenteditable=""]',
-    \\    'combobox': 'select',
-    \\    'spinbutton': 'input[type="number"]'
-    \\  };
-    \\  function queryAll(root, sel) {
-    \\    var results = Array.from(root.querySelectorAll(sel));
-    \\    root.querySelectorAll('*').forEach(function(el) {
-    \\      if (el.shadowRoot) results = results.concat(queryAll(el.shadowRoot, sel));
-    \\    });
-    \\    return results;
-    \\  }
-    \\  var els = queryAll(document, '[role="' + role + '"]');
-    \\  if (IMPLICIT_ROLES[role]) {
-    \\    var implicit = queryAll(document, IMPLICIT_ROLES[role]);
-    \\    implicit = implicit.filter(function(el) { return !el.hasAttribute('role'); });
-    \\    els = els.concat(implicit);
-    \\  }
-    \\  function getLabel(el) {
-    \\    var a = el.getAttribute('aria-label'); if (a) return a;
-    \\    var p = el.getAttribute('placeholder'); if (p) return p;
-    \\    var id = el.id; if (id) { var l = document.querySelector('label[for="'+id+'"]'); if (l) return l.textContent.trim(); }
-    \\    return el.textContent.trim();
-    \\  }
-    \\  if (name) {
-    \\    els = els.filter(function(el) { return getLabel(el) === name; });
-    \\  }
-    \\  var el = els[nth || 0];
-    \\  if (!el) return false;
-    \\  el.focus();
-    \\  if (el.contentEditable === 'true' || el.contentEditable === '') {
-    \\    el.textContent = '';
-    \\    el.dispatchEvent(new Event('input', {bubbles: true}));
-    \\    el.textContent = value;
-    \\  } else {
-    \\    el.value = '';
-    \\    el.dispatchEvent(new Event('input', {bubbles: true}));
-    \\    el.value = value;
-    \\  }
-    \\  el.dispatchEvent(new Event('input', {bubbles: true}));
-    \\  el.dispatchEvent(new Event('change', {bubbles: true}));
-    \\  return true;
-    \\})
-;
-
-/// JavaScript to find element by role and select option
-pub const FIND_AND_SELECT_JS =
-    \\(function(role, name, nth, value) {
-    \\  var IMPLICIT_ROLES = {
-    \\    'combobox': 'select',
-    \\    'listbox': 'select[multiple]',
-    \\    'textbox': 'input:not([type]), input[type="text"], input[type="email"], input[type="password"], input[type="search"], input[type="tel"], input[type="url"], input[type="number"], textarea, [contenteditable="true"], [contenteditable=""]'
-    \\  };
-    \\  function queryAll(root, sel) {
-    \\    var results = Array.from(root.querySelectorAll(sel));
-    \\    root.querySelectorAll('*').forEach(function(el) {
-    \\      if (el.shadowRoot) results = results.concat(queryAll(el.shadowRoot, sel));
-    \\    });
-    \\    return results;
-    \\  }
-    \\  var els = queryAll(document, '[role="' + role + '"]');
-    \\  if (IMPLICIT_ROLES[role]) {
-    \\    var implicit = queryAll(document, IMPLICIT_ROLES[role]);
-    \\    implicit = implicit.filter(function(el) { return !el.hasAttribute('role'); });
-    \\    els = els.concat(implicit);
-    \\  }
-    \\  function getLabel(el) {
-    \\    var a = el.getAttribute('aria-label'); if (a) return a;
-    \\    var p = el.getAttribute('placeholder'); if (p) return p;
-    \\    var id = el.id; if (id) { var l = document.querySelector('label[for="'+id+'"]'); if (l) return l.textContent.trim(); }
-    \\    return el.textContent.trim();
-    \\  }
-    \\  if (name) {
-    \\    els = els.filter(function(el) { return getLabel(el) === name; });
-    \\  }
-    \\  var el = els[nth || 0];
-    \\  if (el) { el.value = value; el.dispatchEvent(new Event('change', {bubbles: true})); }
-    \\})
-;
-
-/// JavaScript to find element by role and set checked state
-pub const FIND_AND_CHECK_JS =
-    \\(function(role, name, nth, checked) {
-    \\  var IMPLICIT_ROLES = {
-    \\    'checkbox': 'input[type="checkbox"]',
-    \\    'radio': 'input[type="radio"]',
-    \\    'switch': 'input[type="checkbox"]'
-    \\  };
-    \\  function queryAll(root, sel) {
-    \\    var results = Array.from(root.querySelectorAll(sel));
-    \\    root.querySelectorAll('*').forEach(function(el) {
-    \\      if (el.shadowRoot) results = results.concat(queryAll(el.shadowRoot, sel));
-    \\    });
-    \\    return results;
-    \\  }
-    \\  var els = queryAll(document, '[role="' + role + '"]');
-    \\  if (IMPLICIT_ROLES[role]) {
-    \\    var implicit = queryAll(document, IMPLICIT_ROLES[role]);
-    \\    implicit = implicit.filter(function(el) { return !el.hasAttribute('role'); });
-    \\    els = els.concat(implicit);
-    \\  }
-    \\  function getLabel(el) {
-    \\    var a = el.getAttribute('aria-label'); if (a) return a;
-    \\    var p = el.getAttribute('placeholder'); if (p) return p;
-    \\    var id = el.id; if (id) { var l = document.querySelector('label[for="'+id+'"]'); if (l) return l.textContent.trim(); }
-    \\    return el.textContent.trim();
-    \\  }
-    \\  if (name) {
-    \\    els = els.filter(function(el) { return getLabel(el) === name; });
-    \\  }
-    \\  var el = els[nth || 0];
-    \\  if (el && el.checked !== checked) el.click();
-    \\})
-;
-
-/// JavaScript to find element by role and scroll into view
-pub const FIND_AND_SCROLL_JS =
-    \\(function(role, name, nth) {
-    \\  var IMPLICIT_ROLES = {
-    \\    'link': 'a[href]',
-    \\    'button': 'button, input[type="button"], input[type="submit"], input[type="reset"]',
-    \\    'textbox': 'input:not([type]), input[type="text"], input[type="email"], input[type="password"], input[type="search"], input[type="tel"], input[type="url"], input[type="number"], textarea, [contenteditable="true"], [contenteditable=""]',
-    \\    'checkbox': 'input[type="checkbox"]',
-    \\    'radio': 'input[type="radio"]',
-    \\    'combobox': 'select',
-    \\    'heading': 'h1, h2, h3, h4, h5, h6',
-    \\    'img': 'img',
-    \\    'list': 'ul, ol',
-    \\    'listitem': 'li'
-    \\  };
-    \\  function queryAll(root, sel) {
-    \\    var results = Array.from(root.querySelectorAll(sel));
-    \\    root.querySelectorAll('*').forEach(function(el) {
-    \\      if (el.shadowRoot) results = results.concat(queryAll(el.shadowRoot, sel));
-    \\    });
-    \\    return results;
-    \\  }
-    \\  var els = queryAll(document, '[role="' + role + '"]');
-    \\  if (IMPLICIT_ROLES[role]) {
-    \\    var implicit = queryAll(document, IMPLICIT_ROLES[role]);
-    \\    implicit = implicit.filter(function(el) { return !el.hasAttribute('role'); });
-    \\    els = els.concat(implicit);
-    \\  }
-    \\  function getLabel(el) {
-    \\    var a = el.getAttribute('aria-label'); if (a) return a;
-    \\    var p = el.getAttribute('placeholder'); if (p) return p;
-    \\    var id = el.id; if (id) { var l = document.querySelector('label[for="'+id+'"]'); if (l) return l.textContent.trim(); }
-    \\    return el.textContent.trim();
-    \\  }
-    \\  if (name) {
-    \\    els = els.filter(function(el) { return getLabel(el) === name; });
-    \\  }
-    \\  var el = els[nth || 0];
-    \\  if (el) el.scrollIntoView({block: 'center', behavior: 'smooth'});
-    \\})
-;
+// JavaScript helpers loaded from external files at compile time
+pub const FIND_BY_ROLE_JS = @embedFile("../js/find-by-role.js");
+pub const FIND_AND_FOCUS_JS = @embedFile("../js/find-and-focus.js");
+pub const FIND_AND_FILL_JS = @embedFile("../js/find-and-fill.js");
+pub const FIND_AND_SELECT_JS = @embedFile("../js/find-and-select.js");
+pub const FIND_AND_CHECK_JS = @embedFile("../js/find-and-check.js");
+pub const FIND_AND_SCROLL_JS = @embedFile("../js/find-and-scroll.js");
 
 /// JavaScript to find element by CSS selector, returns bounding rect
 pub const FIND_BY_CSS_JS =
@@ -314,8 +68,17 @@ pub fn buildGetterJs(
         defer allocator.free(name_arg);
         const nth = resolved.nth orelse 0;
 
+        // Build getter using embedded find-by-role logic with getter expression
         return try std.fmt.allocPrint(allocator,
-            "(function(role,name,nth){{var IMPLICIT_ROLES={{'link':'a[href]','button':'button,input[type=\"button\"],input[type=\"submit\"],input[type=\"reset\"]','textbox':'input:not([type]),input[type=\"text\"],input[type=\"email\"],input[type=\"password\"],input[type=\"search\"],input[type=\"tel\"],input[type=\"url\"],input[type=\"number\"],textarea,[contenteditable=\"true\"],[contenteditable=\"\"]','checkbox':'input[type=\"checkbox\"]','radio':'input[type=\"radio\"]','combobox':'select','heading':'h1,h2,h3,h4,h5,h6'}};function queryAll(root,sel){{var r=Array.from(root.querySelectorAll(sel));root.querySelectorAll('*').forEach(function(e){{if(e.shadowRoot)r=r.concat(queryAll(e.shadowRoot,sel))}});return r}}var els=queryAll(document,'[role=\"'+role+'\"]');if(IMPLICIT_ROLES[role]){{var implicit=queryAll(document,IMPLICIT_ROLES[role]).filter(function(e){{return !e.hasAttribute('role')}});els=els.concat(implicit)}}function getLabel(e){{var a=e.getAttribute('aria-label');if(a)return a;var p=e.getAttribute('placeholder');if(p)return p;var id=e.id;if(id){{var l=document.querySelector('label[for=\"'+id+'\"]');if(l)return l.textContent.trim()}}return e.textContent.trim()}}if(name)els=els.filter(function(e){{return getLabel(e)===name}});var el=els[nth||0];if(!el)return null;return {s}}})(\"{s}\",{s},{d})"
+            \\(function(role,name,nth){{
+            \\var IMPLICIT_ROLES={{'link':'a[href]','button':'button,input[type="button"],input[type="submit"],input[type="reset"]','textbox':'input:not([type]),input[type="text"],input[type="email"],input[type="password"],input[type="search"],input[type="tel"],input[type="url"],input[type="number"],textarea,[contenteditable="true"],[contenteditable=""]','checkbox':'input[type="checkbox"]','radio':'input[type="radio"]','combobox':'select','heading':'h1,h2,h3,h4,h5,h6'}};
+            \\function queryAll(root,sel){{var r=Array.from(root.querySelectorAll(sel));root.querySelectorAll('*').forEach(function(e){{if(e.shadowRoot)r=r.concat(queryAll(e.shadowRoot,sel))}});return r}}
+            \\function getLabel(e){{var a=e.getAttribute('aria-label');if(a)return a;var p=e.getAttribute('placeholder');if(p)return p;var id=e.id;if(id){{var l=document.querySelector('label[for="'+id+'"]');if(l)return l.textContent.trim()}}return e.textContent.trim()}}
+            \\var els=queryAll(document,'[role="'+role+'"]');
+            \\if(IMPLICIT_ROLES[role]){{var implicit=queryAll(document,IMPLICIT_ROLES[role]).filter(function(e){{return !e.hasAttribute('role')}});els=els.concat(implicit)}}
+            \\if(name)els=els.filter(function(e){{return getLabel(e)===name}});
+            \\var el=els[nth||0];if(!el)return null;return {s}
+            \\}})('{s}',{s},{d})
         , .{ getter_expr, role, name_arg, nth });
     }
 }

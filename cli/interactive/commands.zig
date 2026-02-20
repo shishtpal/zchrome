@@ -62,6 +62,11 @@ pub fn printHelp() void {
         \\  drag <src> <tgt>      Drag element to target
         \\  upload <sel> <files>  Upload files to input
         \\
+        \\Keyboard:
+        \\  press <key>           Press key (Enter, Control+a) (alias: key)
+        \\  keydown <key>         Hold key down
+        \\  keyup <key>           Release key
+        \\
         \\Getters:
         \\  get text <sel>        Get text content
         \\  get html <sel>        Get innerHTML
@@ -484,4 +489,37 @@ pub fn cmdReload(state: *InteractiveState) !void {
     var page = cdp.Page.init(session);
     try page.reload(null);
     std.debug.print("Page reloaded\n", .{});
+}
+
+// ─── Keyboard Commands ──────────────────────────────────────────────────────
+
+pub fn cmdPress(state: *InteractiveState, args: []const []const u8) !void {
+    if (args.len == 0) {
+        std.debug.print("Usage: press <key>\n", .{});
+        std.debug.print("Examples: press Enter, press Tab, press Control+a\n", .{});
+        return;
+    }
+    const session = try requireSession(state);
+    try actions_mod.pressKey(session, args[0]);
+    std.debug.print("Pressed: {s}\n", .{args[0]});
+}
+
+pub fn cmdKeyDown(state: *InteractiveState, args: []const []const u8) !void {
+    if (args.len == 0) {
+        std.debug.print("Usage: keydown <key>\n", .{});
+        return;
+    }
+    const session = try requireSession(state);
+    try actions_mod.keyDown(session, args[0]);
+    std.debug.print("Key down: {s}\n", .{args[0]});
+}
+
+pub fn cmdKeyUp(state: *InteractiveState, args: []const []const u8) !void {
+    if (args.len == 0) {
+        std.debug.print("Usage: keyup <key>\n", .{});
+        return;
+    }
+    const session = try requireSession(state);
+    try actions_mod.keyUp(session, args[0]);
+    std.debug.print("Key up: {s}\n", .{args[0]});
 }

@@ -622,6 +622,86 @@ zchrome upload "#upload" "C:\Users\name\Documents\report.pdf"
 
 **Note:** File paths are automatically converted to absolute paths. The command only selects the files - it does not submit any form. Use `click` on the submit button afterwards if needed.
 
+## Keyboard Actions
+
+### press
+
+Press and release a key. Supports modifier combinations.
+
+```bash
+zchrome press <key>
+zchrome key <key>  # alias
+```
+
+**Key Format:**
+- Simple keys: `Enter`, `Tab`, `Escape`, `Backspace`, `Delete`, `Space`
+- Arrow keys: `ArrowUp`, `ArrowDown`, `ArrowLeft`, `ArrowRight`
+- Function keys: `F1`, `F2`, ... `F12`
+- With modifiers: `Control+a`, `Control+Shift+s`, `Alt+Tab`
+
+**Modifier Keys:**
+| Modifier | Aliases |
+|----------|---------|
+| Control | `Control`, `Ctrl` |
+| Alt | `Alt` |
+| Shift | `Shift` |
+| Meta (Cmd) | `Meta`, `Cmd` |
+
+**Example:**
+
+```bash
+# Simple key press
+zchrome press Enter
+zchrome press Tab
+zchrome key Escape  # Using alias
+
+# Key combinations
+zchrome press Control+a      # Select all
+zchrome press Control+c      # Copy
+zchrome press Control+v      # Paste
+zchrome press Control+Shift+s # Save as
+zchrome press Alt+F4         # Close window
+```
+
+### keydown
+
+Hold a key down. Useful for modifier keys during other actions.
+
+```bash
+zchrome keydown <key>
+```
+
+**Example:**
+
+```bash
+# Hold Shift while clicking (for selection)
+zchrome keydown Shift
+zchrome click "#item1"
+zchrome click "#item3"
+zchrome keyup Shift
+
+# Hold Control for multi-select
+zchrome keydown Control
+zchrome click @e5
+zchrome click @e7
+zchrome keyup Control
+```
+
+### keyup
+
+Release a held key.
+
+```bash
+zchrome keyup <key>
+```
+
+**Example:**
+
+```bash
+zchrome keyup Shift
+zchrome keyup Control
+```
+
 ## Getters
 
 ### get text
@@ -895,6 +975,26 @@ zchrome fill "#email" "john@example.com"
 zchrome select "#country" "US"
 zchrome check "#terms"
 zchrome click "#submit"
+```
+
+### Keyboard Navigation Example
+
+```bash
+# Navigate form with keyboard
+zchrome focus "#first-field"
+zchrome fill @e1 "John"
+zchrome press Tab           # Move to next field
+zchrome fill @e2 "Doe"
+zchrome press Tab
+zchrome press Space         # Check checkbox
+zchrome press Tab
+zchrome press Enter         # Submit form
+
+# Use keyboard shortcuts
+zchrome press Control+a     # Select all
+zchrome press Control+c     # Copy
+zchrome press Control+v     # Paste
+zchrome press Escape        # Close modal/cancel
 ```
 
 ### Using Snapshot Refs

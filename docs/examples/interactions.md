@@ -175,6 +175,29 @@ zchrome drag "#draggable-item" "#drop-zone"
 zchrome drag @e3 @e7
 ```
 
+### Keyboard Input
+
+```bash
+# Press Enter to submit
+zchrome press Enter
+
+# Press Tab to move focus
+zchrome press Tab
+
+# Keyboard shortcuts
+zchrome press Control+a  # Select all
+zchrome press Control+c  # Copy
+zchrome press Control+v  # Paste
+zchrome press Escape     # Close modal/cancel
+
+# Hold modifier for multi-select
+zchrome keydown Control
+zchrome click @e5
+zchrome click @e7
+zchrome click @e9
+zchrome keyup Control
+```
+
 ### File Upload
 
 ```bash
@@ -276,6 +299,32 @@ zchrome snapshot -i -s "#results"
 
 # Click first result
 zchrome click @e1
+```
+
+### Keyboard Navigation Flow
+
+```bash
+# Navigate form with keyboard only
+zchrome focus "#first-field"
+zchrome type @e1 "John"
+zchrome press Tab
+zchrome type @e2 "Doe"
+zchrome press Tab
+zchrome press Space      # Check checkbox
+zchrome press Tab
+zchrome press Enter      # Submit form
+
+# Multi-select with modifier
+zchrome keydown Control
+zchrome click @e5
+zchrome click @e7
+zchrome click @e9
+zchrome keyup Control
+
+# Select all and copy
+zchrome click "#text-area"
+zchrome press Control+a
+zchrome press Control+c
 ```
 
 ### File Upload Flow

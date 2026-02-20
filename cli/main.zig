@@ -103,6 +103,9 @@ const Args = struct {
         back,
         forward,
         reload,
+        press,
+        keydown,
+        keyup,
         help,
     };
 };
@@ -149,7 +152,8 @@ pub fn main(init: std.process.Init) !void {
     const needs_target = switch (args.command) {
         .navigate, .screenshot, .pdf, .evaluate, .dom, .network, .cookies, .snapshot,
         .click, .dblclick, .focus, .@"type", .fill, .select, .hover, .check, .uncheck,
-        .scroll, .scrollintoview, .drag, .get, .upload, .back, .forward, .reload => true,
+        .scroll, .scrollintoview, .drag, .get, .upload, .back, .forward, .reload,
+        .press, .keydown, .keyup => true,
         .version, .list_targets, .pages, .interactive, .open, .connect, .help => false,
     };
     if (needs_target and args.use_target == null and config.last_target != null) {
@@ -235,6 +239,9 @@ pub fn main(init: std.process.Init) !void {
             .back => try cmdBack(browser, args, allocator),
             .forward => try cmdForward(browser, args, allocator),
             .reload => try cmdReload(browser, args, allocator),
+            .press => try cmdPress(browser, args, allocator),
+            .keydown => try cmdKeyDown(browser, args, allocator),
+            .keyup => try cmdKeyUp(browser, args, allocator),
             .open, .connect, .help => unreachable,
         }
     }
@@ -273,6 +280,9 @@ fn executeDirectly(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocat
         .back => try cmdBackWithSession(session),
         .forward => try cmdForwardWithSession(session),
         .reload => try cmdReloadWithSession(session),
+        .press => try cmdPressWithSession(session, args),
+        .keydown => try cmdKeyDownWithSession(session, args),
+        .keyup => try cmdKeyUpWithSession(session, args),
         .version => try cmdVersion(browser, allocator),
         .list_targets => try cmdListTargets(browser, allocator),
         .pages => try cmdPages(browser, allocator),
@@ -326,6 +336,9 @@ fn executeOnTarget(browser: *cdp.Browser, target_id: []const u8, args: Args, all
         .back => try cmdBackWithSession(session),
         .forward => try cmdForwardWithSession(session),
         .reload => try cmdReloadWithSession(session),
+        .press => try cmdPressWithSession(session, args),
+        .keydown => try cmdKeyDownWithSession(session, args),
+        .keyup => try cmdKeyUpWithSession(session, args),
         else => std.debug.print("Error: Command not supported with --use\n", .{}),
     }
 }
@@ -1768,6 +1781,111 @@ fn cmdReloadWithSession(session: *cdp.Session) !void {
     std.debug.print("Page reloaded\n", .{});
 }
 
+// ─── Keyboard Commands ──────────────────────────────────────────────────────
+
+/// Press command - press and release a key
+fn cmdPress(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
+    const pages = try browser.pages();
+    defer {
+        for (pages) |*p| {
+            var page_info = p.*;
+            page_info.deinit(allocator);
+        }
+        allocator.free(pages);
+    }
+
+    const page = findFirstRealPage(pages) orelse {
+        std.debug.print("Error: No pages open\n", .{});
+        return error.NoPages;
+    };
+
+    var target = cdp.Target.init(browser.connection);
+    const session_id = try target.attachToTarget(allocator, page.target_id, true);
+    var session = try cdp.Session.init(session_id, browser.connection, allocator);
+    defer session.deinit();
+
+    try cmdPressWithSession(session, args);
+}
+
+fn cmdPressWithSession(session: *cdp.Session, args: Args) !void {
+    if (args.positional.len == 0) {
+        std.debug.print("Usage: zchrome press <key>\n", .{});
+        std.debug.print("Examples: press Enter, press Tab, press Control+a\n", .{});
+        return;
+    }
+
+    try actions_mod.pressKey(session, args.positional[0]);
+    std.debug.print("Pressed: {s}\n", .{args.positional[0]});
+}
+
+/// KeyDown command - hold a key down
+fn cmdKeyDown(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
+    const pages = try browser.pages();
+    defer {
+        for (pages) |*p| {
+            var page_info = p.*;
+            page_info.deinit(allocator);
+        }
+        allocator.free(pages);
+    }
+
+    const page = findFirstRealPage(pages) orelse {
+        std.debug.print("Error: No pages open\n", .{});
+        return error.NoPages;
+    };
+
+    var target = cdp.Target.init(browser.connection);
+    const session_id = try target.attachToTarget(allocator, page.target_id, true);
+    var session = try cdp.Session.init(session_id, browser.connection, allocator);
+    defer session.deinit();
+
+    try cmdKeyDownWithSession(session, args);
+}
+
+fn cmdKeyDownWithSession(session: *cdp.Session, args: Args) !void {
+    if (args.positional.len == 0) {
+        std.debug.print("Usage: zchrome keydown <key>\n", .{});
+        return;
+    }
+
+    try actions_mod.keyDown(session, args.positional[0]);
+    std.debug.print("Key down: {s}\n", .{args.positional[0]});
+}
+
+/// KeyUp command - release a key
+fn cmdKeyUp(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
+    const pages = try browser.pages();
+    defer {
+        for (pages) |*p| {
+            var page_info = p.*;
+            page_info.deinit(allocator);
+        }
+        allocator.free(pages);
+    }
+
+    const page = findFirstRealPage(pages) orelse {
+        std.debug.print("Error: No pages open\n", .{});
+        return error.NoPages;
+    };
+
+    var target = cdp.Target.init(browser.connection);
+    const session_id = try target.attachToTarget(allocator, page.target_id, true);
+    var session = try cdp.Session.init(session_id, browser.connection, allocator);
+    defer session.deinit();
+
+    try cmdKeyUpWithSession(session, args);
+}
+
+fn cmdKeyUpWithSession(session: *cdp.Session, args: Args) !void {
+    if (args.positional.len == 0) {
+        std.debug.print("Usage: zchrome keyup <key>\n", .{});
+        return;
+    }
+
+    try actions_mod.keyUp(session, args.positional[0]);
+    std.debug.print("Key up: {s}\n", .{args.positional[0]});
+}
+
 /// Open command - launch Chrome with remote debugging
 fn cmdOpen(args: Args, allocator: std.mem.Allocator, io: std.Io) !void {
     const port = args.port;
@@ -2016,6 +2134,8 @@ fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
                     command = .list_targets;
                 } else if (std.mem.eql(u8, arg, "scrollinto")) {
                     command = .scrollintoview;
+                } else if (std.mem.eql(u8, arg, "key")) {
+                    command = .press;
                 } else {
                     command = std.meta.stringToEnum(Args.Command, arg) orelse .help;
                 }
@@ -2099,6 +2219,11 @@ fn printUsage() void {
         \\  drag <src> <tgt>         Drag and drop from source to target element
         \\  upload <sel> <files>     Upload files to file input
         \\
+        \\KEYBOARD:
+        \\  press <key>              Press key (Enter, Tab, Control+a) (alias: key)
+        \\  keydown <key>            Hold key down
+        \\  keyup <key>              Release key
+        \\
         \\GETTERS:
         \\  get text <sel>           Get text content
         \\  get html <sel>           Get innerHTML
@@ -2161,6 +2286,13 @@ fn printUsage() void {
         \\  zchrome get title                      # Get page title
         \\  zchrome get url                        # Get current URL
         \\  zchrome get count "li.item"            # Count elements
+        \\
+        \\  # Keyboard input
+        \\  zchrome press Enter                   # Press Enter key
+        \\  zchrome press Control+a               # Select all
+        \\  zchrome key Tab                       # Press Tab (alias for press)
+        \\  zchrome keydown Shift                 # Hold Shift down
+        \\  zchrome keyup Shift                   # Release Shift
         \\
     , .{});
 }

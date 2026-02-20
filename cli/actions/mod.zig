@@ -36,6 +36,13 @@ pub const scroll = element.scroll;
 pub const scrollIntoView = element.scrollIntoView;
 pub const dragElement = element.dragElement;
 
+// Re-export keyboard functions
+pub const KeyDef = element.KeyDef;
+pub const parseKey = element.parseKey;
+pub const pressKey = element.pressKey;
+pub const keyDown = element.keyDown;
+pub const keyUp = element.keyUp;
+
 // Re-export upload function
 pub const uploadFiles = upload.uploadFiles;
 

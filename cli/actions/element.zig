@@ -302,6 +302,174 @@ pub fn scrollIntoView(
     _ = try runtime.evaluate(allocator, js, .{});
 }
 
+// ─── Keyboard Functions ─────────────────────────────────────────────────────
+
+/// Key definition with all necessary CDP fields
+pub const KeyDef = struct {
+    key: []const u8,
+    code: []const u8,
+    keyCode: i32,
+    modifiers: i32 = 0,
+};
+
+/// Get key definition for special keys, returns null for regular characters
+fn getSpecialKeyDef(key: []const u8) ?struct { code: []const u8, keyCode: i32 } {
+    const special_keys = [_]struct { name: []const u8, code: []const u8, keyCode: i32 }{
+        .{ .name = "Enter", .code = "Enter", .keyCode = 13 },
+        .{ .name = "Tab", .code = "Tab", .keyCode = 9 },
+        .{ .name = "Escape", .code = "Escape", .keyCode = 27 },
+        .{ .name = "Esc", .code = "Escape", .keyCode = 27 },
+        .{ .name = "Backspace", .code = "Backspace", .keyCode = 8 },
+        .{ .name = "Delete", .code = "Delete", .keyCode = 46 },
+        .{ .name = "Space", .code = "Space", .keyCode = 32 },
+        .{ .name = " ", .code = "Space", .keyCode = 32 },
+        .{ .name = "ArrowUp", .code = "ArrowUp", .keyCode = 38 },
+        .{ .name = "ArrowDown", .code = "ArrowDown", .keyCode = 40 },
+        .{ .name = "ArrowLeft", .code = "ArrowLeft", .keyCode = 37 },
+        .{ .name = "ArrowRight", .code = "ArrowRight", .keyCode = 39 },
+        .{ .name = "Home", .code = "Home", .keyCode = 36 },
+        .{ .name = "End", .code = "End", .keyCode = 35 },
+        .{ .name = "PageUp", .code = "PageUp", .keyCode = 33 },
+        .{ .name = "PageDown", .code = "PageDown", .keyCode = 34 },
+        .{ .name = "Insert", .code = "Insert", .keyCode = 45 },
+        .{ .name = "F1", .code = "F1", .keyCode = 112 },
+        .{ .name = "F2", .code = "F2", .keyCode = 113 },
+        .{ .name = "F3", .code = "F3", .keyCode = 114 },
+        .{ .name = "F4", .code = "F4", .keyCode = 115 },
+        .{ .name = "F5", .code = "F5", .keyCode = 116 },
+        .{ .name = "F6", .code = "F6", .keyCode = 117 },
+        .{ .name = "F7", .code = "F7", .keyCode = 118 },
+        .{ .name = "F8", .code = "F8", .keyCode = 119 },
+        .{ .name = "F9", .code = "F9", .keyCode = 120 },
+        .{ .name = "F10", .code = "F10", .keyCode = 121 },
+        .{ .name = "F11", .code = "F11", .keyCode = 122 },
+        .{ .name = "F12", .code = "F12", .keyCode = 123 },
+        .{ .name = "Control", .code = "ControlLeft", .keyCode = 17 },
+        .{ .name = "Ctrl", .code = "ControlLeft", .keyCode = 17 },
+        .{ .name = "Alt", .code = "AltLeft", .keyCode = 18 },
+        .{ .name = "Shift", .code = "ShiftLeft", .keyCode = 16 },
+        .{ .name = "Meta", .code = "MetaLeft", .keyCode = 91 },
+        .{ .name = "Cmd", .code = "MetaLeft", .keyCode = 91 },
+    };
+
+    for (special_keys) |sk| {
+        if (std.mem.eql(u8, key, sk.name)) {
+            return .{ .code = sk.code, .keyCode = sk.keyCode };
+        }
+    }
+    return null;
+}
+
+/// Parse key string like "Control+a" into key definition
+/// Modifier masks: Alt=1, Ctrl=2, Meta=4, Shift=8
+pub fn parseKey(key_str: []const u8) KeyDef {
+    var modifiers: i32 = 0;
+    var key: []const u8 = key_str;
+
+    // Split by "+" and process each part
+    var iter = std.mem.splitSequence(u8, key_str, "+");
+    var parts: [8][]const u8 = undefined;
+    var count: usize = 0;
+
+    while (iter.next()) |part| {
+        if (count < 8) {
+            parts[count] = part;
+            count += 1;
+        }
+    }
+
+    // Last part is the key, rest are modifiers
+    if (count > 0) {
+        key = parts[count - 1];
+        for (parts[0 .. count - 1]) |mod| {
+            if (std.mem.eql(u8, mod, "Control") or std.mem.eql(u8, mod, "Ctrl")) {
+                modifiers |= 2;
+            } else if (std.mem.eql(u8, mod, "Alt")) {
+                modifiers |= 1;
+            } else if (std.mem.eql(u8, mod, "Shift")) {
+                modifiers |= 8;
+            } else if (std.mem.eql(u8, mod, "Meta") or std.mem.eql(u8, mod, "Cmd")) {
+                modifiers |= 4;
+            }
+        }
+    }
+
+    // Look up special key definition
+    if (getSpecialKeyDef(key)) |special| {
+        return .{
+            .key = key,
+            .code = special.code,
+            .keyCode = special.keyCode,
+            .modifiers = modifiers,
+        };
+    }
+
+    // For regular character keys
+    const keyCode: i32 = if (key.len == 1) blk: {
+        const c = key[0];
+        if (c >= 'a' and c <= 'z') break :blk @as(i32, c - 32);
+        if (c >= 'A' and c <= 'Z') break :blk @as(i32, c);
+        if (c >= '0' and c <= '9') break :blk @as(i32, c);
+        break :blk 0;
+    } else 0;
+
+    return .{
+        .key = key,
+        .code = key,
+        .keyCode = keyCode,
+        .modifiers = modifiers,
+    };
+}
+
+/// Press and release a key
+pub fn pressKey(session: *cdp.Session, key_str: []const u8) !void {
+    const parsed = parseKey(key_str);
+    var input = cdp.Input.init(session);
+
+    try input.dispatchKeyEvent(.{
+        .type = .keyDown,
+        .key = parsed.key,
+        .code = parsed.code,
+        .windows_virtual_key_code = if (parsed.keyCode != 0) parsed.keyCode else null,
+        .modifiers = if (parsed.modifiers != 0) parsed.modifiers else null,
+    });
+    try input.dispatchKeyEvent(.{
+        .type = .keyUp,
+        .key = parsed.key,
+        .code = parsed.code,
+        .windows_virtual_key_code = if (parsed.keyCode != 0) parsed.keyCode else null,
+        .modifiers = if (parsed.modifiers != 0) parsed.modifiers else null,
+    });
+}
+
+/// Hold a key down
+pub fn keyDown(session: *cdp.Session, key_str: []const u8) !void {
+    const parsed = parseKey(key_str);
+    var input = cdp.Input.init(session);
+
+    try input.dispatchKeyEvent(.{
+        .type = .keyDown,
+        .key = parsed.key,
+        .code = parsed.code,
+        .windows_virtual_key_code = if (parsed.keyCode != 0) parsed.keyCode else null,
+        .modifiers = if (parsed.modifiers != 0) parsed.modifiers else null,
+    });
+}
+
+/// Release a key
+pub fn keyUp(session: *cdp.Session, key_str: []const u8) !void {
+    const parsed = parseKey(key_str);
+    var input = cdp.Input.init(session);
+
+    try input.dispatchKeyEvent(.{
+        .type = .keyUp,
+        .key = parsed.key,
+        .code = parsed.code,
+        .windows_virtual_key_code = if (parsed.keyCode != 0) parsed.keyCode else null,
+        .modifiers = if (parsed.modifiers != 0) parsed.modifiers else null,
+    });
+}
+
 /// Drag from source element to target element
 pub fn dragElement(
     session: *cdp.Session,

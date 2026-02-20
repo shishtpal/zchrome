@@ -246,6 +246,12 @@ fn executeCommand(state: *InteractiveState, line: []const u8) !void {
         try commands.cmdForward(state);
     } else if (eql(cmd, "reload")) {
         try commands.cmdReload(state);
+    } else if (eql(cmd, "press") or eql(cmd, "key")) {
+        try commands.cmdPress(state, args);
+    } else if (eql(cmd, "keydown")) {
+        try commands.cmdKeyDown(state, args);
+    } else if (eql(cmd, "keyup")) {
+        try commands.cmdKeyUp(state, args);
     } else {
         std.debug.print("Unknown command: {s}\nType 'help' for available commands.\n", .{cmd});
     }

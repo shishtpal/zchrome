@@ -77,7 +77,6 @@ const Args = struct {
         screenshot,
         pdf,
         evaluate,
-        dom,
         network,
         cookies,
         version,
@@ -149,7 +148,7 @@ pub fn main(init: std.process.Init) !void {
     }
     // Only apply last_target for page-level commands (not version, pages, list_targets, etc.)
     const needs_target = switch (args.command) {
-        .navigate, .screenshot, .pdf, .evaluate, .dom, .network, .cookies, .snapshot, .click, .dblclick, .focus, .type, .fill, .select, .hover, .check, .uncheck, .scroll, .scrollintoview, .drag, .get, .upload, .back, .forward, .reload, .press, .keydown, .keyup => true,
+        .navigate, .screenshot, .pdf, .evaluate, .network, .cookies, .snapshot, .click, .dblclick, .focus, .type, .fill, .select, .hover, .check, .uncheck, .scroll, .scrollintoview, .drag, .get, .upload, .back, .forward, .reload, .press, .keydown, .keyup => true,
         .version, .list_targets, .pages, .interactive, .open, .connect, .help => false,
     };
     if (needs_target and args.use_target == null and config.last_target != null) {
@@ -211,7 +210,6 @@ pub fn main(init: std.process.Init) !void {
             .screenshot => try cmdScreenshot(browser, args, allocator),
             .pdf => try cmdPdf(browser, args, allocator),
             .evaluate => try cmdEvaluate(browser, args, allocator),
-            .dom => try cmdDom(browser, args, allocator),
             .cookies => try cmdCookies(browser, args, allocator),
             .version => try cmdVersion(browser, allocator),
             .list_targets => try cmdListTargets(browser, allocator),
@@ -507,50 +505,6 @@ fn cmdEvaluate(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) 
     } else {
         std.debug.print("{s}\n", .{result.description orelse "undefined"});
     }
-}
-
-/// DOM command
-fn cmdDom(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
-    if (args.positional.len < 1) {
-        std.debug.print("Error: dom requires a selector\n", .{});
-        return;
-    }
-
-    // If 2+ positional args: first is URL, second is selector
-    // If 1 positional arg: it's the selector (no navigation)
-    const has_url = args.positional.len >= 2;
-    const target_url = if (has_url) args.positional[0] else null;
-    const selector = if (has_url) args.positional[1] else args.positional[0];
-
-    var session = try browser.newPage();
-    defer session.detach() catch {};
-
-    var page = cdp.Page.init(session);
-    try page.enable();
-
-    var dom = cdp.DOM.init(session);
-    try dom.enable();
-
-    if (target_url) |url| {
-        _ = try page.navigate(allocator, url);
-        // Note: sleep API changed in Zig 0.16, using spinloop hint
-        var i: u32 = 0;
-        while (i < 500000) : (i += 1) {
-            std.atomic.spinLoopHint();
-        }
-    }
-
-    const doc = try dom.getDocument(allocator, 1);
-    defer {
-        var d = doc;
-        d.deinit(allocator);
-    }
-
-    const node_id = try dom.querySelector(doc.node_id, selector);
-    const html = try dom.getOuterHTML(allocator, node_id);
-    defer allocator.free(html);
-
-    std.debug.print("{s}\n", .{html});
 }
 
 /// Cookies command
@@ -1048,7 +1002,6 @@ fn printUsage() void {
         \\  screenshot [url]         Capture PNG screenshot
         \\  pdf [url]                Generate PDF
         \\  evaluate [url] <expr>    Evaluate JS expression
-        \\  dom [url] <selector>     Query DOM, print outerHTML
         \\  network [url]            Log network requests
         \\  cookies [url]            Dump cookies
         \\  snapshot                 Capture accessibility tree of active page, save to zsnap.json
@@ -1086,6 +1039,7 @@ fn printUsage() void {
         \\GETTERS:
         \\  get text <sel>           Get text content
         \\  get html <sel>           Get innerHTML
+        \\  get dom <sel>            Get outerHTML
         \\  get value <sel>          Get input value
         \\  get attr <sel> <attr>    Get attribute value
         \\  get title                Get page title

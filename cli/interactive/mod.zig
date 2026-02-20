@@ -32,7 +32,7 @@ pub fn run(state: *InteractiveState) !void {
     };
     defer version.deinit(state.allocator);
     printWelcome(version.product);
-    
+
     // Print current page info if we have a session
     if (state.session != null and state.target_id != null) {
         printCurrentPage(state);
@@ -52,37 +52,37 @@ fn printCurrentPage(state: *InteractiveState) void {
     if (state.session) |session| {
         var runtime = cdp.Runtime.init(session);
         runtime.enable() catch return;
-        
+
         const title = runtime.evaluateAs([]const u8, "document.title") catch "Unknown";
         const url = runtime.evaluateAs([]const u8, "window.location.href") catch "Unknown";
-        
+
         std.debug.print("Using page: {s} ({s})\n\n", .{ title, url });
     }
 }
 
 fn runLoop(state: *InteractiveState) !void {
     const stdin_file = std.Io.File.stdin();
-    
+
     while (true) {
         // Print prompt
         std.debug.print("zchrome> ", .{});
-        
+
         // Read line from stdin
         const line = readLine(state.allocator, state.io, stdin_file) catch |err| {
             std.debug.print("\nRead error: {}\n", .{err});
             return err;
         };
-        
+
         if (line == null) {
             std.debug.print("\nGoodbye!\n", .{});
             return;
         }
         defer state.allocator.free(line.?);
-        
+
         // Trim whitespace (including \r for Windows)
         const trimmed = std.mem.trim(u8, line.?, " \t\r\n");
         if (trimmed.len == 0) continue;
-        
+
         // Parse and execute command
         executeCommand(state, trimmed) catch |err| {
             std.debug.print("Error: {}\n", .{err});
@@ -94,11 +94,11 @@ fn runLoop(state: *InteractiveState) !void {
 fn readLine(allocator: std.mem.Allocator, io: std.Io, file: std.Io.File) !?[]u8 {
     var result: std.ArrayList(u8) = .empty;
     errdefer result.deinit(allocator);
-    
+
     // Use a fresh buffer for each read to avoid stale state
     var read_buf: [256]u8 = undefined;
     var reader = file.readerStreaming(io, &read_buf);
-    
+
     while (true) {
         // Try to read one byte at a time
         const byte = reader.interface.takeByte() catch |err| {
@@ -117,13 +117,13 @@ fn readLine(allocator: std.mem.Allocator, io: std.Io, file: std.Io.File) !?[]u8 
                 },
             }
         };
-        
+
         if (byte == '\n') {
             return try result.toOwnedSlice(allocator);
         }
-        
+
         try result.append(allocator, byte);
-        
+
         // Safety limit
         if (result.items.len > 4096) {
             return try result.toOwnedSlice(allocator);
@@ -138,16 +138,16 @@ fn tokenize(allocator: std.mem.Allocator, line: []const u8) ![][]const u8 {
         for (tokens.items) |t| allocator.free(t);
         tokens.deinit(allocator);
     }
-    
+
     var i: usize = 0;
     while (i < line.len) {
         // Skip whitespace
         while (i < line.len and (line[i] == ' ' or line[i] == '\t')) : (i += 1) {}
         if (i >= line.len) break;
-        
+
         var token_start = i;
         var token_end = i;
-        
+
         if (line[i] == '"') {
             // Quoted string
             i += 1;
@@ -160,12 +160,12 @@ fn tokenize(allocator: std.mem.Allocator, line: []const u8) ![][]const u8 {
             while (i < line.len and line[i] != ' ' and line[i] != '\t') : (i += 1) {}
             token_end = i;
         }
-        
+
         if (token_end > token_start) {
             try tokens.append(allocator, try allocator.dupe(u8, line[token_start..token_end]));
         }
     }
-    
+
     return tokens.toOwnedSlice(allocator);
 }
 
@@ -180,12 +180,12 @@ fn executeCommand(state: *InteractiveState, line: []const u8) !void {
         for (tokens) |t| state.allocator.free(t);
         state.allocator.free(tokens);
     }
-    
+
     if (tokens.len == 0) return;
-    
+
     const cmd = tokens[0];
     const args = if (tokens.len > 1) tokens[1..] else &[_][]const u8{};
-    
+
     // Handle commands
     if (eql(cmd, "help") or eql(cmd, "?")) {
         commands.printHelp();
@@ -206,8 +206,6 @@ fn executeCommand(state: *InteractiveState, line: []const u8) !void {
         try commands.cmdPdf(state, args);
     } else if (eql(cmd, "evaluate") or eql(cmd, "eval") or eql(cmd, "js")) {
         try commands.cmdEvaluate(state, args);
-    } else if (eql(cmd, "dom")) {
-        try commands.cmdDom(state, args);
     } else if (eql(cmd, "cookies")) {
         try commands.cmdCookies(state);
     } else if (eql(cmd, "snapshot") or eql(cmd, "snap")) {

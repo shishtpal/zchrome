@@ -187,32 +187,6 @@ pub fn evaluate(session: *cdp.Session, ctx: CommandCtx) !void {
     }
 }
 
-pub fn dom(session: *cdp.Session, ctx: CommandCtx) !void {
-    if (ctx.positional.len == 0) {
-        std.debug.print("Usage: dom <selector>\n", .{});
-        return;
-    }
-
-    const selector = ctx.positional[0];
-    var page = cdp.Page.init(session);
-    try page.enable();
-
-    var dom_api = cdp.DOM.init(session);
-    try dom_api.enable();
-
-    const doc = try dom_api.getDocument(ctx.allocator, 1);
-    defer {
-        var d = doc;
-        d.deinit(ctx.allocator);
-    }
-
-    const node_id = try dom_api.querySelector(doc.node_id, selector);
-    const html = try dom_api.getOuterHTML(ctx.allocator, node_id);
-    defer ctx.allocator.free(html);
-
-    std.debug.print("{s}\n", .{html});
-}
-
 pub fn cookies(session: *cdp.Session, ctx: CommandCtx) !void {
     var page = cdp.Page.init(session);
     try page.enable();
@@ -494,6 +468,24 @@ pub fn get(session: *cdp.Session, ctx: CommandCtx) !void {
         } else {
             std.debug.print("(not found)\n", .{});
         }
+    } else if (std.mem.eql(u8, subcommand, "dom")) {
+        var resolved = try actions_mod.resolveSelector(ctx.allocator, ctx.io, selector);
+        defer resolved.deinit();
+
+        const js = try actions_mod.helpers.buildGetterJs(ctx.allocator, &resolved, "el.outerHTML");
+        defer ctx.allocator.free(js);
+
+        var runtime = cdp.Runtime.init(session);
+        try runtime.enable();
+
+        var result = try runtime.evaluate(ctx.allocator, js, .{ .return_by_value = true });
+        defer result.deinit(ctx.allocator);
+
+        if (result.asString()) |html| {
+            std.debug.print("{s}\n", .{html});
+        } else {
+            std.debug.print("(not found)\n", .{});
+        }
     } else if (std.mem.eql(u8, subcommand, "value")) {
         var resolved = try actions_mod.resolveSelector(ctx.allocator, ctx.io, selector);
         defer resolved.deinit();
@@ -549,6 +541,7 @@ fn printGetUsage() void {
         \\Subcommands:
         \\  text <sel>           Get text content
         \\  html <sel>           Get innerHTML
+        \\  dom <sel>            Get outerHTML
         \\  value <sel>          Get input value
         \\  attr <sel> <attr>    Get attribute value
         \\  title                Get page title
@@ -569,7 +562,6 @@ pub fn dispatchSessionCommand(session: *cdp.Session, command: anytype, ctx: Comm
         .screenshot => try screenshot(session, ctx),
         .pdf => try pdf(session, ctx),
         .evaluate => try evaluate(session, ctx),
-        .dom => try dom(session, ctx),
         .network => network(),
         .cookies => try cookies(session, ctx),
         .snapshot => try snapshot(session, ctx),

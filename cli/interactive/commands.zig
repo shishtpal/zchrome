@@ -154,11 +154,6 @@ pub fn cmdEvaluate(state: *InteractiveState, args: []const []const u8) !void {
     try impl.evaluate(session, buildCtx(state, args));
 }
 
-pub fn cmdDom(state: *InteractiveState, args: []const []const u8) !void {
-    const session = try requireSession(state);
-    try impl.dom(session, buildCtx(state, args));
-}
-
 pub fn cmdCookies(state: *InteractiveState) !void {
     const session = try requireSession(state);
     try impl.cookies(session, buildCtx(state, &.{}));

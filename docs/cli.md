@@ -180,30 +180,6 @@ zchrome --url $url --use 75E5402CE67C63D19659EEFDC1CF292D evaluate "document.tit
 # Output: Result: Example Domain
 ```
 
-### dom
-
-Query a CSS selector and print the outer HTML.
-
-```bash
-# Create new page and navigate
-zchrome dom <url> <selector>
-
-# Or use existing page (no URL needed)
-zchrome --url $url --use <target-id> dom <selector>
-```
-
-**Example:**
-
-```bash
-# Create new page
-zchrome dom https://example.com "h1"
-# Output: <h1>Example Domain</h1>
-
-# Use existing page
-zchrome --url $url --use 75E5402CE67C63D19659EEFDC1CF292D dom "h1"
-# Output: <h1>Example Domain</h1>
-```
-
 ### network
 
 Navigate to a URL and log network requests.
@@ -319,7 +295,7 @@ zchrome --url <ws-url> --use <target-id> <command> [command-args...]
 
 **Parameters:**
 - `--use <target-id>` - Target ID from the `pages` command
-- `<command>` - Any supported command (navigate, screenshot, pdf, evaluate, dom, cookies)
+- `<command>` - Any supported command (navigate, screenshot, pdf, evaluate, get, cookies)
 - `[command-args...]` - Arguments for the command (URL not needed for most commands)
 
 **Examples:**
@@ -338,8 +314,8 @@ zchrome --url $url --use 75E5402CE67C63D19659EEFDC1CF292D navigate https://examp
 # Take screenshot of existing page (no URL needed)
 zchrome --url $url --use 75E5402CE67C63D19659EEFDC1CF292D screenshot --output page.png
 
-# Query DOM on existing page (no URL needed)
-zchrome --url $url --use 75E5402CE67C63D19659EEFDC1CF292D dom "h1"
+# Get outerHTML on existing page (no URL needed)
+zchrome --url $url --use 75E5402CE67C63D19659EEFDC1CF292D get dom "h1"
 
 # Dump cookies from existing page (no URL needed)
 zchrome --url $url --use 75E5402CE67C63D19659EEFDC1CF292D cookies
@@ -732,6 +708,21 @@ zchrome get html <selector>
 ```bash
 zchrome get html "#content"
 zchrome get html @e5
+```
+
+### get dom
+
+Get the outerHTML of an element (includes the element's own tag).
+
+```bash
+zchrome get dom <selector>
+```
+
+**Example:**
+
+```bash
+zchrome get dom "h1"
+zchrome get dom @e22
 ```
 
 ### get value

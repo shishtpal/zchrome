@@ -226,7 +226,74 @@ zig build test
 | `src/browser/process.zig` | Process spawning (stubbed) |
 | `src/domains/*.zig` | CDP domain wrappers |
 | `src/util/json.zig` | JSON parsing helpers |
-| `cli/main.zig` | CLI implementation |
+| `cli/main.zig` | CLI entry point, arg parsing, browser lifecycle |
+| `cli/command_impl.zig` | Shared command implementations (session-level) |
+| `cli/interactive/mod.zig` | REPL loop, tokenizer, command dispatch |
+| `cli/interactive/commands.zig` | REPL command wrappers (delegate to command_impl) |
+| `cli/actions/*.zig` | Low-level element/keyboard/getter actions |
+
+## CLI Architecture
+
+### Modular Command System
+
+Commands are structured in three layers to avoid code duplication:
+
+```
+cli/main.zig              CLI entry point, arg parsing, browser lifecycle
+cli/command_impl.zig      Shared command implementations (session + CommandCtx → action)
+cli/interactive/           REPL mode
+  mod.zig                 REPL loop, tokenizer, command dispatch
+  commands.zig            Thin wrappers: requireSession → impl.xxx()
+cli/actions/               Low-level element/keyboard actions
+  mod.zig                 Re-exports from submodules
+  element.zig             Click, focus, fill, scroll, drag, keyboard
+  getters.zig             getText, getHtml, getValue, etc.
+  selector.zig            CSS/@ref selector resolution
+  upload.zig              File upload via CDP
+  helpers.zig             JS string escaping, JS snippets
+  types.zig               ResolvedElement, ElementPosition
+```
+
+**`cli/command_impl.zig`** is the single source of truth for all session-level
+command logic. Every function has the signature:
+
+```zig
+pub fn click(session: *cdp.Session, ctx: CommandCtx) !void { ... }
+```
+
+`CommandCtx` is a lightweight struct containing `allocator`, `io`,
+`positional` args, and optional flags (`output`, `full_page`, `snap_*`).
+
+A `dispatchSessionCommand(session, command_enum, ctx)` function switches on the
+command enum and calls the right implementation. It returns `false` for
+commands it doesn't handle (e.g. `version`, `pages`).
+
+**`cli/main.zig`** handles two categories of commands:
+- **Browser-level** commands that manage their own session/page lifecycle
+  (e.g. `navigate` creates or reuses a page and saves target to config).
+  These have explicit `cmdXxx()` functions in `main.zig`.
+- **Session-level** commands that just need a page session. These fall
+  through to `withFirstPage()`, which finds the first real page, attaches a
+  session, and calls `dispatchSessionCommand()`.
+
+**`cli/interactive/commands.zig`** wraps each command as a 3-line function:
+```zig
+pub fn cmdClick(state: *InteractiveState, args: []const []const u8) !void {
+    const session = try requireSession(state);
+    try impl.click(session, buildCtx(state, args));
+}
+```
+
+### Session Routing
+
+```
+CLI dispatch (main.zig)
+  ├─ page-level URL?      → executeDirectly()   → executeWithSession("", ...)
+  ├─ --use <target-id>?   → executeOnTarget()    → executeWithSession(sid, ...)
+  └─ else                 → switch on command:
+       ├─ browser-level   → cmdNavigate / cmdScreenshot / cmdVersion / ...
+       └─ session-level   → withFirstPage()      → dispatchSessionCommand()
+```
 
 ## Common Tasks
 
@@ -239,10 +306,58 @@ zig build test
 
 ### Adding a CLI Command
 
-1. Add command to `Args.Command` enum in `cli/main.zig`
-2. Implement `cmd<Command>` function
-3. Add to switch statement in `main()`
-4. If command supports `--use` flag, implement `cmd<Command>WithSession` variant
+Session-level commands (that operate on an existing page) require 4 steps:
+
+1. **Add to enum** — `Args.Command` in `cli/main.zig`
+2. **Implement** — Add a `pub fn myCommand(session, ctx)` in `cli/command_impl.zig`
+3. **Register dispatch** — Add a `.mycommand => try myCommand(session, ctx)` arm
+   to `dispatchSessionCommand()` in `cli/command_impl.zig`
+4. **Wire up REPL** — Add a `cmdMyCommand()` wrapper in
+   `cli/interactive/commands.zig` and its dispatch entry in
+   `cli/interactive/mod.zig`'s `executeCommand()`
+
+That's it — `main.zig`'s `else => try withFirstPage(...)` automatically
+handles CLI invocation, `--use`, and page-level URL routing.
+
+**If the command needs custom browser-level setup** (e.g. `navigate` creates
+a page and saves config, `screenshot` accepts an optional URL to navigate to
+first), add an explicit `cmdXxx()` in `main.zig` and list it in the
+`switch (args.command)` block. These are the minority of commands.
+
+### Example: Adding a "highlight" Command
+
+```zig
+// 1. cli/main.zig — add to Args.Command enum
+const Command = enum {
+    // ... existing commands ...
+    highlight,
+    // ...
+};
+
+// 2. cli/command_impl.zig — implement
+pub fn highlight(session: *cdp.Session, ctx: CommandCtx) !void {
+    if (ctx.positional.len == 0) {
+        std.debug.print("Usage: highlight <selector>\n", .{});
+        return;
+    }
+    // ... implementation using actions_mod or cdp directly ...
+    std.debug.print("Highlighted: {s}\n", .{ctx.positional[0]});
+}
+
+// 3. cli/command_impl.zig — add to dispatchSessionCommand switch
+.highlight => try highlight(session, ctx),
+
+// 4. cli/interactive/commands.zig — add REPL wrapper
+pub fn cmdHighlight(state: *InteractiveState, args: []const []const u8) !void {
+    const session = try requireSession(state);
+    try impl.highlight(session, buildCtx(state, args));
+}
+
+// 5. cli/interactive/mod.zig — add to executeCommand()
+} else if (eql(cmd, "highlight")) {
+    try commands.cmdHighlight(state, args);
+}
+```
 
 ### Using --use Flag
 
@@ -253,10 +368,10 @@ zchrome --url $url --use <target-id> evaluate "document.title"
 ```
 
 Implementation:
-- Parse `--use` flag in `parseArgs()`
-- Store target ID in `Args.use_target`
-- Call `executeOnTarget()` instead of normal command flow
-- Create session from target ID and call `cmd<Command>WithSession()`
+- Parsed in `parseArgs()`, stored in `Args.use_target`
+- `main()` calls `executeOnTarget()` → attaches to target → `executeWithSession()`
+- `executeWithSession()` calls `dispatchSessionCommand()` for session-level
+  commands, falls back to browser-level commands (`version`, `pages`, etc.)
 
 ### Fixing Memory Leaks
 

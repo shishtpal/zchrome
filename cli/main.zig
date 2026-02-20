@@ -2,9 +2,8 @@ const std = @import("std");
 const cdp = @import("cdp");
 const config_mod = @import("config.zig");
 const http_mod = @import("http.zig");
-const snapshot_mod = @import("snapshot.zig");
-const actions_mod = @import("actions/mod.zig");
 const interactive_mod = @import("interactive/mod.zig");
+const impl = @import("command_impl.zig");
 
 /// Save target ID to config file for subsequent commands
 fn saveTargetToConfig(target_id: []const u8, args: Args, allocator: std.mem.Allocator, io: std.Io) void {
@@ -89,7 +88,7 @@ const Args = struct {
         click,
         dblclick,
         focus,
-        @"type",
+        type,
         fill,
         select,
         hover,
@@ -150,10 +149,7 @@ pub fn main(init: std.process.Init) !void {
     }
     // Only apply last_target for page-level commands (not version, pages, list_targets, etc.)
     const needs_target = switch (args.command) {
-        .navigate, .screenshot, .pdf, .evaluate, .dom, .network, .cookies, .snapshot,
-        .click, .dblclick, .focus, .@"type", .fill, .select, .hover, .check, .uncheck,
-        .scroll, .scrollintoview, .drag, .get, .upload, .back, .forward, .reload,
-        .press, .keydown, .keyup => true,
+        .navigate, .screenshot, .pdf, .evaluate, .dom, .network, .cookies, .snapshot, .click, .dblclick, .focus, .type, .fill, .select, .hover, .check, .uncheck, .scroll, .scrollintoview, .drag, .get, .upload, .back, .forward, .reload, .press, .keydown, .keyup => true,
         .version, .list_targets, .pages, .interactive, .open, .connect, .help => false,
     };
     if (needs_target and args.use_target == null and config.last_target != null) {
@@ -210,84 +206,60 @@ pub fn main(init: std.process.Init) !void {
         try executeOnTarget(browser, tid, args, allocator);
     } else {
         switch (args.command) {
+            // Commands that manage their own session/page lifecycle
             .navigate => try cmdNavigate(browser, args, allocator),
             .screenshot => try cmdScreenshot(browser, args, allocator),
             .pdf => try cmdPdf(browser, args, allocator),
             .evaluate => try cmdEvaluate(browser, args, allocator),
             .dom => try cmdDom(browser, args, allocator),
-            .network => try cmdNetwork(browser, args, allocator),
             .cookies => try cmdCookies(browser, args, allocator),
             .version => try cmdVersion(browser, allocator),
             .list_targets => try cmdListTargets(browser, allocator),
             .pages => try cmdPages(browser, allocator),
             .interactive => try cmdInteractive(browser, args, allocator),
             .snapshot => try cmdSnapshot(browser, args, allocator),
-            .click => try cmdClick(browser, args, allocator),
-            .dblclick => try cmdDblClick(browser, args, allocator),
-            .focus => try cmdFocus(browser, args, allocator),
-            .@"type" => try cmdType(browser, args, allocator),
-            .fill => try cmdFill(browser, args, allocator),
-            .select => try cmdSelect(browser, args, allocator),
-            .hover => try cmdHover(browser, args, allocator),
-            .check => try cmdCheck(browser, args, allocator),
-            .uncheck => try cmdUncheck(browser, args, allocator),
-            .scroll => try cmdScroll(browser, args, allocator),
-            .scrollintoview => try cmdScrollIntoView(browser, args, allocator),
-            .drag => try cmdDrag(browser, args, allocator),
-            .get => try cmdGet(browser, args, allocator),
-            .upload => try cmdUpload(browser, args, allocator),
-            .back => try cmdBack(browser, args, allocator),
-            .forward => try cmdForward(browser, args, allocator),
-            .reload => try cmdReload(browser, args, allocator),
-            .press => try cmdPress(browser, args, allocator),
-            .keydown => try cmdKeyDown(browser, args, allocator),
-            .keyup => try cmdKeyUp(browser, args, allocator),
             .open, .connect, .help => unreachable,
+            // All other commands use first real page
+            else => try withFirstPage(browser, args, allocator),
+        }
+    }
+}
+
+/// Build a CommandCtx from CLI Args
+fn buildCtx(args: Args, allocator: std.mem.Allocator) impl.CommandCtx {
+    return .{
+        .allocator = allocator,
+        .io = args.io,
+        .positional = args.positional,
+        .output = args.output,
+        .full_page = args.full_page,
+        .snap_interactive = args.snap_interactive,
+        .snap_compact = args.snap_compact,
+        .snap_depth = args.snap_depth,
+        .snap_selector = args.snap_selector,
+    };
+}
+
+/// Execute a session-level command. Creates the session and dispatches.
+fn executeWithSession(browser: *cdp.Browser, session_id: []const u8, args: Args, allocator: std.mem.Allocator) !void {
+    var session = try cdp.Session.init(session_id, browser.connection, allocator);
+    defer session.deinit();
+
+    const ctx = buildCtx(args, allocator);
+    if (!try impl.dispatchSessionCommand(session, args.command, ctx)) {
+        // Non-session commands
+        switch (args.command) {
+            .version => try cmdVersion(browser, allocator),
+            .list_targets => try cmdListTargets(browser, allocator),
+            .pages => try cmdPages(browser, allocator),
+            else => std.debug.print("Error: Command not supported in this mode\n", .{}),
         }
     }
 }
 
 /// Execute a command directly on a page-level connection (no session needed)
 fn executeDirectly(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
-    // Page-level WebSocket URL: commands go directly without sessionId
-    // Create a session with empty ID so commands are sent without sessionId
-    var session = try cdp.Session.init("", browser.connection, allocator);
-    defer session.deinit();
-
-    switch (args.command) {
-        .navigate => try cmdNavigateWithSession(session, args, allocator),
-        .screenshot => try cmdScreenshotWithSession(session, args, allocator),
-        .pdf => try cmdPdfWithSession(session, args, allocator),
-        .evaluate => try cmdEvaluateWithSession(session, args, allocator),
-        .dom => try cmdDomWithSession(session, args, allocator),
-        .network => try cmdNetworkWithSession(session, args, allocator),
-        .cookies => try cmdCookiesWithSession(session, args, allocator),
-        .snapshot => try cmdSnapshotWithSession(session, args, allocator),
-        .click => try cmdClickWithSession(session, args, allocator),
-        .dblclick => try cmdDblClickWithSession(session, args, allocator),
-        .focus => try cmdFocusWithSession(session, args, allocator),
-        .@"type" => try cmdTypeWithSession(session, args, allocator),
-        .fill => try cmdFillWithSession(session, args, allocator),
-        .select => try cmdSelectWithSession(session, args, allocator),
-        .hover => try cmdHoverWithSession(session, args, allocator),
-        .check => try cmdCheckWithSession(session, args, allocator),
-        .uncheck => try cmdUncheckWithSession(session, args, allocator),
-        .scroll => try cmdScrollWithSession(session, args),
-        .scrollintoview => try cmdScrollIntoViewWithSession(session, args, allocator),
-        .drag => try cmdDragWithSession(session, args, allocator),
-        .get => try cmdGetWithSession(session, args, allocator),
-        .upload => try cmdUploadWithSession(session, args, allocator),
-        .back => try cmdBackWithSession(session),
-        .forward => try cmdForwardWithSession(session),
-        .reload => try cmdReloadWithSession(session),
-        .press => try cmdPressWithSession(session, args),
-        .keydown => try cmdKeyDownWithSession(session, args),
-        .keyup => try cmdKeyUpWithSession(session, args),
-        .version => try cmdVersion(browser, allocator),
-        .list_targets => try cmdListTargets(browser, allocator),
-        .pages => try cmdPages(browser, allocator),
-        else => std.debug.print("Error: Command not supported on page-level connections\n", .{}),
-    }
+    try executeWithSession(browser, "", args, allocator);
 }
 
 /// Execute a command on an existing target
@@ -296,7 +268,6 @@ fn executeOnTarget(browser: *cdp.Browser, target_id: []const u8, args: Args, all
         std.debug.print("Attaching to target: {s}\n", .{target_id});
     }
 
-    // Attach to existing target
     var target = cdp.Target.init(browser.connection);
     const session_id = try target.attachToTarget(allocator, target_id, true);
     defer allocator.free(session_id);
@@ -305,41 +276,34 @@ fn executeOnTarget(browser: *cdp.Browser, target_id: []const u8, args: Args, all
         std.debug.print("Session ID: {s}\n", .{session_id});
     }
 
-    // Create session with the attached target
+    try executeWithSession(browser, session_id, args, allocator);
+}
+
+/// Find first real page, attach a session, and dispatch a command through command_impl
+fn withFirstPage(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
+    const pages = try browser.pages();
+    defer {
+        for (pages) |*p| {
+            var page_info = p.*;
+            page_info.deinit(allocator);
+        }
+        allocator.free(pages);
+    }
+
+    const page = findFirstRealPage(pages) orelse {
+        std.debug.print("Error: No pages open\n", .{});
+        return error.NoPages;
+    };
+
+    var target = cdp.Target.init(browser.connection);
+    const session_id = try target.attachToTarget(allocator, page.target_id, true);
+    defer allocator.free(session_id);
     var session = try cdp.Session.init(session_id, browser.connection, allocator);
     defer session.deinit();
 
-    // Execute the command on this session
-    switch (args.command) {
-        .navigate => try cmdNavigateWithSession(session, args, allocator),
-        .screenshot => try cmdScreenshotWithSession(session, args, allocator),
-        .pdf => try cmdPdfWithSession(session, args, allocator),
-        .evaluate => try cmdEvaluateWithSession(session, args, allocator),
-        .dom => try cmdDomWithSession(session, args, allocator),
-        .network => try cmdNetworkWithSession(session, args, allocator),
-        .cookies => try cmdCookiesWithSession(session, args, allocator),
-        .snapshot => try cmdSnapshotWithSession(session, args, allocator),
-        .click => try cmdClickWithSession(session, args, allocator),
-        .dblclick => try cmdDblClickWithSession(session, args, allocator),
-        .focus => try cmdFocusWithSession(session, args, allocator),
-        .@"type" => try cmdTypeWithSession(session, args, allocator),
-        .fill => try cmdFillWithSession(session, args, allocator),
-        .select => try cmdSelectWithSession(session, args, allocator),
-        .hover => try cmdHoverWithSession(session, args, allocator),
-        .check => try cmdCheckWithSession(session, args, allocator),
-        .uncheck => try cmdUncheckWithSession(session, args, allocator),
-        .scroll => try cmdScrollWithSession(session, args),
-        .scrollintoview => try cmdScrollIntoViewWithSession(session, args, allocator),
-        .drag => try cmdDragWithSession(session, args, allocator),
-        .get => try cmdGetWithSession(session, args, allocator),
-        .upload => try cmdUploadWithSession(session, args, allocator),
-        .back => try cmdBackWithSession(session),
-        .forward => try cmdForwardWithSession(session),
-        .reload => try cmdReloadWithSession(session),
-        .press => try cmdPressWithSession(session, args),
-        .keydown => try cmdKeyDownWithSession(session, args),
-        .keyup => try cmdKeyUpWithSession(session, args),
-        else => std.debug.print("Error: Command not supported with --use\n", .{}),
+    const ctx = buildCtx(args, allocator);
+    if (!try impl.dispatchSessionCommand(session, args.command, ctx)) {
+        std.debug.print("Error: Command not supported in this mode\n", .{});
     }
 }
 
@@ -375,6 +339,7 @@ fn cmdNavigate(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) 
         }
         var target = cdp.Target.init(browser.connection);
         const session_id = try target.attachToTarget(allocator, target_id, true);
+        defer allocator.free(session_id);
         session = try cdp.Session.init(session_id, browser.connection, allocator);
     } else {
         // Create new page
@@ -588,14 +553,6 @@ fn cmdDom(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void
     std.debug.print("{s}\n", .{html});
 }
 
-/// Network command
-fn cmdNetwork(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
-    _ = browser;
-    _ = allocator;
-    _ = args;
-    std.debug.print("Network monitoring not yet implemented\n", .{});
-}
-
 /// Cookies command
 fn cmdCookies(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
     var session = try browser.newPage();
@@ -692,187 +649,6 @@ fn cmdPages(browser: *cdp.Browser, allocator: std.mem.Allocator) !void {
     }
 }
 
-/// Navigate command with existing session
-fn cmdNavigateWithSession(session: *cdp.Session, args: Args, allocator: std.mem.Allocator) !void {
-    if (args.positional.len < 1) {
-        std.debug.print("Error: navigate requires a URL\n", .{});
-        return;
-    }
-
-    const target_url = args.positional[0];
-
-    var page = cdp.Page.init(session);
-    try page.enable();
-
-    var result = try page.navigate(allocator, target_url);
-    defer result.deinit(allocator);
-
-    if (result.error_text) |err| {
-        std.debug.print("Navigation error: {s}\n", .{err});
-        return;
-    }
-
-    // Wait for page load
-    var i: u32 = 0;
-    while (i < 500000) : (i += 1) {
-        std.atomic.spinLoopHint();
-    }
-
-    var runtime = cdp.Runtime.init(session);
-    try runtime.enable();
-
-    const title = runtime.evaluateAs([]const u8, "document.title") catch "Unknown";
-
-    std.debug.print("URL: {s}\n", .{target_url});
-    std.debug.print("Title: {s}\n", .{title});
-}
-
-/// Screenshot command with existing session
-fn cmdScreenshotWithSession(session: *cdp.Session, args: Args, allocator: std.mem.Allocator) !void {
-    var page = cdp.Page.init(session);
-    try page.enable();
-
-    // Wait for page to be ready
-    var j: u32 = 0;
-    while (j < 500000) : (j += 1) {
-        std.atomic.spinLoopHint();
-    }
-
-    const screenshot_data = try page.captureScreenshot(allocator, .{
-        .format = .png,
-        .capture_beyond_viewport = if (args.full_page) true else null,
-    });
-    defer allocator.free(screenshot_data);
-
-    const decoded = try cdp.base64.decodeAlloc(allocator, screenshot_data);
-    defer allocator.free(decoded);
-
-    const output_path = args.output orelse "screenshot.png";
-    try writeFile(args.io, output_path, decoded);
-    std.debug.print("Screenshot saved to {s} ({} bytes){s}\n", .{
-        output_path,
-        decoded.len,
-        if (args.full_page) " (full page)" else "",
-    });
-}
-
-/// PDF command with existing session
-fn cmdPdfWithSession(session: *cdp.Session, args: Args, allocator: std.mem.Allocator) !void {
-    var page = cdp.Page.init(session);
-    try page.enable();
-
-    // Wait for page to be ready
-    var j: u32 = 0;
-    while (j < 500000) : (j += 1) {
-        std.atomic.spinLoopHint();
-    }
-
-    const pdf_data = try page.printToPDF(allocator, .{});
-    defer allocator.free(pdf_data);
-
-    const decoded = try cdp.base64.decodeAlloc(allocator, pdf_data);
-    defer allocator.free(decoded);
-
-    const output_path = args.output orelse "page.pdf";
-    try writeFile(args.io, output_path, decoded);
-    std.debug.print("PDF saved to {s} ({} bytes)\n", .{ output_path, decoded.len });
-}
-
-/// Evaluate command with existing session
-fn cmdEvaluateWithSession(session: *cdp.Session, args: Args, allocator: std.mem.Allocator) !void {
-    if (args.positional.len < 1) {
-        std.debug.print("Error: evaluate requires an expression\n", .{});
-        return;
-    }
-
-    const expression = args.positional[0];
-
-    var runtime = cdp.Runtime.init(session);
-    try runtime.enable();
-
-    var result = try runtime.evaluate(allocator, expression, .{ .return_by_value = true });
-    defer result.deinit(allocator);
-
-    std.debug.print("Result: ", .{});
-    if (result.value) |v| {
-        switch (v) {
-            .string => |s| std.debug.print("{s}\n", .{s}),
-            .integer => |int_val| std.debug.print("{}\n", .{int_val}),
-            .float => |f| std.debug.print("{d}\n", .{f}),
-            .bool => |b| std.debug.print("{}\n", .{b}),
-            .null => std.debug.print("null\n", .{}),
-            else => std.debug.print("[complex value]\n", .{}),
-        }
-    } else {
-        std.debug.print("{s}\n", .{result.description orelse "undefined"});
-    }
-}
-
-/// DOM command with existing session
-fn cmdDomWithSession(session: *cdp.Session, args: Args, allocator: std.mem.Allocator) !void {
-    if (args.positional.len < 1) {
-        std.debug.print("Error: dom requires a selector\n", .{});
-        return;
-    }
-
-    const selector = args.positional[0];
-
-    var page = cdp.Page.init(session);
-    try page.enable();
-
-    var dom = cdp.DOM.init(session);
-    try dom.enable();
-
-    const doc = try dom.getDocument(allocator, 1);
-    defer {
-        var d = doc;
-        d.deinit(allocator);
-    }
-
-    const node_id = try dom.querySelector(doc.node_id, selector);
-    const html = try dom.getOuterHTML(allocator, node_id);
-    defer allocator.free(html);
-
-    std.debug.print("{s}\n", .{html});
-}
-
-/// Network command with existing session
-fn cmdNetworkWithSession(session: *cdp.Session, args: Args, allocator: std.mem.Allocator) !void {
-    _ = session;
-    _ = allocator;
-    _ = args;
-    std.debug.print("Network monitoring not yet implemented\n", .{});
-}
-
-/// Cookies command with existing session
-fn cmdCookiesWithSession(session: *cdp.Session, args: Args, allocator: std.mem.Allocator) !void {
-    _ = args; // Not used for cookies command
-    var page = cdp.Page.init(session);
-    try page.enable();
-
-    var storage = cdp.Storage.init(session);
-
-    var i: u32 = 0;
-    while (i < 500000) : (i += 1) {
-        std.atomic.spinLoopHint();
-    }
-
-    const cookies = try storage.getCookies(allocator, null);
-    defer {
-        for (cookies) |*c| {
-            var cookie = c.*;
-            cookie.deinit(allocator);
-        }
-        allocator.free(cookies);
-    }
-
-    std.debug.print("{s:<30} {s:<40} {s:<20}\n", .{ "Name", "Value", "Domain" });
-    std.debug.print("{s:-<90}\n", .{""});
-    for (cookies) |cookie| {
-        std.debug.print("{s:<30} {s:<40} {s:<20}\n", .{ cookie.name, cookie.value, cookie.domain });
-    }
-}
-
 /// Interactive REPL
 fn cmdInteractive(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
     // Find the first "real" page to attach to
@@ -950,54 +726,9 @@ fn cmdSnapshot(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) 
     }
     defer session.deinit();
 
-    try cmdSnapshotWithSession(session, args, allocator);
+    const ctx = buildCtx(args, allocator);
+    try impl.snapshot(session, ctx);
 }
-
-/// Snapshot command with existing session
-fn cmdSnapshotWithSession(session: *cdp.Session, args: Args, allocator: std.mem.Allocator) !void {
-    var runtime = cdp.Runtime.init(session);
-    try runtime.enable();
-
-    // Build and execute snapshot JavaScript
-    const js = try snapshot_mod.buildSnapshotJs(allocator, args.snap_selector, args.snap_depth);
-    defer allocator.free(js);
-
-    var result = try runtime.evaluate(allocator, js, .{ .return_by_value = true });
-    defer result.deinit(allocator);
-
-    const aria_tree = result.asString() orelse "(empty)";
-
-    // Process the ARIA tree
-    var processor = snapshot_mod.SnapshotProcessor.init(allocator);
-    defer processor.deinit();
-
-    const options = snapshot_mod.SnapshotOptions{
-        .interactive = args.snap_interactive,
-        .compact = args.snap_compact,
-        .max_depth = args.snap_depth,
-        .selector = args.snap_selector,
-    };
-
-    var snapshot = try processor.processAriaTree(aria_tree, options);
-    defer snapshot.deinit();
-
-    // Print the tree
-    std.debug.print("{s}\n", .{snapshot.tree});
-    std.debug.print("\n--- {} element(s) with refs ---\n", .{snapshot.refs.count()});
-
-    // Save to file
-    const output_path = args.output orelse try config_mod.getSnapshotPath(allocator, args.io);
-    defer if (args.output == null) allocator.free(output_path);
-
-    try snapshot_mod.saveSnapshot(allocator, args.io, output_path, &snapshot);
-
-    std.debug.print("\nSnapshot saved to: {s}\n", .{output_path});
-    if (snapshot.refs.count() > 0) {
-        std.debug.print("Use @e<N> refs in subsequent commands\n", .{});
-    }
-}
-
-// ─── Action Commands ────────────────────────────────────────────────────────
 
 /// Find the first "real" page (skipping devtools://, chrome://, etc.)
 fn findFirstRealPage(pages: []const cdp.TargetInfo) ?*const cdp.TargetInfo {
@@ -1012,878 +743,6 @@ fn findFirstRealPage(pages: []const cdp.TargetInfo) ?*const cdp.TargetInfo {
     // Fallback to first page if no "real" page found
     if (pages.len > 0) return &pages[0];
     return null;
-}
-
-/// Click command - uses existing page
-fn cmdClick(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
-    const pages = try browser.pages();
-    defer {
-        for (pages) |*p| {
-            var page_info = p.*;
-            page_info.deinit(allocator);
-        }
-        allocator.free(pages);
-    }
-
-    const page = findFirstRealPage(pages) orelse {
-        std.debug.print("Error: No pages open\n", .{});
-        return error.NoPages;
-    };
-
-    var target = cdp.Target.init(browser.connection);
-    const session_id = try target.attachToTarget(allocator, page.target_id, true);
-    var session = try cdp.Session.init(session_id, browser.connection, allocator);
-    defer session.deinit();
-
-    try cmdClickWithSession(session, args, allocator);
-}
-
-fn cmdClickWithSession(session: *cdp.Session, args: Args, allocator: std.mem.Allocator) !void {
-    if (args.positional.len == 0) {
-        std.debug.print("Usage: zchrome click <selector>\n", .{});
-        return;
-    }
-
-    var resolved = try actions_mod.resolveSelector(allocator, args.io, args.positional[0]);
-    defer resolved.deinit();
-
-    try actions_mod.clickElement(session, allocator, &resolved, 1);
-    std.debug.print("Clicked: {s}\n", .{args.positional[0]});
-}
-
-/// Double-click command
-fn cmdDblClick(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
-    const pages = try browser.pages();
-    defer {
-        for (pages) |*p| {
-            var page_info = p.*;
-            page_info.deinit(allocator);
-        }
-        allocator.free(pages);
-    }
-
-    const page = findFirstRealPage(pages) orelse {
-        std.debug.print("Error: No pages open\n", .{});
-        return error.NoPages;
-    };
-
-    var target = cdp.Target.init(browser.connection);
-    const session_id = try target.attachToTarget(allocator, page.target_id, true);
-    var session = try cdp.Session.init(session_id, browser.connection, allocator);
-    defer session.deinit();
-
-    try cmdDblClickWithSession(session, args, allocator);
-}
-
-fn cmdDblClickWithSession(session: *cdp.Session, args: Args, allocator: std.mem.Allocator) !void {
-    if (args.positional.len == 0) {
-        std.debug.print("Usage: zchrome dblclick <selector>\n", .{});
-        return;
-    }
-
-    var resolved = try actions_mod.resolveSelector(allocator, args.io, args.positional[0]);
-    defer resolved.deinit();
-
-    try actions_mod.clickElement(session, allocator, &resolved, 2);
-    std.debug.print("Double-clicked: {s}\n", .{args.positional[0]});
-}
-
-/// Focus command
-fn cmdFocus(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
-    const pages = try browser.pages();
-    defer {
-        for (pages) |*p| {
-            var page_info = p.*;
-            page_info.deinit(allocator);
-        }
-        allocator.free(pages);
-    }
-
-    const page = findFirstRealPage(pages) orelse {
-        std.debug.print("Error: No pages open\n", .{});
-        return error.NoPages;
-    };
-
-    var target = cdp.Target.init(browser.connection);
-    const session_id = try target.attachToTarget(allocator, page.target_id, true);
-    var session = try cdp.Session.init(session_id, browser.connection, allocator);
-    defer session.deinit();
-
-    try cmdFocusWithSession(session, args, allocator);
-}
-
-fn cmdFocusWithSession(session: *cdp.Session, args: Args, allocator: std.mem.Allocator) !void {
-    if (args.positional.len == 0) {
-        std.debug.print("Usage: zchrome focus <selector>\n", .{});
-        return;
-    }
-
-    var resolved = try actions_mod.resolveSelector(allocator, args.io, args.positional[0]);
-    defer resolved.deinit();
-
-    try actions_mod.focusElement(session, allocator, &resolved);
-    std.debug.print("Focused: {s}\n", .{args.positional[0]});
-}
-
-/// Type command (type into focused element or specified element)
-fn cmdType(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
-    const pages = try browser.pages();
-    defer {
-        for (pages) |*p| {
-            var page_info = p.*;
-            page_info.deinit(allocator);
-        }
-        allocator.free(pages);
-    }
-
-    const page = findFirstRealPage(pages) orelse {
-        std.debug.print("Error: No pages open\n", .{});
-        return error.NoPages;
-    };
-
-    var target = cdp.Target.init(browser.connection);
-    const session_id = try target.attachToTarget(allocator, page.target_id, true);
-    var session = try cdp.Session.init(session_id, browser.connection, allocator);
-    defer session.deinit();
-
-    try cmdTypeWithSession(session, args, allocator);
-}
-
-fn cmdTypeWithSession(session: *cdp.Session, args: Args, allocator: std.mem.Allocator) !void {
-    if (args.positional.len < 2) {
-        std.debug.print("Usage: zchrome type <selector> <text>\n", .{});
-        return;
-    }
-
-    var resolved = try actions_mod.resolveSelector(allocator, args.io, args.positional[0]);
-    defer resolved.deinit();
-
-    try actions_mod.focusElement(session, allocator, &resolved);
-    // Sleep using spinloop (Zig 0.16 changed time API)
-    var j: u32 = 0;
-    while (j < 500000) : (j += 1) {
-        std.atomic.spinLoopHint();
-    }
-    try actions_mod.typeText(session, args.positional[1]);
-    std.debug.print("Typed into: {s}\n", .{args.positional[0]});
-}
-
-/// Fill command (clear then type)
-fn cmdFill(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
-    const pages = try browser.pages();
-    defer {
-        for (pages) |*p| {
-            var page_info = p.*;
-            page_info.deinit(allocator);
-        }
-        allocator.free(pages);
-    }
-
-    const page = findFirstRealPage(pages) orelse {
-        std.debug.print("Error: No pages open\n", .{});
-        return error.NoPages;
-    };
-
-    var target = cdp.Target.init(browser.connection);
-    const session_id = try target.attachToTarget(allocator, page.target_id, true);
-    var session = try cdp.Session.init(session_id, browser.connection, allocator);
-    defer session.deinit();
-
-    try cmdFillWithSession(session, args, allocator);
-}
-
-fn cmdFillWithSession(session: *cdp.Session, args: Args, allocator: std.mem.Allocator) !void {
-    if (args.positional.len < 2) {
-        std.debug.print("Usage: zchrome fill <selector> <text>\n", .{});
-        return;
-    }
-
-    var resolved = try actions_mod.resolveSelector(allocator, args.io, args.positional[0]);
-    defer resolved.deinit();
-
-    try actions_mod.fillElement(session, allocator, &resolved, args.positional[1]);
-    std.debug.print("Filled: {s}\n", .{args.positional[0]});
-}
-
-/// Select command (select dropdown option)
-fn cmdSelect(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
-    const pages = try browser.pages();
-    defer {
-        for (pages) |*p| {
-            var page_info = p.*;
-            page_info.deinit(allocator);
-        }
-        allocator.free(pages);
-    }
-
-    const page = findFirstRealPage(pages) orelse {
-        std.debug.print("Error: No pages open\n", .{});
-        return error.NoPages;
-    };
-
-    var target = cdp.Target.init(browser.connection);
-    const session_id = try target.attachToTarget(allocator, page.target_id, true);
-    var session = try cdp.Session.init(session_id, browser.connection, allocator);
-    defer session.deinit();
-
-    try cmdSelectWithSession(session, args, allocator);
-}
-
-fn cmdSelectWithSession(session: *cdp.Session, args: Args, allocator: std.mem.Allocator) !void {
-    if (args.positional.len < 2) {
-        std.debug.print("Usage: zchrome select <selector> <value>\n", .{});
-        return;
-    }
-
-    var resolved = try actions_mod.resolveSelector(allocator, args.io, args.positional[0]);
-    defer resolved.deinit();
-
-    try actions_mod.selectOption(session, allocator, &resolved, args.positional[1]);
-    std.debug.print("Selected '{s}' in: {s}\n", .{ args.positional[1], args.positional[0] });
-}
-
-/// Hover command
-fn cmdHover(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
-    const pages = try browser.pages();
-    defer {
-        for (pages) |*p| {
-            var page_info = p.*;
-            page_info.deinit(allocator);
-        }
-        allocator.free(pages);
-    }
-
-    const page = findFirstRealPage(pages) orelse {
-        std.debug.print("Error: No pages open\n", .{});
-        return error.NoPages;
-    };
-
-    var target = cdp.Target.init(browser.connection);
-    const session_id = try target.attachToTarget(allocator, page.target_id, true);
-    var session = try cdp.Session.init(session_id, browser.connection, allocator);
-    defer session.deinit();
-
-    try cmdHoverWithSession(session, args, allocator);
-}
-
-fn cmdHoverWithSession(session: *cdp.Session, args: Args, allocator: std.mem.Allocator) !void {
-    if (args.positional.len == 0) {
-        std.debug.print("Usage: zchrome hover <selector>\n", .{});
-        return;
-    }
-
-    var resolved = try actions_mod.resolveSelector(allocator, args.io, args.positional[0]);
-    defer resolved.deinit();
-
-    try actions_mod.hoverElement(session, allocator, &resolved);
-    std.debug.print("Hovering: {s}\n", .{args.positional[0]});
-}
-
-/// Check command (check checkbox)
-fn cmdCheck(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
-    const pages = try browser.pages();
-    defer {
-        for (pages) |*p| {
-            var page_info = p.*;
-            page_info.deinit(allocator);
-        }
-        allocator.free(pages);
-    }
-
-    const page = findFirstRealPage(pages) orelse {
-        std.debug.print("Error: No pages open\n", .{});
-        return error.NoPages;
-    };
-
-    var target = cdp.Target.init(browser.connection);
-    const session_id = try target.attachToTarget(allocator, page.target_id, true);
-    var session = try cdp.Session.init(session_id, browser.connection, allocator);
-    defer session.deinit();
-
-    try cmdCheckWithSession(session, args, allocator);
-}
-
-fn cmdCheckWithSession(session: *cdp.Session, args: Args, allocator: std.mem.Allocator) !void {
-    if (args.positional.len == 0) {
-        std.debug.print("Usage: zchrome check <selector>\n", .{});
-        return;
-    }
-
-    var resolved = try actions_mod.resolveSelector(allocator, args.io, args.positional[0]);
-    defer resolved.deinit();
-
-    try actions_mod.setChecked(session, allocator, &resolved, true);
-    std.debug.print("Checked: {s}\n", .{args.positional[0]});
-}
-
-/// Uncheck command (uncheck checkbox)
-fn cmdUncheck(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
-    const pages = try browser.pages();
-    defer {
-        for (pages) |*p| {
-            var page_info = p.*;
-            page_info.deinit(allocator);
-        }
-        allocator.free(pages);
-    }
-
-    const page = findFirstRealPage(pages) orelse {
-        std.debug.print("Error: No pages open\n", .{});
-        return error.NoPages;
-    };
-
-    var target = cdp.Target.init(browser.connection);
-    const session_id = try target.attachToTarget(allocator, page.target_id, true);
-    var session = try cdp.Session.init(session_id, browser.connection, allocator);
-    defer session.deinit();
-
-    try cmdUncheckWithSession(session, args, allocator);
-}
-
-fn cmdUncheckWithSession(session: *cdp.Session, args: Args, allocator: std.mem.Allocator) !void {
-    if (args.positional.len == 0) {
-        std.debug.print("Usage: zchrome uncheck <selector>\n", .{});
-        return;
-    }
-
-    var resolved = try actions_mod.resolveSelector(allocator, args.io, args.positional[0]);
-    defer resolved.deinit();
-
-    try actions_mod.setChecked(session, allocator, &resolved, false);
-    std.debug.print("Unchecked: {s}\n", .{args.positional[0]});
-}
-
-/// Scroll command
-fn cmdScroll(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
-    const pages = try browser.pages();
-    defer {
-        for (pages) |*p| {
-            var page_info = p.*;
-            page_info.deinit(allocator);
-        }
-        allocator.free(pages);
-    }
-
-    const page = findFirstRealPage(pages) orelse {
-        std.debug.print("Error: No pages open\n", .{});
-        return error.NoPages;
-    };
-
-    var target = cdp.Target.init(browser.connection);
-    const session_id = try target.attachToTarget(allocator, page.target_id, true);
-    var session = try cdp.Session.init(session_id, browser.connection, allocator);
-    defer session.deinit();
-
-    try cmdScrollWithSession(session, args);
-}
-
-fn cmdScrollWithSession(session: *cdp.Session, args: Args) !void {
-    if (args.positional.len == 0) {
-        std.debug.print("Usage: zchrome scroll <up|down|left|right> [pixels]\n", .{});
-        return;
-    }
-
-    const direction = args.positional[0];
-    const pixels: f64 = if (args.positional.len > 1)
-        @floatFromInt(std.fmt.parseInt(i32, args.positional[1], 10) catch 300)
-    else
-        300;
-
-    var delta_x: f64 = 0;
-    var delta_y: f64 = 0;
-
-    if (std.mem.eql(u8, direction, "up")) {
-        delta_y = -pixels;
-    } else if (std.mem.eql(u8, direction, "down")) {
-        delta_y = pixels;
-    } else if (std.mem.eql(u8, direction, "left")) {
-        delta_x = -pixels;
-    } else if (std.mem.eql(u8, direction, "right")) {
-        delta_x = pixels;
-    } else {
-        std.debug.print("Invalid direction: {s}. Use up, down, left, or right.\n", .{direction});
-        return;
-    }
-
-    try actions_mod.scroll(session, delta_x, delta_y);
-    std.debug.print("Scrolled {s} {d}px\n", .{ direction, pixels });
-}
-
-/// Scroll into view command
-fn cmdScrollIntoView(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
-    const pages = try browser.pages();
-    defer {
-        for (pages) |*p| {
-            var page_info = p.*;
-            page_info.deinit(allocator);
-        }
-        allocator.free(pages);
-    }
-
-    const page = findFirstRealPage(pages) orelse {
-        std.debug.print("Error: No pages open\n", .{});
-        return error.NoPages;
-    };
-
-    var target = cdp.Target.init(browser.connection);
-    const session_id = try target.attachToTarget(allocator, page.target_id, true);
-    var session = try cdp.Session.init(session_id, browser.connection, allocator);
-    defer session.deinit();
-
-    try cmdScrollIntoViewWithSession(session, args, allocator);
-}
-
-fn cmdScrollIntoViewWithSession(session: *cdp.Session, args: Args, allocator: std.mem.Allocator) !void {
-    if (args.positional.len == 0) {
-        std.debug.print("Usage: zchrome scrollintoview <selector>\n", .{});
-        return;
-    }
-
-    var resolved = try actions_mod.resolveSelector(allocator, args.io, args.positional[0]);
-    defer resolved.deinit();
-
-    try actions_mod.scrollIntoView(session, allocator, &resolved);
-    std.debug.print("Scrolled into view: {s}\n", .{args.positional[0]});
-}
-
-/// Drag command - drag from source element to target element
-fn cmdDrag(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
-    const pages = try browser.pages();
-    defer {
-        for (pages) |*p| {
-            var page_info = p.*;
-            page_info.deinit(allocator);
-        }
-        allocator.free(pages);
-    }
-
-    const page = findFirstRealPage(pages) orelse {
-        std.debug.print("Error: No pages open\n", .{});
-        return error.NoPages;
-    };
-
-    var target = cdp.Target.init(browser.connection);
-    const session_id = try target.attachToTarget(allocator, page.target_id, true);
-    var session = try cdp.Session.init(session_id, browser.connection, allocator);
-    defer session.deinit();
-
-    try cmdDragWithSession(session, args, allocator);
-}
-
-fn cmdDragWithSession(session: *cdp.Session, args: Args, allocator: std.mem.Allocator) !void {
-    if (args.positional.len < 2) {
-        std.debug.print("Usage: zchrome drag <source-selector> <target-selector>\n", .{});
-        return;
-    }
-
-    var src_resolved = try actions_mod.resolveSelector(allocator, args.io, args.positional[0]);
-    defer src_resolved.deinit();
-
-    var tgt_resolved = try actions_mod.resolveSelector(allocator, args.io, args.positional[1]);
-    defer tgt_resolved.deinit();
-
-    try actions_mod.dragElement(session, allocator, &src_resolved, &tgt_resolved);
-    std.debug.print("Dragged: {s} -> {s}\n", .{ args.positional[0], args.positional[1] });
-}
-
-/// Upload command - upload files to file input element
-fn cmdUpload(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
-    const pages = try browser.pages();
-    defer {
-        for (pages) |*p| {
-            var page_info = p.*;
-            page_info.deinit(allocator);
-        }
-        allocator.free(pages);
-    }
-
-    const page = findFirstRealPage(pages) orelse {
-        std.debug.print("Error: No pages open\n", .{});
-        return error.NoPages;
-    };
-
-    var target = cdp.Target.init(browser.connection);
-    const session_id = try target.attachToTarget(allocator, page.target_id, true);
-    var session = try cdp.Session.init(session_id, browser.connection, allocator);
-    defer session.deinit();
-
-    try cmdUploadWithSession(session, args, allocator);
-}
-
-fn cmdUploadWithSession(session: *cdp.Session, args: Args, allocator: std.mem.Allocator) !void {
-    if (args.positional.len < 2) {
-        std.debug.print("Usage: zchrome upload <selector> <file1> [file2...]\n", .{});
-        return;
-    }
-
-    var resolved = try actions_mod.resolveSelector(allocator, args.io, args.positional[0]);
-    defer resolved.deinit();
-
-    const files = args.positional[1..];
-    try actions_mod.uploadFiles(session, allocator, args.io, &resolved, files);
-    std.debug.print("Uploaded {} file(s) to: {s}\n", .{ files.len, args.positional[0] });
-}
-
-/// Get command - retrieve information from elements and page
-fn cmdGet(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
-    const pages = try browser.pages();
-    defer {
-        for (pages) |*p| {
-            var page_info = p.*;
-            page_info.deinit(allocator);
-        }
-        allocator.free(pages);
-    }
-
-    const page = findFirstRealPage(pages) orelse {
-        std.debug.print("Error: No pages open\n", .{});
-        return error.NoPages;
-    };
-
-    var target = cdp.Target.init(browser.connection);
-    const session_id = try target.attachToTarget(allocator, page.target_id, true);
-    var session = try cdp.Session.init(session_id, browser.connection, allocator);
-    defer session.deinit();
-
-    try cmdGetWithSession(session, args, allocator);
-}
-
-fn cmdGetWithSession(session: *cdp.Session, args: Args, allocator: std.mem.Allocator) !void {
-    if (args.positional.len == 0) {
-        printGetUsage();
-        return;
-    }
-
-    const subcommand = args.positional[0];
-
-    // Page-level getters (no selector needed)
-    if (std.mem.eql(u8, subcommand, "title")) {
-        const title = try actions_mod.getPageTitle(session, allocator);
-        defer allocator.free(title);
-        std.debug.print("{s}\n", .{title});
-        return;
-    }
-
-    if (std.mem.eql(u8, subcommand, "url")) {
-        const url = try actions_mod.getPageUrl(session, allocator);
-        defer allocator.free(url);
-        std.debug.print("{s}\n", .{url});
-        return;
-    }
-
-    // Element-level getters (need selector)
-    if (args.positional.len < 2) {
-        std.debug.print("Error: Missing selector\n", .{});
-        printGetUsage();
-        return;
-    }
-
-    const selector = args.positional[1];
-
-    if (std.mem.eql(u8, subcommand, "text")) {
-        var resolved = try actions_mod.resolveSelector(allocator, args.io, selector);
-        defer resolved.deinit();
-
-        if (try actions_mod.getText(session, allocator, &resolved)) |text| {
-            defer allocator.free(text);
-            std.debug.print("{s}\n", .{text});
-        } else {
-            std.debug.print("(element not found)\n", .{});
-        }
-    } else if (std.mem.eql(u8, subcommand, "html")) {
-        var resolved = try actions_mod.resolveSelector(allocator, args.io, selector);
-        defer resolved.deinit();
-
-        if (try actions_mod.getHtml(session, allocator, &resolved)) |html| {
-            defer allocator.free(html);
-            std.debug.print("{s}\n", .{html});
-        } else {
-            std.debug.print("(element not found)\n", .{});
-        }
-    } else if (std.mem.eql(u8, subcommand, "value")) {
-        var resolved = try actions_mod.resolveSelector(allocator, args.io, selector);
-        defer resolved.deinit();
-
-        if (try actions_mod.getValue(session, allocator, &resolved)) |value| {
-            defer allocator.free(value);
-            std.debug.print("{s}\n", .{value});
-        } else {
-            std.debug.print("(element not found)\n", .{});
-        }
-    } else if (std.mem.eql(u8, subcommand, "attr")) {
-        if (args.positional.len < 3) {
-            std.debug.print("Error: Missing attribute name\n", .{});
-            std.debug.print("Usage: zchrome get attr <selector> <attribute>\n", .{});
-            return;
-        }
-        const attr_name = args.positional[2];
-
-        var resolved = try actions_mod.resolveSelector(allocator, args.io, selector);
-        defer resolved.deinit();
-
-        if (try actions_mod.getAttribute(session, allocator, &resolved, attr_name)) |value| {
-            defer allocator.free(value);
-            std.debug.print("{s}\n", .{value});
-        } else {
-            std.debug.print("(null)\n", .{});
-        }
-    } else if (std.mem.eql(u8, subcommand, "count")) {
-        const count = try actions_mod.getCount(session, allocator, selector);
-        std.debug.print("{}\n", .{count});
-    } else if (std.mem.eql(u8, subcommand, "box")) {
-        var resolved = try actions_mod.resolveSelector(allocator, args.io, selector);
-        defer resolved.deinit();
-
-        const pos = actions_mod.getElementPosition(session, allocator, &resolved) catch {
-            std.debug.print("(element not found)\n", .{});
-            return;
-        };
-        std.debug.print("x={d:.0} y={d:.0} width={d:.0} height={d:.0}\n", .{ pos.x, pos.y, pos.width, pos.height });
-    } else if (std.mem.eql(u8, subcommand, "styles")) {
-        var resolved = try actions_mod.resolveSelector(allocator, args.io, selector);
-        defer resolved.deinit();
-
-        if (try actions_mod.getStyles(session, allocator, &resolved)) |styles| {
-            defer allocator.free(styles);
-            std.debug.print("{s}\n", .{styles});
-        } else {
-            std.debug.print("(element not found)\n", .{});
-        }
-    } else {
-        std.debug.print("Unknown subcommand: {s}\n", .{subcommand});
-        printGetUsage();
-    }
-}
-
-fn printGetUsage() void {
-    std.debug.print(
-        \\Usage: zchrome get <subcommand> [selector] [args]
-        \\
-        \\Subcommands:
-        \\  text <sel>           Get text content
-        \\  html <sel>           Get innerHTML
-        \\  value <sel>          Get input value
-        \\  attr <sel> <attr>    Get attribute value
-        \\  title                Get page title
-        \\  url                  Get current URL
-        \\  count <sel>          Count matching elements
-        \\  box <sel>            Get bounding box
-        \\  styles <sel>         Get computed styles (JSON)
-        \\
-        \\Examples:
-        \\  zchrome get text @e3
-        \\  zchrome get value "#email"
-        \\  zchrome get attr @e5 href
-        \\  zchrome get title
-        \\  zchrome get count "li.item"
-        \\
-    , .{});
-}
-
-/// Back command - navigate back in history
-fn cmdBack(browser: *cdp.Browser, _: Args, allocator: std.mem.Allocator) !void {
-    var target = cdp.Target.init(browser.connection);
-    const pages = try browser.pages();
-    defer {
-        for (pages) |*p| {
-            var page_info = p.*;
-            page_info.deinit(allocator);
-        }
-        allocator.free(pages);
-    }
-
-    if (pages.len == 0) {
-        std.debug.print("Error: No pages open\n", .{});
-        return;
-    }
-
-    const session_id = try target.attachToTarget(allocator, pages[0].target_id, true);
-    defer allocator.free(session_id);
-    var session = try cdp.Session.init(session_id, browser.connection, allocator);
-    defer session.deinit();
-
-    try cmdBackWithSession(session);
-}
-
-fn cmdBackWithSession(session: *cdp.Session) !void {
-    var page = cdp.Page.init(session);
-    const navigated = try page.goBack();
-    if (navigated) {
-        std.debug.print("Navigated back\n", .{});
-    } else {
-        std.debug.print("No previous page in history\n", .{});
-    }
-}
-
-/// Forward command - navigate forward in history
-fn cmdForward(browser: *cdp.Browser, _: Args, allocator: std.mem.Allocator) !void {
-    var target = cdp.Target.init(browser.connection);
-    const pages = try browser.pages();
-    defer {
-        for (pages) |*p| {
-            var page_info = p.*;
-            page_info.deinit(allocator);
-        }
-        allocator.free(pages);
-    }
-
-    if (pages.len == 0) {
-        std.debug.print("Error: No pages open\n", .{});
-        return;
-    }
-
-    const session_id = try target.attachToTarget(allocator, pages[0].target_id, true);
-    defer allocator.free(session_id);
-    var session = try cdp.Session.init(session_id, browser.connection, allocator);
-    defer session.deinit();
-
-    try cmdForwardWithSession(session);
-}
-
-fn cmdForwardWithSession(session: *cdp.Session) !void {
-    var page = cdp.Page.init(session);
-    const navigated = try page.goForward();
-    if (navigated) {
-        std.debug.print("Navigated forward\n", .{});
-    } else {
-        std.debug.print("No next page in history\n", .{});
-    }
-}
-
-/// Reload command - reload current page
-fn cmdReload(browser: *cdp.Browser, _: Args, allocator: std.mem.Allocator) !void {
-    var target = cdp.Target.init(browser.connection);
-    const pages = try browser.pages();
-    defer {
-        for (pages) |*p| {
-            var page_info = p.*;
-            page_info.deinit(allocator);
-        }
-        allocator.free(pages);
-    }
-
-    if (pages.len == 0) {
-        std.debug.print("Error: No pages open\n", .{});
-        return;
-    }
-
-    const session_id = try target.attachToTarget(allocator, pages[0].target_id, true);
-    defer allocator.free(session_id);
-    var session = try cdp.Session.init(session_id, browser.connection, allocator);
-    defer session.deinit();
-
-    try cmdReloadWithSession(session);
-}
-
-fn cmdReloadWithSession(session: *cdp.Session) !void {
-    var page = cdp.Page.init(session);
-    try page.reload(null);
-    std.debug.print("Page reloaded\n", .{});
-}
-
-// ─── Keyboard Commands ──────────────────────────────────────────────────────
-
-/// Press command - press and release a key
-fn cmdPress(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
-    const pages = try browser.pages();
-    defer {
-        for (pages) |*p| {
-            var page_info = p.*;
-            page_info.deinit(allocator);
-        }
-        allocator.free(pages);
-    }
-
-    const page = findFirstRealPage(pages) orelse {
-        std.debug.print("Error: No pages open\n", .{});
-        return error.NoPages;
-    };
-
-    var target = cdp.Target.init(browser.connection);
-    const session_id = try target.attachToTarget(allocator, page.target_id, true);
-    var session = try cdp.Session.init(session_id, browser.connection, allocator);
-    defer session.deinit();
-
-    try cmdPressWithSession(session, args);
-}
-
-fn cmdPressWithSession(session: *cdp.Session, args: Args) !void {
-    if (args.positional.len == 0) {
-        std.debug.print("Usage: zchrome press <key>\n", .{});
-        std.debug.print("Examples: press Enter, press Tab, press Control+a\n", .{});
-        return;
-    }
-
-    try actions_mod.pressKey(session, args.positional[0]);
-    std.debug.print("Pressed: {s}\n", .{args.positional[0]});
-}
-
-/// KeyDown command - hold a key down
-fn cmdKeyDown(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
-    const pages = try browser.pages();
-    defer {
-        for (pages) |*p| {
-            var page_info = p.*;
-            page_info.deinit(allocator);
-        }
-        allocator.free(pages);
-    }
-
-    const page = findFirstRealPage(pages) orelse {
-        std.debug.print("Error: No pages open\n", .{});
-        return error.NoPages;
-    };
-
-    var target = cdp.Target.init(browser.connection);
-    const session_id = try target.attachToTarget(allocator, page.target_id, true);
-    var session = try cdp.Session.init(session_id, browser.connection, allocator);
-    defer session.deinit();
-
-    try cmdKeyDownWithSession(session, args);
-}
-
-fn cmdKeyDownWithSession(session: *cdp.Session, args: Args) !void {
-    if (args.positional.len == 0) {
-        std.debug.print("Usage: zchrome keydown <key>\n", .{});
-        return;
-    }
-
-    try actions_mod.keyDown(session, args.positional[0]);
-    std.debug.print("Key down: {s}\n", .{args.positional[0]});
-}
-
-/// KeyUp command - release a key
-fn cmdKeyUp(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
-    const pages = try browser.pages();
-    defer {
-        for (pages) |*p| {
-            var page_info = p.*;
-            page_info.deinit(allocator);
-        }
-        allocator.free(pages);
-    }
-
-    const page = findFirstRealPage(pages) orelse {
-        std.debug.print("Error: No pages open\n", .{});
-        return error.NoPages;
-    };
-
-    var target = cdp.Target.init(browser.connection);
-    const session_id = try target.attachToTarget(allocator, page.target_id, true);
-    var session = try cdp.Session.init(session_id, browser.connection, allocator);
-    defer session.deinit();
-
-    try cmdKeyUpWithSession(session, args);
-}
-
-fn cmdKeyUpWithSession(session: *cdp.Session, args: Args) !void {
-    if (args.positional.len == 0) {
-        std.debug.print("Usage: zchrome keyup <key>\n", .{});
-        return;
-    }
-
-    try actions_mod.keyUp(session, args.positional[0]);
-    std.debug.print("Key up: {s}\n", .{args.positional[0]});
 }
 
 /// Open command - launch Chrome with remote debugging

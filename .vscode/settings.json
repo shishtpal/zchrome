@@ -1,9 +1,11 @@
 {
     "cSpell.words": [
         "dblclick",
+        "domcontentloaded",
         "keyup",
         "mousedown",
         "mousemove",
+        "networkidle",
         "scrollintoview",
         "spinloop",
         "zchrome"

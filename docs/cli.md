@@ -678,6 +678,109 @@ zchrome keyup Shift
 zchrome keyup Control
 ```
 
+## Wait Commands
+
+Wait for various conditions before proceeding. All wait commands have a default timeout of 30 seconds (configurable with `--timeout`).
+
+### wait (selector)
+
+Wait for an element to be visible on the page.
+
+```bash
+zchrome wait <selector>
+```
+
+**Example:**
+
+```bash
+zchrome wait "#login-form"
+zchrome wait ".loading-complete"
+zchrome wait @e5  # Wait for snapshot ref
+```
+
+### wait (time)
+
+Wait for a specified number of milliseconds.
+
+```bash
+zchrome wait <milliseconds>
+```
+
+**Example:**
+
+```bash
+zchrome wait 1000    # Wait 1 second
+zchrome wait 5000    # Wait 5 seconds
+```
+
+### wait --text
+
+Wait for specific text to appear anywhere on the page.
+
+```bash
+zchrome wait --text "Welcome"
+zchrome wait --text "Login successful"
+```
+
+### wait --match
+
+Wait for the URL to match a pattern. Supports glob patterns with `*` (single segment) and `**` (multiple segments).
+
+```bash
+zchrome wait --match "**/dashboard"
+zchrome wait --match "*/login*"
+zchrome wait --match "https://example.com/success"
+```
+
+### wait --load
+
+Wait for a specific load state.
+
+```bash
+zchrome wait --load load            # Wait for load event
+zchrome wait --load domcontentloaded # Wait for DOMContentLoaded
+zchrome wait --load networkidle     # Wait for network to be idle
+```
+
+**Load States:**
+
+| State | Description |
+|-------|-------------|
+| `load` | Wait for the `load` event to fire |
+| `domcontentloaded` | Wait for `DOMContentLoaded` event |
+| `networkidle` | Wait for network activity to settle |
+
+### wait --fn
+
+Wait for a JavaScript expression to return a truthy value.
+
+```bash
+zchrome wait --fn "window.ready === true"
+zchrome wait --fn "document.querySelector('#app').dataset.loaded"
+zchrome wait --fn "typeof myApp !== 'undefined'"
+```
+
+### Combining with Other Commands
+
+```bash
+# Navigate and wait for content
+zchrome navigate https://example.com
+zchrome wait --load networkidle
+zchrome wait "#main-content"
+zchrome snapshot -i
+
+# Form submission workflow
+zchrome fill "#email" "user@example.com"
+zchrome click "#submit"
+zchrome wait --text "Success"
+zchrome screenshot --output success.png
+
+# Wait for SPA navigation
+zchrome click "#dashboard-link"
+zchrome wait --match "**/dashboard"
+zchrome wait --fn "window.dashboardLoaded"
+```
+
 ## Getters
 
 ### get text

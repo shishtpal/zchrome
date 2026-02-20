@@ -250,6 +250,8 @@ fn executeCommand(state: *InteractiveState, line: []const u8) !void {
         try commands.cmdKeyDown(state, args);
     } else if (eql(cmd, "keyup")) {
         try commands.cmdKeyUp(state, args);
+    } else if (eql(cmd, "wait")) {
+        try commands.cmdWait(state, args);
     } else {
         std.debug.print("Unknown command: {s}\nType 'help' for available commands.\n", .{cmd});
     }

@@ -69,6 +69,11 @@ const Args = struct {
     snap_compact: bool = false,
     snap_depth: ?usize = null,
     snap_selector: ?[]const u8 = null,
+    // Wait options
+    wait_text: ?[]const u8 = null,
+    wait_url: ?[]const u8 = null,
+    wait_load: ?[]const u8 = null,
+    wait_fn: ?[]const u8 = null,
 
     const Command = enum {
         open,
@@ -104,6 +109,7 @@ const Args = struct {
         press,
         keydown,
         keyup,
+        wait,
         help,
     };
 };
@@ -125,6 +131,10 @@ pub fn main(init: std.process.Init) !void {
         if (args.output) |o| allocator.free(o);
         if (args.use_target) |t| allocator.free(t);
         if (args.snap_selector) |s| allocator.free(s);
+        if (args.wait_text) |w| allocator.free(w);
+        if (args.wait_url) |w| allocator.free(w);
+        if (args.wait_load) |w| allocator.free(w);
+        if (args.wait_fn) |w| allocator.free(w);
     }
 
     if (args.command == .help) {
@@ -148,7 +158,7 @@ pub fn main(init: std.process.Init) !void {
     }
     // Only apply last_target for page-level commands (not version, pages, list_targets, etc.)
     const needs_target = switch (args.command) {
-        .navigate, .screenshot, .pdf, .evaluate, .network, .cookies, .snapshot, .click, .dblclick, .focus, .type, .fill, .select, .hover, .check, .uncheck, .scroll, .scrollintoview, .drag, .get, .upload, .back, .forward, .reload, .press, .keydown, .keyup => true,
+        .navigate, .screenshot, .pdf, .evaluate, .network, .cookies, .snapshot, .click, .dblclick, .focus, .type, .fill, .select, .hover, .check, .uncheck, .scroll, .scrollintoview, .drag, .get, .upload, .back, .forward, .reload, .press, .keydown, .keyup, .wait => true,
         .version, .list_targets, .pages, .interactive, .open, .connect, .help => false,
     };
     if (needs_target and args.use_target == null and config.last_target != null) {
@@ -235,6 +245,10 @@ fn buildCtx(args: Args, allocator: std.mem.Allocator) impl.CommandCtx {
         .snap_compact = args.snap_compact,
         .snap_depth = args.snap_depth,
         .snap_selector = args.snap_selector,
+        .wait_text = args.wait_text,
+        .wait_url = args.wait_url,
+        .wait_load = args.wait_load,
+        .wait_fn = args.wait_fn,
     };
 }
 
@@ -875,6 +889,11 @@ fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
     var snap_compact: bool = false;
     var snap_depth: ?usize = null;
     var snap_selector: ?[]const u8 = null;
+    // Wait options
+    var wait_text: ?[]const u8 = null;
+    var wait_url: ?[]const u8 = null;
+    var wait_load: ?[]const u8 = null;
+    var wait_fn: ?[]const u8 = null;
 
     _ = iter.skip(); // Skip program name
 
@@ -939,6 +958,18 @@ fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
             } else if (std.mem.eql(u8, arg, "--selector")) {
                 const val = iter.next() orelse return error.MissingArgument;
                 snap_selector = try allocator.dupe(u8, val);
+            } else if (std.mem.eql(u8, arg, "--text")) {
+                const val = iter.next() orelse return error.MissingArgument;
+                wait_text = try allocator.dupe(u8, val);
+            } else if (std.mem.eql(u8, arg, "--match")) {
+                const val = iter.next() orelse return error.MissingArgument;
+                wait_url = try allocator.dupe(u8, val);
+            } else if (std.mem.eql(u8, arg, "--load")) {
+                const val = iter.next() orelse return error.MissingArgument;
+                wait_load = try allocator.dupe(u8, val);
+            } else if (std.mem.eql(u8, arg, "--fn")) {
+                const val = iter.next() orelse return error.MissingArgument;
+                wait_fn = try allocator.dupe(u8, val);
             }
         } else {
             if (command == .help) {
@@ -975,6 +1006,10 @@ fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
         .snap_compact = snap_compact,
         .snap_depth = snap_depth,
         .snap_selector = snap_selector,
+        .wait_text = wait_text,
+        .wait_url = wait_url,
+        .wait_load = wait_load,
+        .wait_fn = wait_fn,
     };
 }
 
@@ -1048,6 +1083,14 @@ fn printUsage() void {
         \\  get box <sel>            Get bounding box (x, y, width, height)
         \\  get styles <sel>         Get computed styles (JSON)
         \\
+        \\WAIT:
+        \\  wait <selector>          Wait for element to be visible
+        \\  wait <ms>                Wait for time (milliseconds)
+        \\  wait --text "string"     Wait for text to appear on page
+        \\  wait --match "pattern"   Wait for URL to match glob pattern
+        \\  wait --load <state>      Wait for load state (load, domcontentloaded, networkidle)
+        \\  wait --fn "expression"   Wait for JS expression to return truthy
+        \\
         \\SNAPSHOT OPTIONS:
         \\  -i, --interactive-only   Only include interactive elements
         \\  -c, --compact            Compact output (skip empty structural elements)
@@ -1106,6 +1149,14 @@ fn printUsage() void {
         \\  zchrome key Tab                       # Press Tab (alias for press)
         \\  zchrome keydown Shift                 # Hold Shift down
         \\  zchrome keyup Shift                   # Release Shift
+        \\
+        \\  # Wait for conditions
+        \\  zchrome wait "#login-form"            # Wait for element
+        \\  zchrome wait 2000                     # Wait 2 seconds
+        \\  zchrome wait --text "Welcome"         # Wait for text
+        \\  zchrome wait --match "**/dashboard"   # Wait for URL pattern
+        \\  zchrome wait --load networkidle       # Wait for network idle
+        \\  zchrome wait --fn "window.ready"      # Wait for JS condition
         \\
     , .{});
 }

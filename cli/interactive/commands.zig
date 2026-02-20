@@ -87,6 +87,14 @@ pub fn printHelp() void {
         \\  get count <sel>       Count matching elements
         \\  get box <sel>         Get bounding box
         \\
+        \\Wait:
+        \\  wait <selector>       Wait for element to be visible
+        \\  wait <ms>             Wait for time (milliseconds)
+        \\  wait --text "txt"     Wait for text to appear
+        \\  wait --match "pat"    Wait for URL pattern (glob)
+        \\  wait --load <state>   Wait for load state (load, domcontentloaded, networkidle)
+        \\  wait --fn "expr"      Wait for JS condition to be true
+        \\
         \\Selectors can be CSS selectors or @refs from snapshot (e.g., @e3)
         \\
     , .{});
@@ -286,4 +294,42 @@ pub fn cmdKeyDown(state: *InteractiveState, args: []const []const u8) !void {
 pub fn cmdKeyUp(state: *InteractiveState, args: []const []const u8) !void {
     const session = try requireSession(state);
     try impl.keyUp(session, buildCtx(state, args));
+}
+
+pub fn cmdWait(state: *InteractiveState, args: []const []const u8) !void {
+    const session = try requireSession(state);
+    // Parse wait options from args
+    var wait_text: ?[]const u8 = null;
+    var wait_url: ?[]const u8 = null;
+    var wait_load: ?[]const u8 = null;
+    var wait_fn: ?[]const u8 = null;
+    var positional: std.ArrayList([]const u8) = .empty;
+    defer positional.deinit(state.allocator);
+
+    var i: usize = 0;
+    while (i < args.len) : (i += 1) {
+        const arg = args[i];
+        if (eql(arg, "--text") and i + 1 < args.len) {
+            i += 1;
+            wait_text = args[i];
+        } else if (eql(arg, "--match") and i + 1 < args.len) {
+            i += 1;
+            wait_url = args[i];
+        } else if (eql(arg, "--load") and i + 1 < args.len) {
+            i += 1;
+            wait_load = args[i];
+        } else if (eql(arg, "--fn") and i + 1 < args.len) {
+            i += 1;
+            wait_fn = args[i];
+        } else {
+            try positional.append(state.allocator, arg);
+        }
+    }
+
+    var ctx = buildCtx(state, positional.items);
+    ctx.wait_text = wait_text;
+    ctx.wait_url = wait_url;
+    ctx.wait_load = wait_load;
+    ctx.wait_fn = wait_fn;
+    try impl.wait(session, ctx);
 }

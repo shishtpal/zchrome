@@ -4,6 +4,7 @@ const config_mod = @import("config.zig");
 const http_mod = @import("http.zig");
 const snapshot_mod = @import("snapshot.zig");
 const actions_mod = @import("actions/mod.zig");
+const interactive_mod = @import("interactive/mod.zig");
 
 /// Save target ID to config file for subsequent commands
 fn saveTargetToConfig(target_id: []const u8, args: Args, allocator: std.mem.Allocator, io: std.Io) void {
@@ -215,7 +216,7 @@ pub fn main(init: std.process.Init) !void {
             .version => try cmdVersion(browser, allocator),
             .list_targets => try cmdListTargets(browser, allocator),
             .pages => try cmdPages(browser, allocator),
-            .interactive => try cmdInteractive(allocator),
+            .interactive => try cmdInteractive(browser, args, allocator),
             .snapshot => try cmdSnapshot(browser, args, allocator),
             .click => try cmdClick(browser, args, allocator),
             .dblclick => try cmdDblClick(browser, args, allocator),
@@ -860,10 +861,46 @@ fn cmdCookiesWithSession(session: *cdp.Session, args: Args, allocator: std.mem.A
 }
 
 /// Interactive REPL
-fn cmdInteractive(allocator: std.mem.Allocator) !void {
-    _ = allocator;
-    std.debug.print("Interactive mode not yet implemented\n", .{});
-    std.debug.print("Use: navigate, screenshot, pdf, evaluate, dom, network, cookies, version, list-targets\n", .{});
+fn cmdInteractive(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
+    // Find the first "real" page to attach to
+    const pages = try browser.pages();
+    defer {
+        for (pages) |*p| {
+            var page_info = p.*;
+            page_info.deinit(allocator);
+        }
+        allocator.free(pages);
+    }
+
+    var state = interactive_mod.InteractiveState{
+        .allocator = allocator,
+        .io = args.io,
+        .browser = browser,
+        .session = null,
+        .target_id = null,
+        .verbose = args.verbose,
+    };
+    defer state.deinit();
+
+    // Auto-attach to the first real page if available
+    const page = findFirstRealPage(pages);
+    if (page) |p| {
+        var target = cdp.Target.init(browser.connection);
+        const session_id = target.attachToTarget(allocator, p.target_id, true) catch |err| {
+            std.debug.print("Warning: Could not attach to page: {}\n", .{err});
+            try interactive_mod.run(&state);
+            return;
+        };
+        state.session = cdp.Session.init(session_id, browser.connection, allocator) catch |err| {
+            std.debug.print("Warning: Could not create session: {}\n", .{err});
+            allocator.free(session_id);
+            try interactive_mod.run(&state);
+            return;
+        };
+        state.target_id = allocator.dupe(u8, p.target_id) catch null;
+    }
+
+    try interactive_mod.run(&state);
 }
 
 /// Snapshot command - capture accessibility tree and save to zsnap.json

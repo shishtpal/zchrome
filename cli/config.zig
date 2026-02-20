@@ -7,6 +7,8 @@ pub const Config = struct {
     port: u16 = 9222,
     ws_url: ?[]const u8 = null,
     last_target: ?[]const u8 = null,
+    last_mouse_x: ?f64 = null,
+    last_mouse_y: ?f64 = null,
 
     pub fn deinit(self: *Config, allocator: std.mem.Allocator) void {
         if (self.chrome_path) |p| allocator.free(p);
@@ -67,6 +69,14 @@ pub fn loadConfig(allocator: std.mem.Allocator, io: std.Io) ?Config {
     if (parsed.value.object.get("last_target")) |v| {
         if (v == .string) config.last_target = allocator.dupe(u8, v.string) catch null;
     }
+    if (parsed.value.object.get("last_mouse_x")) |v| {
+        if (v == .float) config.last_mouse_x = v.float;
+        if (v == .integer) config.last_mouse_x = @floatFromInt(v.integer);
+    }
+    if (parsed.value.object.get("last_mouse_y")) |v| {
+        if (v == .float) config.last_mouse_y = v.float;
+        if (v == .integer) config.last_mouse_y = @floatFromInt(v.integer);
+    }
 
     return config;
 }
@@ -118,6 +128,22 @@ pub fn saveConfig(config: Config, allocator: std.mem.Allocator, io: std.Io) !voi
         try json_buf.appendSlice(allocator, "  \"last_target\": \"");
         try appendEscapedString(&json_buf, allocator, target);
         try json_buf.appendSlice(allocator, "\"");
+    }
+
+    if (config.last_mouse_x) |x| {
+        if (!first) try json_buf.appendSlice(allocator, ",\n");
+        first = false;
+        const x_str = try std.fmt.allocPrint(allocator, "  \"last_mouse_x\": {d}", .{x});
+        defer allocator.free(x_str);
+        try json_buf.appendSlice(allocator, x_str);
+    }
+
+    if (config.last_mouse_y) |y| {
+        if (!first) try json_buf.appendSlice(allocator, ",\n");
+        first = false;
+        const y_str = try std.fmt.allocPrint(allocator, "  \"last_mouse_y\": {d}", .{y});
+        defer allocator.free(y_str);
+        try json_buf.appendSlice(allocator, y_str);
     }
 
     try json_buf.appendSlice(allocator, "\n}\n");

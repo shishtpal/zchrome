@@ -7,6 +7,8 @@ The `Input` domain provides methods for simulating mouse and keyboard input.
 ```zig
 const cdp = @import("cdp");
 const Input = cdp.Input;
+const MouseButton = cdp.MouseButton;
+const MouseEventType = cdp.MouseEventType;
 ```
 
 ## Initialization
@@ -91,6 +93,36 @@ Move mouse to coordinates.
 
 ```zig
 pub fn moveTo(self: *Input, x: f64, y: f64) !void
+```
+
+### mouseDown
+
+Press a mouse button at the given coordinates.
+
+```zig
+pub fn mouseDown(self: *Input, x: f64, y: f64, button: MouseButton) !void
+```
+
+**Example:**
+
+```zig
+// Press left button at (100, 200)
+try input.mouseDown(100, 200, .left);
+```
+
+### mouseUp
+
+Release a mouse button at the given coordinates.
+
+```zig
+pub fn mouseUp(self: *Input, x: f64, y: f64, button: MouseButton) !void
+```
+
+**Example:**
+
+```zig
+// Release left button at (400, 200) — completes a drag
+try input.mouseUp(400, 200, .left);
 ```
 
 ### scroll

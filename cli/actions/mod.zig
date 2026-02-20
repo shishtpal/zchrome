@@ -55,3 +55,9 @@ pub const getPageTitle = getters.getPageTitle;
 pub const getPageUrl = getters.getPageUrl;
 pub const getCount = getters.getCount;
 pub const getStyles = getters.getStyles;
+
+// Re-export low-level mouse functions
+pub const mouseMove = element.mouseMove;
+pub const mouseDownAt = element.mouseDownAt;
+pub const mouseUpAt = element.mouseUpAt;
+pub const mouseWheelAt = element.mouseWheelAt;

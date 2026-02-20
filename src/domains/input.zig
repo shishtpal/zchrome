@@ -71,6 +71,28 @@ pub const Input = struct {
         });
     }
 
+    /// Convenience: Press mouse button down
+    pub fn mouseDown(self: *Self, x: f64, y: f64, button: MouseButton) !void {
+        try self.dispatchMouseEvent(.{
+            .type = .mousePressed,
+            .x = x,
+            .y = y,
+            .button = button,
+            .click_count = 1,
+        });
+    }
+
+    /// Convenience: Release mouse button
+    pub fn mouseUp(self: *Self, x: f64, y: f64, button: MouseButton) !void {
+        try self.dispatchMouseEvent(.{
+            .type = .mouseReleased,
+            .x = x,
+            .y = y,
+            .button = button,
+            .click_count = 1,
+        });
+    }
+
     /// Convenience: Type text
     pub fn typeText(self: *Self, text: []const u8, delay_ms: ?u64) !void {
         for (text) |char| {

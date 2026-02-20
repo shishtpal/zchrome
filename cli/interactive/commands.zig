@@ -7,7 +7,6 @@ const std = @import("std");
 const cdp = @import("cdp");
 const config_mod = @import("../config.zig");
 const snapshot_mod = @import("../snapshot.zig");
-const actions_mod = @import("../actions/mod.zig");
 const impl = @import("../command_impl.zig");
 const InteractiveState = @import("mod.zig").InteractiveState;
 
@@ -76,6 +75,12 @@ pub fn printHelp() void {
         \\  press <key>           Press key (Enter, Control+a) (alias: key)
         \\  keydown <key>         Hold key down
         \\  keyup <key>           Release key
+        \\
+        \\Mouse:
+        \\  mouse move <x> <y>    Move mouse to coordinates
+        \\  mouse down [button]   Press mouse button (left/right/middle)
+        \\  mouse up [button]     Release mouse button
+        \\  mouse wheel <dy> [dx] Scroll mouse wheel
         \\
         \\Getters:
         \\  get text <sel>        Get text content
@@ -332,4 +337,19 @@ pub fn cmdWait(state: *InteractiveState, args: []const []const u8) !void {
     ctx.wait_load = wait_load;
     ctx.wait_fn = wait_fn;
     try impl.wait(session, ctx);
+}
+
+// ─── Mouse Commands ──────────────────────────────────────────────────────────
+
+/// Thin wrapper: delegates to impl.mouse(), then updates in-memory position
+/// if the subcommand was "move" so subsequent down/up/wheel use the new coords.
+pub fn cmdMouse(state: *InteractiveState, args: []const []const u8) !void {
+    const session = try requireSession(state);
+    try impl.mouse(session, buildCtx(state, args));
+
+    // Keep in-memory position in sync after a successful "move"
+    if (args.len >= 3 and eql(args[0], "move")) {
+        state.mouse_x = std.fmt.parseFloat(f64, args[1]) catch state.mouse_x;
+        state.mouse_y = std.fmt.parseFloat(f64, args[2]) catch state.mouse_y;
+    }
 }

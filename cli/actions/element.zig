@@ -567,3 +567,55 @@ pub fn dragElement(
         .click_count = 1,
     });
 }
+
+// ─── Low-level Mouse Functions ───────────────────────────────────────────────
+
+/// Move mouse to absolute coordinates
+pub fn mouseMove(
+    session: *cdp.Session,
+    x: f64,
+    y: f64,
+) !void {
+    var input = cdp.Input.init(session);
+    try input.moveTo(x, y);
+}
+
+/// Press mouse button at position
+pub fn mouseDownAt(
+    session: *cdp.Session,
+    x: f64,
+    y: f64,
+    button: cdp.MouseButton,
+) !void {
+    var input = cdp.Input.init(session);
+    try input.mouseDown(x, y, button);
+}
+
+/// Release mouse button at position
+pub fn mouseUpAt(
+    session: *cdp.Session,
+    x: f64,
+    y: f64,
+    button: cdp.MouseButton,
+) !void {
+    var input = cdp.Input.init(session);
+    try input.mouseUp(x, y, button);
+}
+
+/// Scroll mouse wheel at position
+pub fn mouseWheelAt(
+    session: *cdp.Session,
+    x: f64,
+    y: f64,
+    delta_x: f64,
+    delta_y: f64,
+) !void {
+    var input = cdp.Input.init(session);
+    try input.dispatchMouseEvent(.{
+        .type = .mouseWheel,
+        .x = x,
+        .y = y,
+        .delta_x = delta_x,
+        .delta_y = delta_y,
+    });
+}

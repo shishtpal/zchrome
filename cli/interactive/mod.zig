@@ -15,6 +15,8 @@ pub const InteractiveState = struct {
     session: ?*cdp.Session,
     target_id: ?[]const u8,
     verbose: bool,
+    mouse_x: ?f64 = null,
+    mouse_y: ?f64 = null,
 
     pub fn deinit(self: *InteractiveState) void {
         if (self.session) |s| s.deinit();
@@ -252,6 +254,8 @@ fn executeCommand(state: *InteractiveState, line: []const u8) !void {
         try commands.cmdKeyUp(state, args);
     } else if (eql(cmd, "wait")) {
         try commands.cmdWait(state, args);
+    } else if (eql(cmd, "mouse")) {
+        try commands.cmdMouse(state, args);
     } else {
         std.debug.print("Unknown command: {s}\nType 'help' for available commands.\n", .{cmd});
     }

@@ -110,6 +110,7 @@ const Args = struct {
         keydown,
         keyup,
         wait,
+        mouse,
         help,
     };
 };
@@ -158,7 +159,7 @@ pub fn main(init: std.process.Init) !void {
     }
     // Only apply last_target for page-level commands (not version, pages, list_targets, etc.)
     const needs_target = switch (args.command) {
-        .navigate, .screenshot, .pdf, .evaluate, .network, .cookies, .snapshot, .click, .dblclick, .focus, .type, .fill, .select, .hover, .check, .uncheck, .scroll, .scrollintoview, .drag, .get, .upload, .back, .forward, .reload, .press, .keydown, .keyup, .wait => true,
+        .navigate, .screenshot, .pdf, .evaluate, .network, .cookies, .snapshot, .click, .dblclick, .focus, .type, .fill, .select, .hover, .check, .uncheck, .scroll, .scrollintoview, .drag, .get, .upload, .back, .forward, .reload, .press, .keydown, .keyup, .wait, .mouse => true,
         .version, .list_targets, .pages, .interactive, .open, .connect, .help => false,
     };
     if (needs_target and args.use_target == null and config.last_target != null) {
@@ -1071,6 +1072,12 @@ fn printUsage() void {
         \\  keydown <key>            Hold key down
         \\  keyup <key>              Release key
         \\
+        \\MOUSE:
+        \\  mouse move <x> <y>       Move mouse to coordinates
+        \\  mouse down [button]      Press mouse button (left/right/middle)
+        \\  mouse up [button]        Release mouse button
+        \\  mouse wheel <dy> [dx]    Scroll mouse wheel
+        \\
         \\GETTERS:
         \\  get text <sel>           Get text content
         \\  get html <sel>           Get innerHTML
@@ -1099,7 +1106,7 @@ fn printUsage() void {
         \\
         \\CONFIG FILE:
         \\  zchrome.json is stored alongside the executable for portability.
-        \\  It stores chrome_path, data_dir, port, ws_url, and last_target.
+        \\  It stores chrome_path, data_dir, port, ws_url, last_target, and mouse position.
         \\  Options from command line override config file values.
         \\
         \\EXAMPLES:
@@ -1149,6 +1156,12 @@ fn printUsage() void {
         \\  zchrome key Tab                       # Press Tab (alias for press)
         \\  zchrome keydown Shift                 # Hold Shift down
         \\  zchrome keyup Shift                   # Release Shift
+        \\
+        \\  # Mouse control
+        \\  zchrome mouse move 100 200            # Move mouse to coordinates
+        \\  zchrome mouse down left               # Press left button
+        \\  zchrome mouse up                      # Release button
+        \\  zchrome mouse wheel -100              # Scroll down 100px
         \\
         \\  # Wait for conditions
         \\  zchrome wait "#login-form"            # Wait for element

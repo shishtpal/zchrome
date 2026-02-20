@@ -678,6 +678,84 @@ zchrome keyup Shift
 zchrome keyup Control
 ```
 
+## Mouse Commands
+
+Low-level mouse control. The last mouse position is persisted to `zchrome.json` so that `mouse down`, `mouse up`, and `mouse wheel` can be used in subsequent commands without repeating coordinates.
+
+### mouse move
+
+Move the mouse cursor to absolute viewport coordinates.
+
+```bash
+zchrome mouse move <x> <y>
+```
+
+**Example:**
+
+```bash
+zchrome mouse move 100 200
+```
+
+### mouse down
+
+Press a mouse button at the last known mouse position.
+
+```bash
+zchrome mouse down [button]
+```
+
+`button` is one of `left` (default), `right`, or `middle`.
+
+**Example:**
+
+```bash
+zchrome mouse move 300 400
+zchrome mouse down left
+```
+
+### mouse up
+
+Release a mouse button at the last known mouse position.
+
+```bash
+zchrome mouse up [button]
+```
+
+**Example:**
+
+```bash
+zchrome mouse up left
+```
+
+### mouse wheel
+
+Scroll the mouse wheel at the last known mouse position.
+
+```bash
+zchrome mouse wheel <dy> [dx]
+```
+
+Positive `dy` scrolls down; negative scrolls up.
+
+**Example:**
+
+```bash
+# Scroll down 300 pixels
+zchrome mouse wheel 300
+
+# Scroll up 200 pixels
+zchrome mouse wheel -200
+
+# Scroll right 100 pixels
+zchrome mouse wheel 0 100
+
+# Drag-and-drop sequence
+zchrome mouse move 100 200
+zchrome mouse down
+zchrome mouse move 400 200
+zchrome mouse up
+```
+
 ## Wait Commands
 
 Wait for various conditions before proceeding. All wait commands have a default timeout of 30 seconds (configurable with `--timeout`).

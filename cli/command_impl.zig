@@ -423,6 +423,152 @@ pub fn keyUp(session: *cdp.Session, ctx: CommandCtx) !void {
     std.debug.print("Key up: {s}\n", .{ctx.positional[0]});
 }
 
+// ─── Mouse ──────────────────────────────────────────────────────────────────
+
+/// Parse button string to MouseButton enum
+pub fn parseMouseButton(button_str: ?[]const u8) cdp.MouseButton {
+    if (button_str) |b| {
+        if (std.mem.eql(u8, b, "left")) return .left;
+        if (std.mem.eql(u8, b, "right")) return .right;
+        if (std.mem.eql(u8, b, "middle")) return .middle;
+    }
+    return .left; // default
+}
+
+/// Mouse command dispatcher - handles move, down, up, wheel subcommands
+pub fn mouse(session: *cdp.Session, ctx: CommandCtx) !void {
+    if (ctx.positional.len == 0) {
+        printMouseUsage();
+        return;
+    }
+
+    const subcommand = ctx.positional[0];
+    const args = if (ctx.positional.len > 1) ctx.positional[1..] else &[_][]const u8{};
+
+    if (std.mem.eql(u8, subcommand, "move")) {
+        try mouseMoveCmd(session, ctx.allocator, ctx.io, args);
+    } else if (std.mem.eql(u8, subcommand, "down")) {
+        try mouseDownCmd(session, ctx.allocator, ctx.io, args);
+    } else if (std.mem.eql(u8, subcommand, "up")) {
+        try mouseUpCmd(session, ctx.allocator, ctx.io, args);
+    } else if (std.mem.eql(u8, subcommand, "wheel")) {
+        try mouseWheelCmd(session, ctx.allocator, ctx.io, args);
+    } else {
+        std.debug.print("Unknown mouse subcommand: {s}\n", .{subcommand});
+        printMouseUsage();
+    }
+}
+
+fn printMouseUsage() void {
+    std.debug.print(
+        \\Usage: mouse <subcommand> [args]
+        \\
+        \\Subcommands:
+        \\  move <x> <y>        Move mouse to coordinates
+        \\  down [button]       Press mouse button (left/right/middle, default: left)
+        \\  up [button]         Release mouse button
+        \\  wheel <dy> [dx]     Scroll mouse wheel
+        \\
+        \\Examples:
+        \\  mouse move 100 200
+        \\  mouse down left
+        \\  mouse up
+        \\  mouse wheel -100
+        \\
+    , .{});
+}
+
+fn mouseMoveCmd(session: *cdp.Session, allocator: std.mem.Allocator, io: std.Io, args: []const []const u8) !void {
+    if (args.len < 2) {
+        std.debug.print("Usage: mouse move <x> <y>\n", .{});
+        return;
+    }
+
+    const x = std.fmt.parseFloat(f64, args[0]) catch {
+        std.debug.print("Error: Invalid x coordinate: {s}\n", .{args[0]});
+        return error.InvalidArgument;
+    };
+    const y = std.fmt.parseFloat(f64, args[1]) catch {
+        std.debug.print("Error: Invalid y coordinate: {s}\n", .{args[1]});
+        return error.InvalidArgument;
+    };
+
+    try actions_mod.mouseMove(session, x, y);
+    std.debug.print("Mouse moved to ({d}, {d})\n", .{ x, y });
+
+    // Save position to config; defer runs after saveConfig below
+    var config = config_mod.loadConfig(allocator, io) orelse config_mod.Config{};
+    defer config.deinit(allocator);
+    config.last_mouse_x = x;
+    config.last_mouse_y = y;
+    config_mod.saveConfig(config, allocator, io) catch |err| {
+        std.debug.print("Warning: Could not save mouse position: {}\n", .{err});
+    };
+}
+
+fn mouseDownCmd(session: *cdp.Session, allocator: std.mem.Allocator, io: std.Io, args: []const []const u8) !void {
+    const button = parseMouseButton(if (args.len > 0) args[0] else null);
+
+    // Get position from config
+    var config = config_mod.loadConfig(allocator, io) orelse config_mod.Config{};
+    defer config.deinit(allocator);
+
+    const x = config.last_mouse_x orelse blk: {
+        std.debug.print("Warning: No mouse position set. Use 'mouse move <x> <y>' first.\n", .{});
+        break :blk 0.0;
+    };
+    const y = config.last_mouse_y orelse 0.0;
+
+    try actions_mod.mouseDownAt(session, x, y, button);
+    std.debug.print("Mouse button {s} pressed at ({d}, {d})\n", .{ @tagName(button), x, y });
+}
+
+fn mouseUpCmd(session: *cdp.Session, allocator: std.mem.Allocator, io: std.Io, args: []const []const u8) !void {
+    const button = parseMouseButton(if (args.len > 0) args[0] else null);
+
+    // Get position from config
+    var config = config_mod.loadConfig(allocator, io) orelse config_mod.Config{};
+    defer config.deinit(allocator);
+
+    const x = config.last_mouse_x orelse blk: {
+        std.debug.print("Warning: No mouse position set. Use 'mouse move <x> <y>' first.\n", .{});
+        break :blk 0.0;
+    };
+    const y = config.last_mouse_y orelse 0.0;
+
+    try actions_mod.mouseUpAt(session, x, y, button);
+    std.debug.print("Mouse button {s} released at ({d}, {d})\n", .{ @tagName(button), x, y });
+}
+
+fn mouseWheelCmd(session: *cdp.Session, allocator: std.mem.Allocator, io: std.Io, args: []const []const u8) !void {
+    if (args.len < 1) {
+        std.debug.print("Usage: mouse wheel <dy> [dx]\n", .{});
+        return;
+    }
+
+    const delta_y = std.fmt.parseFloat(f64, args[0]) catch {
+        std.debug.print("Error: Invalid delta_y: {s}\n", .{args[0]});
+        return error.InvalidArgument;
+    };
+    const delta_x: f64 = if (args.len > 1)
+        std.fmt.parseFloat(f64, args[1]) catch 0
+    else
+        0;
+
+    // Get position from config
+    var config = config_mod.loadConfig(allocator, io) orelse config_mod.Config{};
+    defer config.deinit(allocator);
+
+    const x = config.last_mouse_x orelse blk: {
+        std.debug.print("Warning: No mouse position set. Use 'mouse move <x> <y>' first.\n", .{});
+        break :blk 0.0;
+    };
+    const y = config.last_mouse_y orelse 0.0;
+
+    try actions_mod.mouseWheelAt(session, x, y, delta_x, delta_y);
+    std.debug.print("Mouse wheel scrolled (dx={d}, dy={d})\n", .{ delta_x, delta_y });
+}
+
 // ─── Wait ───────────────────────────────────────────────────────────────────
 
 pub fn wait(session: *cdp.Session, ctx: CommandCtx) !void {
@@ -486,9 +632,7 @@ fn waitForSelector(session: *cdp.Session, allocator: std.mem.Allocator, io: std.
     defer resolved.deinit();
 
     // Build JS to check element visibility (handles both CSS and role-based)
-    const js = try actions_mod.helpers.buildGetterJs(allocator, &resolved,
-        "el && el.offsetParent !== null && getComputedStyle(el).visibility !== 'hidden'"
-    );
+    const js = try actions_mod.helpers.buildGetterJs(allocator, &resolved, "el && el.offsetParent !== null && getComputedStyle(el).visibility !== 'hidden'");
     defer allocator.free(js);
 
     if (try pollUntil(session, allocator, js, timeout_ms)) {
@@ -503,9 +647,7 @@ fn waitForText(session: *cdp.Session, allocator: std.mem.Allocator, text: []cons
     const escaped = try actions_mod.helpers.escapeJsString(allocator, text);
     defer allocator.free(escaped);
 
-    const js = try std.fmt.allocPrint(allocator,
-        "document.body.innerText.includes('{s}')"
-    , .{escaped});
+    const js = try std.fmt.allocPrint(allocator, "document.body.innerText.includes('{s}')", .{escaped});
     defer allocator.free(js);
 
     if (try pollUntil(session, allocator, js, timeout_ms)) {
@@ -521,9 +663,7 @@ fn waitForUrl(session: *cdp.Session, allocator: std.mem.Allocator, pattern: []co
     const regex_pattern = try globToRegex(allocator, pattern);
     defer allocator.free(regex_pattern);
 
-    const js = try std.fmt.allocPrint(allocator,
-        "new RegExp('{s}').test(window.location.href)"
-    , .{regex_pattern});
+    const js = try std.fmt.allocPrint(allocator, "new RegExp('{s}').test(window.location.href)", .{regex_pattern});
     defer allocator.free(js);
 
     if (try pollUntil(session, allocator, js, timeout_ms)) {
@@ -563,9 +703,7 @@ fn waitForLoadState(session: *cdp.Session, allocator: std.mem.Allocator, state: 
 }
 
 fn waitForFunction(session: *cdp.Session, allocator: std.mem.Allocator, expr: []const u8, timeout_ms: u32) !void {
-    const js = try std.fmt.allocPrint(allocator,
-        "(() => {{ return !!({s}); }})()"
-    , .{expr});
+    const js = try std.fmt.allocPrint(allocator, "(() => {{ return !!({s}); }})()", .{expr});
     defer allocator.free(js);
 
     if (try pollUntil(session, allocator, js, timeout_ms)) {
@@ -619,8 +757,9 @@ fn globToRegex(allocator: std.mem.Allocator, pattern: []const u8) ![]u8 {
                 i += 1;
             }
         } else if (c == '.' or c == '?' or c == '+' or c == '^' or c == '$' or
-                   c == '{' or c == '}' or c == '(' or c == ')' or c == '|' or
-                   c == '[' or c == ']' or c == '\\') {
+            c == '{' or c == '}' or c == '(' or c == ')' or c == '|' or
+            c == '[' or c == ']' or c == '\\')
+        {
             // Escape regex special chars
             try result.append(allocator, '\\');
             try result.append(allocator, c);
@@ -801,6 +940,7 @@ pub fn dispatchSessionCommand(session: *cdp.Session, command: anytype, ctx: Comm
         .keydown => try keyDown(session, ctx),
         .keyup => try keyUp(session, ctx),
         .wait => try wait(session, ctx),
+        .mouse => try mouse(session, ctx),
         else => {
             std.debug.print("Warning: unhandled command in dispatchSessionCommand\n", .{});
             return false;

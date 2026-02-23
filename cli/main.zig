@@ -1121,7 +1121,9 @@ fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
     _ = iter.skip(); // Skip program name
 
     while (iter.next()) |arg| {
-        if (std.mem.startsWith(u8, arg, "-") and arg.len > 1 and arg[1] != '-') {
+        // Check for short options, but not negative numbers (-123.45)
+        const is_negative_number = arg.len > 1 and arg[0] == '-' and (arg[1] >= '0' and arg[1] <= '9');
+        if (std.mem.startsWith(u8, arg, "-") and arg.len > 1 and arg[1] != '-' and !is_negative_number) {
             // Single-dash short options (-i, -c, -d, -s)
             if (std.mem.eql(u8, arg, "-i")) {
                 snap_interactive = true;

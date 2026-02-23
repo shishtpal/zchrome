@@ -21,6 +21,7 @@ pub const Config = struct {
     auth_user: ?[]const u8 = null,
     auth_pass: ?[]const u8 = null,
     media_feature: ?[]const u8 = null,
+    user_agent: ?[]const u8 = null,
 
     pub fn deinit(self: *Config, allocator: std.mem.Allocator) void {
         if (self.chrome_path) |p| allocator.free(p);
@@ -32,6 +33,7 @@ pub const Config = struct {
         if (self.auth_user) |u| allocator.free(u);
         if (self.auth_pass) |p| allocator.free(p);
         if (self.media_feature) |m| allocator.free(m);
+        if (self.user_agent) |u| allocator.free(u);
         self.* = .{};
     }
 };
@@ -126,6 +128,9 @@ pub fn loadConfig(allocator: std.mem.Allocator, io: std.Io) ?Config {
     }
     if (parsed.value.object.get("media_feature")) |v| {
         if (v == .string) config.media_feature = allocator.dupe(u8, v.string) catch null;
+    }
+    if (parsed.value.object.get("user_agent")) |v| {
+        if (v == .string) config.user_agent = allocator.dupe(u8, v.string) catch null;
     }
 
     return config;
@@ -262,6 +267,13 @@ pub fn saveConfig(config: Config, allocator: std.mem.Allocator, io: std.Io) !voi
         first = false;
         try json_buf.appendSlice(allocator, "  \"media_feature\": \"");
         try appendEscapedString(&json_buf, allocator, m);
+        try json_buf.appendSlice(allocator, "\"");
+    }
+    if (config.user_agent) |ua| {
+        if (!first) try json_buf.appendSlice(allocator, ",\n");
+        first = false;
+        try json_buf.appendSlice(allocator, "  \"user_agent\": \"");
+        try appendEscapedString(&json_buf, allocator, ua);
         try json_buf.appendSlice(allocator, "\"");
     }
 

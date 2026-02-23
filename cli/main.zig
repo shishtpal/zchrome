@@ -84,6 +84,7 @@ const Args = struct {
         evaluate,
         network,
         cookies,
+        storage,
         version,
         list_targets,
         pages,
@@ -159,7 +160,7 @@ pub fn main(init: std.process.Init) !void {
     }
     // Only apply last_target for page-level commands (not version, pages, list_targets, etc.)
     const needs_target = switch (args.command) {
-        .navigate, .screenshot, .pdf, .evaluate, .network, .cookies, .snapshot, .click, .dblclick, .focus, .type, .fill, .select, .hover, .check, .uncheck, .scroll, .scrollintoview, .drag, .get, .upload, .back, .forward, .reload, .press, .keydown, .keyup, .wait, .mouse => true,
+        .navigate, .screenshot, .pdf, .evaluate, .network, .cookies, .storage, .snapshot, .click, .dblclick, .focus, .type, .fill, .select, .hover, .check, .uncheck, .scroll, .scrollintoview, .drag, .get, .upload, .back, .forward, .reload, .press, .keydown, .keyup, .wait, .mouse => true,
         .version, .list_targets, .pages, .interactive, .open, .connect, .help => false,
     };
     if (needs_target and args.use_target == null and config.last_target != null) {
@@ -221,7 +222,6 @@ pub fn main(init: std.process.Init) !void {
             .screenshot => try cmdScreenshot(browser, args, allocator),
             .pdf => try cmdPdf(browser, args, allocator),
             .evaluate => try cmdEvaluate(browser, args, allocator),
-            .cookies => try cmdCookies(browser, args, allocator),
             .version => try cmdVersion(browser, allocator),
             .list_targets => try cmdListTargets(browser, allocator),
             .pages => try cmdPages(browser, allocator),
@@ -519,41 +519,6 @@ fn cmdEvaluate(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) 
         }
     } else {
         std.debug.print("{s}\n", .{result.description orelse "undefined"});
-    }
-}
-
-/// Cookies command
-fn cmdCookies(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
-    var session = try browser.newPage();
-    defer session.detach() catch {};
-
-    var page = cdp.Page.init(session);
-    try page.enable();
-
-    var storage = cdp.Storage.init(session);
-
-    if (args.positional.len > 0) {
-        _ = try page.navigate(allocator, args.positional[0]);
-        // Note: sleep API changed in Zig 0.16, using spinloop hint
-        var i: u32 = 0;
-        while (i < 500000) : (i += 1) {
-            std.atomic.spinLoopHint();
-        }
-    }
-
-    const cookies = try storage.getCookies(allocator, null);
-    defer {
-        for (cookies) |*c| {
-            var cookie = c.*;
-            cookie.deinit(allocator);
-        }
-        allocator.free(cookies);
-    }
-
-    std.debug.print("{s:<30} {s:<40} {s:<20}\n", .{ "Name", "Value", "Domain" });
-    std.debug.print("{s:-<90}\n", .{""});
-    for (cookies) |cookie| {
-        std.debug.print("{s:<30} {s:<40} {s:<20}\n", .{ cookie.name, cookie.value, cookie.domain });
     }
 }
 
@@ -1039,7 +1004,14 @@ fn printUsage() void {
         \\  pdf [url]                Generate PDF
         \\  evaluate [url] <expr>    Evaluate JS expression
         \\  network [url]            Log network requests
-        \\  cookies [url]            Dump cookies
+        \\  cookies                  List all cookies
+        \\  cookies set <n> <v>      Set a cookie
+        \\  cookies clear            Clear all cookies
+        \\  storage local            Get all localStorage entries (JSON)
+        \\  storage local <key>      Get specific localStorage key
+        \\  storage local set <k> <v> Set localStorage value
+        \\  storage local clear      Clear all localStorage
+        \\  storage session          Same commands for sessionStorage
         \\  snapshot                 Capture accessibility tree of active page, save to zsnap.json
         \\  version                  Print browser version info
         \\  list-targets             List all open targets

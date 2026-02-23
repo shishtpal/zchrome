@@ -327,21 +327,27 @@ pub fn stringifyValueToString(allocator: std.mem.Allocator, value: anytype) ![]c
             inline for (struct_info.fields) |field| {
                 const field_value = @field(value, field.name);
 
-                // Skip null optional fields
-                if (@typeInfo(field.type) == .optional and field_value == null) {
-                    continue;
-                }
-
-                if (!first) try list.appendSlice(allocator, ",");
-                first = false;
-
                 // Use comptime string concatenation for field name
                 const camel_name = comptime comptimeSnakeToCamel(field.name);
-                try list.appendSlice(allocator, "\"" ++ camel_name ++ "\":");
 
-                const field_str = try stringifyValueToString(allocator, field_value);
-                defer allocator.free(field_str);
-                try list.appendSlice(allocator, field_str);
+                // Skip null optional fields
+                if (comptime @typeInfo(field.type) == .optional) {
+                    if (field_value) |unwrapped| {
+                        if (!first) try list.appendSlice(allocator, ",");
+                        first = false;
+                        try list.appendSlice(allocator, "\"" ++ camel_name ++ "\":");
+                        const field_str = try stringifyValueToString(allocator, unwrapped);
+                        defer allocator.free(field_str);
+                        try list.appendSlice(allocator, field_str);
+                    }
+                } else {
+                    if (!first) try list.appendSlice(allocator, ",");
+                    first = false;
+                    try list.appendSlice(allocator, "\"" ++ camel_name ++ "\":");
+                    const field_str = try stringifyValueToString(allocator, field_value);
+                    defer allocator.free(field_str);
+                    try list.appendSlice(allocator, field_str);
+                }
             }
             try list.appendSlice(allocator, "}");
             return list.toOwnedSlice(allocator);

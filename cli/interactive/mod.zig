@@ -209,7 +209,9 @@ fn executeCommand(state: *InteractiveState, line: []const u8) !void {
     } else if (eql(cmd, "evaluate") or eql(cmd, "eval") or eql(cmd, "js")) {
         try commands.cmdEvaluate(state, args);
     } else if (eql(cmd, "cookies")) {
-        try commands.cmdCookies(state);
+        try commands.cmdCookies(state, args);
+    } else if (eql(cmd, "storage")) {
+        try commands.cmdStorage(state, args);
     } else if (eql(cmd, "snapshot") or eql(cmd, "snap")) {
         try commands.cmdSnapshot(state, args);
     } else if (eql(cmd, "click")) {

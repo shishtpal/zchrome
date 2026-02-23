@@ -55,6 +55,13 @@ pub fn printHelp() void {
         \\  evaluate <expr>       Evaluate JavaScript (aliases: eval, js)
         \\  dom <selector>        Query DOM element
         \\  cookies               List cookies
+        \\  cookies set <n> <v>   Set a cookie
+        \\  cookies clear         Clear all cookies
+        \\  storage local         Get all localStorage (JSON)
+        \\  storage local <key>   Get specific key
+        \\  storage local set <k> <v>  Set value
+        \\  storage local clear   Clear all localStorage
+        \\  storage session [..]  Same for sessionStorage
         \\
         \\Element Actions:
         \\  click <selector>      Click element
@@ -167,9 +174,14 @@ pub fn cmdEvaluate(state: *InteractiveState, args: []const []const u8) !void {
     try impl.evaluate(session, buildCtx(state, args));
 }
 
-pub fn cmdCookies(state: *InteractiveState) !void {
+pub fn cmdCookies(state: *InteractiveState, args: []const []const u8) !void {
     const session = try requireSession(state);
-    try impl.cookies(session, buildCtx(state, &.{}));
+    try impl.cookies(session, buildCtx(state, args));
+}
+
+pub fn cmdStorage(state: *InteractiveState, args: []const []const u8) !void {
+    const session = try requireSession(state);
+    try impl.webStorage(session, buildCtx(state, args));
 }
 
 pub fn cmdSnapshot(state: *InteractiveState, args: []const []const u8) !void {

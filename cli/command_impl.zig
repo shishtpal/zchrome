@@ -201,6 +201,33 @@ pub fn cookies(session: *cdp.Session, ctx: CommandCtx) !void {
     var i: u32 = 0;
     while (i < 500000) : (i += 1) std.atomic.spinLoopHint();
 
+    // Subcommand dispatch: set, clear, or list (default)
+    if (ctx.positional.len > 0 and std.mem.eql(u8, ctx.positional[0], "set")) {
+        // cookies set <name> <value>
+        if (ctx.positional.len < 3) {
+            std.debug.print("Usage: cookies set <name> <value>\n", .{});
+            return;
+        }
+        // Get current page URL for the cookie domain
+        var runtime = cdp.Runtime.init(session);
+        try runtime.enable();
+        const page_url = runtime.evaluateAs([]const u8, "window.location.href") catch null;
+        try storage.setCookies(&.{.{
+            .name = ctx.positional[1],
+            .value = ctx.positional[2],
+            .url = page_url,
+        }});
+        std.debug.print("Cookie set: {s}={s}\n", .{ ctx.positional[1], ctx.positional[2] });
+        return;
+    }
+
+    if (ctx.positional.len > 0 and std.mem.eql(u8, ctx.positional[0], "clear")) {
+        try storage.clearCookies();
+        std.debug.print("All cookies cleared\n", .{});
+        return;
+    }
+
+    // Default: list all cookies
     const cookie_list = try storage.getCookies(ctx.allocator, null);
     defer {
         for (cookie_list) |*c| {
@@ -210,11 +237,146 @@ pub fn cookies(session: *cdp.Session, ctx: CommandCtx) !void {
         ctx.allocator.free(cookie_list);
     }
 
+    if (cookie_list.len == 0) {
+        std.debug.print("No cookies found\n", .{});
+        return;
+    }
+
     std.debug.print("{s:<30} {s:<40} {s:<20}\n", .{ "Name", "Value", "Domain" });
     std.debug.print("{s:-<90}\n", .{""});
     for (cookie_list) |cookie| {
         std.debug.print("{s:<30} {s:<40} {s:<20}\n", .{ cookie.name, cookie.value, cookie.domain });
     }
+}
+
+pub fn webStorage(session: *cdp.Session, ctx: CommandCtx) !void {
+    if (ctx.positional.len == 0) {
+        printStorageUsage();
+        return;
+    }
+
+    const store_type = ctx.positional[0];
+    const is_local = std.mem.eql(u8, store_type, "local");
+    const is_session = std.mem.eql(u8, store_type, "session");
+
+    if (!is_local and !is_session) {
+        std.debug.print("Unknown storage type: {s}\n", .{store_type});
+        printStorageUsage();
+        return;
+    }
+
+    const js_obj: []const u8 = if (is_local) "localStorage" else "sessionStorage";
+    const args = if (ctx.positional.len > 1) ctx.positional[1..] else &[_][]const u8{};
+
+    var runtime = cdp.Runtime.init(session);
+    try runtime.enable();
+
+    // storage local set <key> <value>
+    if (args.len >= 1 and std.mem.eql(u8, args[0], "set")) {
+        if (args.len < 3) {
+            std.debug.print("Usage: storage {s} set <key> <value>\n", .{store_type});
+            return;
+        }
+        const js = try std.fmt.allocPrint(ctx.allocator,
+            \\{s}.setItem({s}, {s})
+        , .{
+            js_obj,
+            try jsStringLiteral(ctx.allocator, args[1]),
+            try jsStringLiteral(ctx.allocator, args[2]),
+        });
+        defer ctx.allocator.free(js);
+        var result = try runtime.evaluate(ctx.allocator, js, .{ .return_by_value = true });
+        defer result.deinit(ctx.allocator);
+        std.debug.print("{s} set: {s}={s}\n", .{ store_type, args[1], args[2] });
+        return;
+    }
+
+    // storage local clear
+    if (args.len >= 1 and std.mem.eql(u8, args[0], "clear")) {
+        const js = try std.fmt.allocPrint(ctx.allocator, "{s}.clear()", .{js_obj});
+        defer ctx.allocator.free(js);
+        var result = try runtime.evaluate(ctx.allocator, js, .{ .return_by_value = true });
+        defer result.deinit(ctx.allocator);
+        std.debug.print("{s} storage cleared\n", .{store_type});
+        return;
+    }
+
+    // storage local <key>  → get specific key
+    if (args.len >= 1) {
+        const js = try std.fmt.allocPrint(ctx.allocator, "{s}.getItem({s})", .{
+            js_obj,
+            try jsStringLiteral(ctx.allocator, args[0]),
+        });
+        defer ctx.allocator.free(js);
+        var result = try runtime.evaluate(ctx.allocator, js, .{ .return_by_value = true });
+        defer result.deinit(ctx.allocator);
+        if (result.value) |v| {
+            switch (v) {
+                .string => |s| std.debug.print("{s}\n", .{s}),
+                .null => std.debug.print("(null)\n", .{}),
+                else => std.debug.print("{s}\n", .{result.description orelse "(undefined)"}),
+            }
+        } else {
+            std.debug.print("(undefined)\n", .{});
+        }
+        return;
+    }
+
+    // storage local  → list all
+    const js = try std.fmt.allocPrint(ctx.allocator,
+        \\JSON.stringify(Object.fromEntries(
+        \\  Object.keys({s}).map(k => [k, {s}.getItem(k)])
+        \\))
+    , .{ js_obj, js_obj });
+    defer ctx.allocator.free(js);
+    var result = try runtime.evaluate(ctx.allocator, js, .{ .return_by_value = true });
+    defer result.deinit(ctx.allocator);
+    if (result.value) |v| {
+        switch (v) {
+            .string => |s| {
+                if (std.mem.eql(u8, s, "{}")) {
+                    std.debug.print("No {s} storage entries\n", .{store_type});
+                } else {
+                    std.debug.print("{s}\n", .{s});
+                }
+            },
+            else => std.debug.print("No {s} storage entries\n", .{store_type}),
+        }
+    } else {
+        std.debug.print("No {s} storage entries\n", .{store_type});
+    }
+}
+
+fn jsStringLiteral(allocator: std.mem.Allocator, s: []const u8) ![]const u8 {
+    var result: std.ArrayList(u8) = .empty;
+    errdefer result.deinit(allocator);
+    try result.append(allocator, '"');
+    for (s) |c| {
+        switch (c) {
+            '"' => try result.appendSlice(allocator, "\\\""),
+            '\\' => try result.appendSlice(allocator, "\\\\"),
+            '\n' => try result.appendSlice(allocator, "\\n"),
+            '\r' => try result.appendSlice(allocator, "\\r"),
+            '\t' => try result.appendSlice(allocator, "\\t"),
+            else => try result.append(allocator, c),
+        }
+    }
+    try result.append(allocator, '"');
+    return result.toOwnedSlice(allocator);
+}
+
+fn printStorageUsage() void {
+    std.debug.print(
+        \\Usage: storage <local|session> [subcommand] [args]
+        \\
+        \\Subcommands:
+        \\  storage local              Get all localStorage entries
+        \\  storage local <key>        Get specific key
+        \\  storage local set <k> <v>  Set value
+        \\  storage local clear        Clear all entries
+        \\  storage session            Same for sessionStorage
+        \\
+    , .{});
 }
 
 pub fn network() void {
@@ -918,6 +1080,7 @@ pub fn dispatchSessionCommand(session: *cdp.Session, command: anytype, ctx: Comm
         .evaluate => try evaluate(session, ctx),
         .network => network(),
         .cookies => try cookies(session, ctx),
+        .storage => try webStorage(session, ctx),
         .snapshot => try snapshot(session, ctx),
         .click => try click(session, ctx),
         .dblclick => try dblclick(session, ctx),

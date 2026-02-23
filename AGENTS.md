@@ -306,6 +306,10 @@ CLI dispatch (main.zig)
 
 ### Adding a CLI Command
 
+Commands with subcommands (like `cookies` and `storage`) use positional args
+for dispatch. The first positional becomes the subcommand (`set`, `clear`,
+`local`, `session`) and is parsed inside the `command_impl.zig` function.
+
 Session-level commands (that operate on an existing page) require 4 steps:
 
 1. **Add to enum** — `Args.Command` in `cli/main.zig`
@@ -358,6 +362,35 @@ pub fn cmdHighlight(state: *InteractiveState, args: []const []const u8) !void {
     try commands.cmdHighlight(state, args);
 }
 ```
+
+### Example: Subcommand-Style Command (cookies, storage)
+
+Commands like `cookies` and `storage` use positional args as subcommands:
+
+```zig
+// In command_impl.zig:
+pub fn cookies(session: *cdp.Session, ctx: CommandCtx) !void {
+    if (ctx.positional.len > 0 and std.mem.eql(u8, ctx.positional[0], "set")) {
+        // cookies set <name> <value>
+        ...
+    }
+    if (ctx.positional.len > 0 and std.mem.eql(u8, ctx.positional[0], "clear")) {
+        // cookies clear
+        ...
+    }
+    // Default: list all cookies
+    ...
+}
+
+pub fn webStorage(session: *cdp.Session, ctx: CommandCtx) !void {
+    // positional[0] = "local" or "session"
+    // positional[1..] = subcommand args (set/clear/key)
+    ...
+}
+```
+
+`storage` uses JavaScript `localStorage`/`sessionStorage` APIs via
+`Runtime.evaluate` rather than CDP domain commands.
 
 ### Using --use Flag
 

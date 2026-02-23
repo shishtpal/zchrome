@@ -194,29 +194,68 @@ Network monitoring is not yet fully implemented in the CLI.
 
 ### cookies
 
-Dump cookies from a page.
+Manage browser cookies. Without a subcommand, lists all cookies for the current page.
 
 ```bash
-# Create new page and navigate
-zchrome cookies <url>
-
-# Or use existing page (no URL needed)
-zchrome --url $url --use <target-id> cookies
+zchrome cookies                   # List all cookies
+zchrome cookies set <name> <val>  # Set a cookie
+zchrome cookies clear             # Clear all cookies
 ```
 
-**Example:**
+**Examples:**
 
 ```bash
-# Create new page
-zchrome cookies https://example.com
-
-# Use existing page
-zchrome --url $url --use 75E5402CE67C63D19659EEFDC1CF292D cookies
+# List all cookies
+zchrome cookies
 
 # Output:
 # Name                           Value                                    Domain
 # ------------------------------------------------------------------------------------------
 # session_id                     abc123...                                .example.com
+
+# Set a cookie (uses current page URL for domain)
+zchrome cookies set theme dark
+
+# Clear all cookies
+zchrome cookies clear
+```
+
+### storage
+
+Manage localStorage and sessionStorage on the current page.
+
+```bash
+zchrome storage local                  # Get all localStorage entries (JSON)
+zchrome storage local <key>            # Get specific key
+zchrome storage local set <key> <val>  # Set value
+zchrome storage local clear            # Clear all localStorage
+
+zchrome storage session                # Same for sessionStorage
+zchrome storage session <key>
+zchrome storage session set <key> <val>
+zchrome storage session clear
+```
+
+**Examples:**
+
+```bash
+# List all localStorage entries
+zchrome storage local
+# Output: {"theme":"dark","lang":"en"}
+
+# Get a specific key
+zchrome storage local theme
+# Output: dark
+
+# Set a value
+zchrome storage local set theme light
+
+# Clear all localStorage
+zchrome storage local clear
+
+# Same commands work for sessionStorage
+zchrome storage session
+zchrome storage session set token abc123
 ```
 
 ### version
@@ -295,7 +334,7 @@ zchrome --url <ws-url> --use <target-id> <command> [command-args...]
 
 **Parameters:**
 - `--use <target-id>` - Target ID from the `pages` command
-- `<command>` - Any supported command (navigate, screenshot, pdf, evaluate, get, cookies)
+- `<command>` - Any supported command (navigate, screenshot, pdf, evaluate, get, cookies, storage)
 - `[command-args...]` - Arguments for the command (URL not needed for most commands)
 
 **Examples:**
@@ -317,8 +356,14 @@ zchrome --url $url --use 75E5402CE67C63D19659EEFDC1CF292D screenshot --output pa
 # Get outerHTML on existing page (no URL needed)
 zchrome --url $url --use 75E5402CE67C63D19659EEFDC1CF292D get dom "h1"
 
-# Dump cookies from existing page (no URL needed)
+# List cookies from existing page
 zchrome --url $url --use 75E5402CE67C63D19659EEFDC1CF292D cookies
+
+# Set cookie on existing page
+zchrome --url $url --use 75E5402CE67C63D19659EEFDC1CF292D cookies set theme dark
+
+# Get localStorage from existing page
+zchrome --url $url --use 75E5402CE67C63D19659EEFDC1CF292D storage local
 ```
 
 **Note:** The `--use` flag requires connecting to the browser-level WebSocket URL (`/devtools/browser/...`), not a page-specific URL.

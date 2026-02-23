@@ -462,6 +462,16 @@ pub const RECORD_GET_EVENTS_JS =
     \\})()
 ;
 
+/// JavaScript to retrieve and clear recorded events (for polling)
+pub const RECORD_POLL_EVENTS_JS =
+    \\(function() {
+    \\  if (!window.__zchrome_macro) return null;
+    \\  var events = window.__zchrome_macro.events;
+    \\  window.__zchrome_macro.events = [];
+    \\  return JSON.stringify(events);
+    \\})()
+;
+
 /// JavaScript to clean up recording
 pub const RECORD_CLEANUP_JS =
     \\(function() {

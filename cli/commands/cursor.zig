@@ -7,6 +7,7 @@ const cdp = @import("cdp");
 const types = @import("types.zig");
 const config_mod = @import("../config.zig");
 const macro_mod = @import("macro.zig");
+const record_server = @import("record_server.zig");
 
 pub const CommandCtx = types.CommandCtx;
 
@@ -163,7 +164,8 @@ fn cursorHover(session: *cdp.Session, allocator: std.mem.Allocator, io: std.Io) 
     std.debug.print("  (no element found)\n", .{});
 }
 
-/// Record mouse and keyboard events to a macro file
+/// Record mouse and keyboard events to a macro file via WebSocket streaming.
+/// Events are streamed in real-time and survive page reloads.
 fn cursorRecord(session: *cdp.Session, allocator: std.mem.Allocator, io: std.Io, args: []const []const u8) !void {
     if (args.len == 0) {
         std.debug.print("Usage: cursor record <filename.json>\n", .{});
@@ -171,168 +173,64 @@ fn cursorRecord(session: *cdp.Session, allocator: std.mem.Allocator, io: std.Io,
     }
 
     const filename = args[0];
+    const port = record_server.DEFAULT_PORT;
 
+    // Start WebSocket server (runs in background thread)
+    var server = record_server.RecordServer.init(allocator, io, port) catch |err| {
+        std.debug.print("Failed to start recording server: {}\n", .{err});
+        return;
+    };
+    defer server.deinit();
+
+    // Set up browser to inject recording script
     var runtime = cdp.Runtime.init(session);
     try runtime.enable();
 
-    // Inject the recording script
-    var init_result = try runtime.evaluate(allocator, macro_mod.RECORD_INIT_JS, .{ .return_by_value = true });
-    defer init_result.deinit(allocator);
+    var page = cdp.Page.init(session);
+    try page.enable();
 
-    if (init_result.value) |val| {
-        if (val == .string) {
-            if (std.mem.eql(u8, val.string, "already_initialized")) {
-                std.debug.print("Warning: Recording was already initialized on this page.\n", .{});
-            }
-        }
-    }
+    // Get recording JavaScript
+    const recording_js = try record_server.getRecordingJs(allocator, port);
+    defer allocator.free(recording_js);
 
-    std.debug.print("Recording... Press Enter to stop.\n", .{});
+    // Auto-inject on page navigation
+    const script_id = try page.addScriptToEvaluateOnNewDocument(recording_js);
+    defer page.removeScriptToEvaluateOnNewDocument(script_id) catch {};
 
-    // Wait for Enter key
+    // Inject on current page
+    var init_result = try runtime.evaluate(allocator, recording_js, .{ .return_by_value = true });
+    init_result.deinit(allocator);
+
+    std.debug.print("Recording on port {}... Press Enter to stop.\n", .{port});
+    std.debug.print("(Events stream in real-time, survives page reloads)\n", .{});
+
+    // Wait for Enter key (WebSocket server runs in background thread)
     const stdin_file = std.Io.File.stdin();
     var read_buf: [256]u8 = undefined;
     var reader = stdin_file.readerStreaming(io, &read_buf);
 
-    // Read until newline
     while (true) {
-        const byte = reader.interface.takeByte() catch |err| {
-            switch (err) {
-                error.EndOfStream => break,
-                else => break,
-            }
-        };
-        if (byte == '\n') break;
+        const byte = reader.interface.takeByte() catch break;
+        if (byte == '\n' or byte == '\r') break;
     }
 
-    // Retrieve recorded events
-    var events_result = try runtime.evaluate(allocator, macro_mod.RECORD_GET_EVENTS_JS, .{ .return_by_value = true });
-    defer events_result.deinit(allocator);
+    // Stop server and get events
+    const events = server.stop();
 
-    var events_json: ?[]const u8 = null;
-    if (events_result.value) |val| {
-        if (val == .string) {
-            events_json = val.string;
-        }
-    }
-
-    if (events_json == null) {
-        std.debug.print("Error: No events recorded.\n", .{});
+    if (events.len == 0) {
+        std.debug.print("No events recorded.\n", .{});
         return;
     }
 
-    // Parse the JSON events and convert to macro format
-    const parsed = std.json.parseFromSlice(std.json.Value, allocator, events_json.?, .{}) catch |err| {
-        std.debug.print("Error parsing events: {}\n", .{err});
-        return;
-    };
-    defer parsed.deinit();
-
-    if (parsed.value != .array) {
-        std.debug.print("Error: Invalid events format.\n", .{});
-        return;
-    }
-
-    // Build macro events
-    var events_list: std.ArrayList(macro_mod.MacroEvent) = .empty;
-    defer {
-        for (events_list.items) |*e| e.deinit(allocator);
-        events_list.deinit(allocator);
-    }
-
-    for (parsed.value.array.items) |event_val| {
-        if (event_val != .object) continue;
-
-        const obj = event_val.object;
-        var event = macro_mod.MacroEvent{
-            .event_type = .mouseMove,
-            .timestamp = 0,
-        };
-
-        // Parse event type
-        if (obj.get("type")) |t| {
-            if (t == .string) {
-                if (std.mem.eql(u8, t.string, "mousemove")) {
-                    event.event_type = .mouseMove;
-                } else if (std.mem.eql(u8, t.string, "mousedown")) {
-                    event.event_type = .mouseDown;
-                } else if (std.mem.eql(u8, t.string, "mouseup")) {
-                    event.event_type = .mouseUp;
-                } else if (std.mem.eql(u8, t.string, "wheel")) {
-                    event.event_type = .mouseWheel;
-                } else if (std.mem.eql(u8, t.string, "keydown")) {
-                    event.event_type = .keyDown;
-                } else if (std.mem.eql(u8, t.string, "keyup")) {
-                    event.event_type = .keyUp;
-                } else {
-                    continue; // Skip unknown event types
-                }
-            }
-        }
-
-        // Parse timestamp
-        if (obj.get("timestamp")) |ts| {
-            if (ts == .integer) event.timestamp = ts.integer;
-            if (ts == .float) event.timestamp = @intFromFloat(ts.float);
-        }
-
-        // Parse coordinates
-        if (obj.get("x")) |x| {
-            if (x == .float) event.x = x.float;
-            if (x == .integer) event.x = @floatFromInt(x.integer);
-        }
-        if (obj.get("y")) |y| {
-            if (y == .float) event.y = y.float;
-            if (y == .integer) event.y = @floatFromInt(y.integer);
-        }
-
-        // Parse mouse button
-        if (obj.get("button")) |b| {
-            if (b == .integer) {
-                event.button = macro_mod.MouseButton.fromInt(b.integer);
-            }
-        }
-
-        // Parse wheel deltas
-        if (obj.get("deltaX")) |dx| {
-            if (dx == .float) event.delta_x = dx.float;
-            if (dx == .integer) event.delta_x = @floatFromInt(dx.integer);
-        }
-        if (obj.get("deltaY")) |dy| {
-            if (dy == .float) event.delta_y = dy.float;
-            if (dy == .integer) event.delta_y = @floatFromInt(dy.integer);
-        }
-
-        // Parse key properties
-        if (obj.get("key")) |k| {
-            if (k == .string) event.key = try allocator.dupe(u8, k.string);
-        }
-        if (obj.get("code")) |c| {
-            if (c == .string) event.code = try allocator.dupe(u8, c.string);
-        }
-        if (obj.get("modifiers")) |m| {
-            if (m == .integer) event.modifiers = @intCast(m.integer);
-        }
-
-        try events_list.append(allocator, event);
-    }
-
-    // Create macro and save
-    const events_slice = try events_list.toOwnedSlice(allocator);
+    // Save macro
     var macro = macro_mod.Macro{
         .version = 1,
         .recorded_at = null,
-        .events = events_slice,
+        .events = events,
     };
-    defer macro.deinit(allocator);
 
     try macro_mod.saveMacro(allocator, io, filename, &macro);
-
-    // Cleanup recording on the page
-    var cleanup_result = try runtime.evaluate(allocator, macro_mod.RECORD_CLEANUP_JS, .{ .return_by_value = true });
-    cleanup_result.deinit(allocator);
-
-    std.debug.print("Recorded {} events to {s}\n", .{ events_slice.len, filename });
+    std.debug.print("Recorded {} events to {s}\n", .{events.len, filename});
 }
 
 /// Replay events from a macro file

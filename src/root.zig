@@ -25,6 +25,10 @@ pub const types = @import("core/types.zig");
 // Transport
 pub const WebSocket = @import("transport/websocket.zig").WebSocket;
 pub const PipeTransport = @import("transport/pipe.zig").PipeTransport;
+pub const ws_server = @import("transport/ws_server.zig");
+pub const WsServer = ws_server.Server;
+pub const WsServerClient = ws_server.Client;
+pub const WsServerError = ws_server.ServerError;
 
 // Domain clients
 pub const Page = @import("domains/page.zig").Page;

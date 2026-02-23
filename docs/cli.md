@@ -1010,21 +1010,33 @@ zchrome cursor hover
 
 ### cursor record
 
-Record mouse and keyboard events to a JSON macro file. Press Enter to stop recording.
+Record mouse and keyboard events to a JSON macro file using WebSocket streaming. Events are captured in real-time and survive page reloads.
 
 ```bash
 zchrome cursor record <filename.json>
 ```
+
+**How it works:**
+
+1. Starts a WebSocket server on port 4040
+2. Injects JavaScript into the page that connects to the server
+3. Events stream in real-time to zchrome
+4. Script auto-injects on page navigation (survives reloads)
+5. Press Enter to stop recording and save
 
 **Example:**
 
 ```bash
 # Start recording
 zchrome cursor record macro.json
-# Recording... Press Enter to stop.
-# (interact with the page)
+# Recording on port 4040... Press Enter to stop.
+# (Events stream in real-time, survives page reloads)
+#   (browser connected)
+# (interact with the page, navigate, reload - all captured)
 # Recorded 42 events to macro.json
 ```
+
+**Note:** The recording survives page reloads because the JavaScript is injected via `Page.addScriptToEvaluateOnNewDocument`, which automatically runs on every new page load.
 
 **Output Format:**
 

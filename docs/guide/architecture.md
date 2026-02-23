@@ -37,6 +37,7 @@ zchrome/
 │   │   └── types.zig       # Type aliases (SessionId, TargetId, etc.)
 │   ├── transport/
 │   │   ├── websocket.zig   # RFC 6455 WebSocket client
+│   │   ├── ws_server.zig   # WebSocket server for event streaming
 │   │   └── pipe.zig        # Stdio pipe transport
 │   ├── domains/
 │   │   ├── page.zig        # Navigation, screenshots, PDF

@@ -225,6 +225,7 @@ zig build test
 | `src/domains/*.zig` | CDP domain wrappers |
 | `src/util/json.zig` | JSON parsing helpers |
 | `src/util/yaml.zig` | YAML serialization for flat string maps |
+| `src/transport/ws_server.zig` | WebSocket server for event streaming |
 | `cli/main.zig` | CLI entry point, arg parsing, browser lifecycle |
 | `cli/commands/*.zig` | Shared command implementations (session-level, modular) |
 | `cli/interactive/mod.zig` | REPL loop, tokenizer, command dispatch |
@@ -265,6 +266,9 @@ cli/actions/               Low-level element/keyboard actions
   upload.zig              File upload via CDP
   helpers.zig             JS string escaping, JS snippets
   types.zig               ResolvedElement, ElementPosition
+cli/commands/              Macro recording
+  macro.zig               MacroEvent/Macro types, JSON serialization
+  record_server.zig       WebSocket-based event collection
 ```
 
 **`cli/commands/`** is the single source of truth for all session-level
@@ -308,6 +312,65 @@ CLI dispatch (main.zig)
   └─ else                 → switch on command:
        ├─ browser-level   → cmdNavigate / cmdScreenshot / cmdTab / cmdWindow / cmdVersion / ...
        └─ session-level   → withFirstPage()      → dispatchSessionCommand()
+```
+
+## Macro Recording Architecture
+
+The `cursor record` command uses a WebSocket-based architecture to capture events in real-time, surviving page reloads.
+
+### Components
+
+```
+┌─────────────────┐     WebSocket       ┌──────────────────┐
+│   Browser Page  │ ──────────────────→ │  zchrome CLI     │
+│  (injected JS)  │   ws://127.0.0.1:   │  RecordServer    │
+│                 │       4040          │                  │
+└─────────────────┘                     └──────────────────┘
+```
+
+### Data Flow
+
+1. **CLI starts WebSocket server** on port 4040 (`ws_server.zig`)
+2. **JavaScript injected** via `Page.addScriptToEvaluateOnNewDocument`
+   - Auto-injects on every page load (survives navigation/reload)
+3. **Browser JS connects** to `ws://127.0.0.1:4040/`
+4. **Events streamed** as JSON messages in real-time
+5. **Server collects events** with server-side timestamps (`record_server.zig`)
+6. **Press Enter** to stop and save to JSON file
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/transport/ws_server.zig` | WebSocket server (accept, handshake, frame read/write) |
+| `cli/commands/record_server.zig` | Recording state, event parsing, JSON accumulation |
+| `cli/commands/macro.zig` | `MacroEvent`/`Macro` types, `saveMacro`/`loadMacro` |
+| `cli/commands/cursor.zig` | `cursorRecord`, `cursorReplay` commands |
+
+### Event Types
+
+```zig
+pub const EventType = enum {
+    mouseMove,
+    mouseDown,
+    mouseUp,
+    mouseWheel,
+    keyDown,
+    keyUp,
+};
+```
+
+### Macro JSON Format
+
+```json
+{
+  "version": 1,
+  "events": [
+    { "type": "mouseMove", "timestamp": 0, "x": 100.0, "y": 200.0 },
+    { "type": "mouseDown", "timestamp": 150, "x": 100.0, "y": 200.0, "button": "left" },
+    { "type": "keyDown", "timestamp": 300, "key": "a", "code": "KeyA", "modifiers": 0 }
+  ]
+}
 ```
 
 ## Common Tasks

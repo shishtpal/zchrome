@@ -263,6 +263,9 @@ fn executeWithSession(browser: *cdp.Browser, session_id: []const u8, args: Args,
     var session = try cdp.Session.init(session_id, browser.connection, allocator);
     defer session.deinit();
 
+    // Apply saved emulation settings (user agent, viewport, etc.)
+    impl.applyEmulationSettings(session, allocator, args.io);
+
     const ctx = buildCtx(args, allocator);
     if (!try impl.dispatchSessionCommand(session, args.command, ctx)) {
         // Non-session commands
@@ -318,6 +321,9 @@ fn withFirstPage(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator
     defer allocator.free(session_id);
     var session = try cdp.Session.init(session_id, browser.connection, allocator);
     defer session.deinit();
+
+    // Apply saved emulation settings (user agent, viewport, etc.)
+    impl.applyEmulationSettings(session, allocator, args.io);
 
     const ctx = buildCtx(args, allocator);
     if (!try impl.dispatchSessionCommand(session, args.command, ctx)) {
@@ -381,6 +387,9 @@ fn cmdNavigate(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) 
     }
     defer session.deinit();
 
+    // Apply saved emulation settings (user agent, viewport, etc.)
+    impl.applyEmulationSettings(session, allocator, args.io);
+
     var page = cdp.Page.init(session);
     try page.enable();
 
@@ -420,6 +429,9 @@ fn cmdScreenshot(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator
     var session = try browser.newPage();
     defer session.detach() catch {};
 
+    // Apply saved emulation settings (user agent, viewport, etc.)
+    impl.applyEmulationSettings(session, allocator, args.io);
+
     var page = cdp.Page.init(session);
     try page.enable();
 
@@ -454,6 +466,9 @@ fn cmdScreenshot(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator
 fn cmdPdf(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
     var session = try browser.newPage();
     defer session.detach() catch {};
+
+    // Apply saved emulation settings (user agent, viewport, etc.)
+    impl.applyEmulationSettings(session, allocator, args.io);
 
     var page = cdp.Page.init(session);
     try page.enable();
@@ -493,6 +508,9 @@ fn cmdEvaluate(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) 
 
     var session = try browser.newPage();
     defer session.detach() catch {};
+
+    // Apply saved emulation settings (user agent, viewport, etc.)
+    impl.applyEmulationSettings(session, allocator, args.io);
 
     var page = cdp.Page.init(session);
     try page.enable();
@@ -771,6 +789,11 @@ fn cmdInteractive(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocato
             return;
         };
         state.target_id = allocator.dupe(u8, p.target_id) catch null;
+
+        // Apply saved emulation settings (user agent, viewport, etc.)
+        if (state.session) |s| {
+            impl.applyEmulationSettings(s, allocator, args.io);
+        }
     }
 
     try interactive_mod.run(&state);
@@ -809,6 +832,9 @@ fn cmdSnapshot(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) 
         session = try browser.newPage();
     }
     defer session.deinit();
+
+    // Apply saved emulation settings (user agent, viewport, etc.)
+    impl.applyEmulationSettings(session, allocator, args.io);
 
     const ctx = buildCtx(args, allocator);
     try impl.snapshot(session, ctx);

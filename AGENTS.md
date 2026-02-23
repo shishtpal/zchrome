@@ -1,7 +1,5 @@
 # AGENTS.md
 
-This document provides context for AI agents working on the zchrome codebase.
-
 ## Project Overview
 
 `zchrome` is a Chrome DevTools Protocol (CDP) client library for Zig. It enables programmatic control of Chrome/Chromium browsers via the DevTools Protocol.

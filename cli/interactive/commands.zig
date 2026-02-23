@@ -109,6 +109,12 @@ pub fn cmdTab(state: *InteractiveState, args: []const []const u8) !void {
         const session_id = try target.attachToTarget(state.allocator, selected.target_id, true);
         state.session = try cdp.Session.init(session_id, state.browser.connection, state.allocator);
         state.target_id = try state.allocator.dupe(u8, selected.target_id);
+
+        // Apply saved emulation settings (user agent, viewport, etc.)
+        if (state.session) |s| {
+            impl.applyEmulationSettings(s, state.allocator, state.io);
+        }
+
         std.debug.print("Switched to tab {}: {s} ({s})\n", .{ tab_num, selected.title, selected.url });
         return;
     }
@@ -198,6 +204,12 @@ pub fn cmdUse(state: *InteractiveState, args: []const []const u8) !void {
     const session_id = try target.attachToTarget(state.allocator, args[0], true);
     state.session = try cdp.Session.init(session_id, state.browser.connection, state.allocator);
     state.target_id = try state.allocator.dupe(u8, args[0]);
+
+    // Apply saved emulation settings (user agent, viewport, etc.)
+    if (state.session) |s| {
+        impl.applyEmulationSettings(s, state.allocator, state.io);
+    }
+
     std.debug.print("Switched to target: {s}\n", .{args[0]});
 }
 

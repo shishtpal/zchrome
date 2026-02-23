@@ -28,6 +28,79 @@ pub const CommandCtx = struct {
     wait_fn: ?[]const u8 = null,
 };
 
+// ─── Emulation Helpers (shared between set command and applyEmulationSettings) ───
+
+fn applyUserAgent(session: *cdp.Session, ua: []const u8) !void {
+    // Enable domains first
+    _ = session.sendCommand("Network.enable", .{}) catch {};
+    _ = session.sendCommand("Page.enable", .{}) catch {};
+
+    // Set via Emulation.setUserAgentOverride
+    // This affects both navigator.userAgent AND the User-Agent HTTP header for ALL requests
+    _ = try session.sendCommand("Emulation.setUserAgentOverride", .{
+        .userAgent = ua,
+    });
+}
+
+fn applyViewport(session: *cdp.Session, width: u32, height: u32, scale: f64, mobile: bool) !void {
+    _ = try session.sendCommand("Emulation.setDeviceMetricsOverride", .{
+        .width = width,
+        .height = height,
+        .deviceScaleFactor = scale,
+        .mobile = mobile,
+    });
+}
+
+fn applyGeolocation(session: *cdp.Session, lat: f64, lng: f64) !void {
+    _ = try session.sendCommand("Emulation.setGeolocationOverride", .{
+        .latitude = lat,
+        .longitude = lng,
+        .accuracy = 1.0,
+    });
+}
+
+fn applyOfflineMode(session: *cdp.Session, offline: bool) !void {
+    _ = try session.sendCommand("Network.emulateNetworkConditions", .{
+        .offline = offline,
+        .latency = 0,
+        .downloadThroughput = -1,
+        .uploadThroughput = -1,
+    });
+}
+
+fn applyMediaFeature(session: *cdp.Session, scheme: []const u8) !void {
+    _ = try session.sendCommand("Emulation.setEmulatedMedia", .{
+        .features = &[_]struct { name: []const u8, value: []const u8 }{
+            .{ .name = "prefers-color-scheme", .value = scheme },
+        },
+    });
+}
+
+/// Apply saved emulation settings from config to a session.
+/// Call this after attaching to a target to ensure user agent and other settings persist.
+pub fn applyEmulationSettings(session: *cdp.Session, allocator: std.mem.Allocator, io: std.Io) void {
+    var config = config_mod.loadConfig(allocator, io) orelse return;
+    defer config.deinit(allocator);
+
+    if (config.user_agent) |ua| {
+        applyUserAgent(session, ua) catch |err| {
+            std.debug.print("Warning: Failed to apply user agent: {}\n", .{err});
+        };
+    }
+    if (config.viewport_width != null and config.viewport_height != null) {
+        applyViewport(session, config.viewport_width.?, config.viewport_height.?, 1.0, false) catch {};
+    }
+    if (config.geo_lat != null and config.geo_lng != null) {
+        applyGeolocation(session, config.geo_lat.?, config.geo_lng.?) catch {};
+    }
+    if (config.offline) |offline| {
+        applyOfflineMode(session, offline) catch {};
+    }
+    if (config.media_feature) |scheme| {
+        applyMediaFeature(session, scheme) catch {};
+    }
+}
+
 // ─── Navigation ─────────────────────────────────────────────────────────────
 
 pub fn navigate(session: *cdp.Session, ctx: CommandCtx) !void {
@@ -1466,15 +1539,7 @@ pub fn set(session: *cdp.Session, ctx: CommandCtx) !void {
             return;
         };
 
-        // Apply via CDP Emulation.setDeviceMetricsOverride
-        _ = try session.sendCommand("Emulation.setDeviceMetricsOverride", .{
-            .width = w,
-            .height = h,
-            .deviceScaleFactor = 1.0,
-            .mobile = false,
-        });
-
-        // Reload page to apply new viewport
+        try applyViewport(session, w, h, 1.0, false);
         _ = try session.sendCommand("Page.reload", .{});
 
         config.viewport_width = w;
@@ -1494,27 +1559,20 @@ pub fn set(session: *cdp.Session, ctx: CommandCtx) !void {
             return;
         };
 
-        // Apply via CDP
-        _ = try session.sendCommand("Emulation.setDeviceMetricsOverride", .{
-            .width = device.width,
-            .height = device.height,
-            .deviceScaleFactor = device.scale,
-            .mobile = device.mobile,
-        });
-
+        try applyViewport(session, device.width, device.height, device.scale, device.mobile);
         if (device.user_agent) |ua| {
-            _ = try session.sendCommand("Emulation.setUserAgentOverride", .{
-                .userAgent = ua,
-            });
+            try applyUserAgent(session, ua);
         }
-
-        // Reload page to apply device emulation
         _ = try session.sendCommand("Page.reload", .{});
 
         if (config.device_name) |old| ctx.allocator.free(old);
         config.device_name = ctx.allocator.dupe(u8, device_name) catch null;
         config.viewport_width = device.width;
         config.viewport_height = device.height;
+        if (device.user_agent) |ua| {
+            if (config.user_agent) |old| ctx.allocator.free(old);
+            config.user_agent = ctx.allocator.dupe(u8, ua) catch null;
+        }
         try config_mod.saveConfig(config, ctx.allocator, ctx.io);
         std.debug.print("Device emulation: {s} ({}x{}, page reloaded)\n", .{ device_name, device.width, device.height });
     } else if (std.mem.eql(u8, sub, "geo")) {
@@ -1531,12 +1589,7 @@ pub fn set(session: *cdp.Session, ctx: CommandCtx) !void {
             return;
         };
 
-        // Apply via CDP Emulation.setGeolocationOverride
-        _ = try session.sendCommand("Emulation.setGeolocationOverride", .{
-            .latitude = lat,
-            .longitude = lng,
-            .accuracy = 1.0,
-        });
+        try applyGeolocation(session, lat, lng);
 
         config.geo_lat = lat;
         config.geo_lng = lng;
@@ -1549,13 +1602,7 @@ pub fn set(session: *cdp.Session, ctx: CommandCtx) !void {
         }
         const offline = std.mem.eql(u8, ctx.positional[1], "on");
 
-        // Apply via CDP Network.emulateNetworkConditions
-        _ = try session.sendCommand("Network.emulateNetworkConditions", .{
-            .offline = offline,
-            .latency = 0,
-            .downloadThroughput = -1,
-            .uploadThroughput = -1,
-        });
+        try applyOfflineMode(session, offline);
 
         config.offline = offline;
         try config_mod.saveConfig(config, ctx.allocator, ctx.io);
@@ -1611,14 +1658,7 @@ pub fn set(session: *cdp.Session, ctx: CommandCtx) !void {
             return;
         }
 
-        // Apply via CDP Emulation.setEmulatedMedia
-        _ = try session.sendCommand("Emulation.setEmulatedMedia", .{
-            .features = &[_]struct { name: []const u8, value: []const u8 }{
-                .{ .name = "prefers-color-scheme", .value = scheme },
-            },
-        });
-
-        // Reload page to apply media feature
+        try applyMediaFeature(session, scheme);
         _ = try session.sendCommand("Page.reload", .{});
 
         if (config.media_feature) |old| ctx.allocator.free(old);
@@ -1636,12 +1676,7 @@ pub fn set(session: *cdp.Session, ctx: CommandCtx) !void {
         // Check if it's a built-in user agent name
         const ua_string = getUserAgent(ua_input) orelse ua_input;
 
-        // Apply via CDP Emulation.setUserAgentOverride
-        _ = try session.sendCommand("Emulation.setUserAgentOverride", .{
-            .userAgent = ua_string,
-        });
-
-        // Reload page to apply new user agent
+        try applyUserAgent(session, ua_string);
         _ = try session.sendCommand("Page.reload", .{});
 
         if (config.user_agent) |old| ctx.allocator.free(old);
@@ -1650,9 +1685,9 @@ pub fn set(session: *cdp.Session, ctx: CommandCtx) !void {
 
         // Show friendly name if it was a preset
         if (getUserAgent(ua_input) != null) {
-            std.debug.print("User agent set to {s} (page reloaded)\n", .{ua_input});
+            std.debug.print("User agent set to {s} (applies to all requests, page reloaded)\n", .{ua_input});
         } else {
-            std.debug.print("User agent set (page reloaded)\n", .{});
+            std.debug.print("User agent set (applies to all requests, page reloaded)\n", .{});
         }
     } else {
         std.debug.print("Unknown subcommand: {s}\n", .{sub});

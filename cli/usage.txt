@@ -67,6 +67,10 @@ MOUSE:
   mouse up [button]        Release mouse button
   mouse wheel <dy> [dx]    Scroll mouse wheel
 
+CURSOR:
+  cursor active            Show the currently focused element
+  cursor hover             Show the element under the mouse cursor
+
 GETTERS:
   get text <sel>           Get text content
   get html <sel>           Get innerHTML
@@ -163,6 +167,10 @@ EXAMPLES:
   zchrome mouse down left               # Press left button
   zchrome mouse up                      # Release button
   zchrome mouse wheel -100              # Scroll down 100px
+
+  # Cursor info
+  zchrome cursor active                 # Show focused element
+  zchrome cursor hover                  # Show element at mouse position
 
   # Wait for conditions
   zchrome wait "#login-form"            # Wait for element

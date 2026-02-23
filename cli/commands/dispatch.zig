@@ -15,6 +15,7 @@ const drag_cmd = @import("drag.zig");
 const upload_cmd = @import("upload.zig");
 const keyboard = @import("keyboard.zig");
 const mouse_cmd = @import("mouse.zig");
+const cursor_cmd = @import("cursor.zig");
 const wait_cmd = @import("wait.zig");
 const getters = @import("getters.zig");
 const setters = @import("setters.zig");
@@ -54,6 +55,7 @@ pub fn dispatchSessionCommand(session: *cdp.Session, command: anytype, ctx: Comm
         .keyup => try keyboard.keyUp(session, ctx),
         .wait => try wait_cmd.wait(session, ctx),
         .mouse => try mouse_cmd.mouse(session, ctx),
+        .cursor => try cursor_cmd.cursor(session, ctx),
         .set => try setters.set(session, ctx),
         else => {
             std.debug.print("Warning: unhandled command in dispatchSessionCommand\n", .{});

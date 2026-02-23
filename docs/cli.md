@@ -923,7 +923,90 @@ zchrome mouse move 400 200
 zchrome mouse up
 ```
 
-## Wait Commands
+## Cursor Commands
+
+Show information about elements at the cursor position or with focus.
+
+### cursor active
+
+Show the currently focused element (the element that would receive keyboard input).
+
+```bash
+zchrome cursor active
+```
+
+**Output:**
+
+```
+Active element:
+  type: html
+  tag: input
+  role: textbox
+  name: "Search"
+  id: search-box
+  selector: input#search-box
+  position: (100, 200)
+```
+
+**Element Types:**
+
+| Type | Description |
+|------|-------------|
+| `html` | Standard HTML element |
+| `img` | Image element |
+| `svg` | SVG element |
+| `canvas` | Canvas element |
+| `iframe` | Iframe element |
+| `shadow` | Element in shadow DOM |
+| `placeholder` | Input with placeholder text |
+
+**Example:**
+
+```bash
+# Focus an element and check what's active
+zchrome focus "#email"
+zchrome cursor active
+# Output shows the email input element
+
+# After clicking a button
+zchrome click "#submit"
+zchrome cursor active
+# Output shows the submit button (it received focus from the click)
+```
+
+### cursor hover
+
+Show the element under the last known mouse cursor position. Requires `mouse move` to be called first to set the position.
+
+```bash
+zchrome cursor hover
+```
+
+**Output:**
+
+```
+Element at cursor (150, 300):
+  type: html
+  tag: button
+  role: button
+  name: "Submit"
+  selector: button.submit-btn
+```
+
+**Example:**
+
+```bash
+# Move mouse and check what's under it
+zchrome mouse move 300 400
+zchrome cursor hover
+# Output shows the element at coordinates (300, 400)
+
+# Useful for debugging hover states
+zchrome mouse move 100 200
+zchrome cursor hover
+```
+
+**Note:** The `cursor hover` command uses the last saved mouse position from `zchrome.json`. You must use `mouse move` first to set the position.
 
 Wait for various conditions before proceeding. All wait commands have a default timeout of 30 seconds (configurable with `--timeout`).
 

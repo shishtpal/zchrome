@@ -21,6 +21,7 @@ const drag_mod = @import("drag.zig");
 const upload_mod = @import("upload.zig");
 const keyboard_mod = @import("keyboard.zig");
 const mouse_mod = @import("mouse.zig");
+const cursor_mod = @import("cursor.zig");
 const wait_mod = @import("wait.zig");
 const getters_mod = @import("getters.zig");
 const setters_mod = @import("setters.zig");
@@ -104,6 +105,11 @@ pub const keyUp = keyboard_mod.keyUp;
 pub const mouse = mouse_mod.mouse;
 pub const parseMouseButton = mouse_mod.parseMouseButton;
 pub const printMouseHelp = mouse_mod.printMouseHelp;
+
+// ─── Cursor Re-exports ───────────────────────────────────────────────────────
+
+pub const cursor = cursor_mod.cursor;
+pub const printCursorHelp = cursor_mod.printCursorHelp;
 
 // ─── Wait Re-exports ─────────────────────────────────────────────────────────
 

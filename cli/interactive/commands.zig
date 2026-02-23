@@ -429,3 +429,8 @@ pub fn cmdSet(state: *InteractiveState, args: []const []const u8) !void {
     const session = try requireSession(state);
     try impl.set(session, buildCtx(state, args));
 }
+
+pub fn cmdCursor(state: *InteractiveState, args: []const []const u8) !void {
+    const session = try requireSession(state);
+    try impl.cursor(session, buildCtx(state, args));
+}

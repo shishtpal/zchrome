@@ -75,6 +75,10 @@ pub fn print() void {
         \\  mouse up [button]     Release mouse button
         \\  mouse wheel <dy> [dx] Scroll mouse wheel
         \\
+        \\Cursor:
+        \\  cursor active         Show focused element
+        \\  cursor hover          Show element at mouse position
+        \\
         \\Getters:
         \\  get text <sel>        Get text content
         \\  get html <sel>        Get innerHTML

@@ -528,6 +528,14 @@ fn cmdEvaluate(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) 
 
 /// Tab command - list, new, switch, close tabs
 fn cmdTab(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
+    // Check for --help flag
+    for (args.positional) |arg| {
+        if (std.mem.eql(u8, arg, "--help")) {
+            impl.printTabHelp();
+            return;
+        }
+    }
+
     var target = cdp.Target.init(browser.connection);
 
     // tab new [url]
@@ -636,6 +644,15 @@ fn printTabUsage() void {
 /// Window command - new window
 fn cmdWindow(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
     _ = allocator;
+    
+    // Check for --help flag
+    for (args.positional) |arg| {
+        if (std.mem.eql(u8, arg, "--help")) {
+            impl.printWindowHelp();
+            return;
+        }
+    }
+    
     if (args.positional.len >= 1 and std.mem.eql(u8, args.positional[0], "new")) {
         _ = try browser.connection.sendCommand("Target.createTarget", .{
             .url = "about:blank",
@@ -1044,8 +1061,13 @@ fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
                 const val = iter.next() orelse return error.MissingArgument;
                 output = try allocator.dupe(u8, val);
             } else if (std.mem.eql(u8, arg, "--help")) {
-                command = .help;
-                break;
+                // If we haven't parsed a command yet, treat --help as the global help command
+                if (command == .help) {
+                    command = .help;
+                    break;
+                }
+                // Otherwise pass --help to the subcommand
+                try positional.append(allocator, try allocator.dupe(u8, arg));
             } else if (std.mem.eql(u8, arg, "--interactive-only")) {
                 snap_interactive = true;
             } else if (std.mem.eql(u8, arg, "--compact")) {

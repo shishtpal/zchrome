@@ -125,6 +125,14 @@ pub fn pdf(session: *cdp.Session, ctx: CommandCtx) !void {
 }
 
 pub fn snapshot(session: *cdp.Session, ctx: CommandCtx) !void {
+    // Check for --help flag in positional args
+    for (ctx.positional) |arg| {
+        if (std.mem.eql(u8, arg, "--help")) {
+            printSnapshotHelp();
+            return;
+        }
+    }
+
     var runtime = cdp.Runtime.init(session);
     try runtime.enable();
 
@@ -223,6 +231,14 @@ fn cookieDomainMatches(cookie_domain: []const u8, filter: []const u8) bool {
 }
 
 pub fn cookies(session: *cdp.Session, ctx: CommandCtx) !void {
+    // Check for --help flag
+    for (ctx.positional) |arg| {
+        if (std.mem.eql(u8, arg, "--help")) {
+            printCookiesHelp();
+            return;
+        }
+    }
+
     var page = cdp.Page.init(session);
     try page.enable();
 
@@ -466,6 +482,14 @@ pub fn cookies(session: *cdp.Session, ctx: CommandCtx) !void {
 }
 
 pub fn webStorage(session: *cdp.Session, ctx: CommandCtx) !void {
+    // Check for --help flag
+    for (ctx.positional) |arg| {
+        if (std.mem.eql(u8, arg, "--help")) {
+            printStorageHelp();
+            return;
+        }
+    }
+
     if (ctx.positional.len == 0) {
         printStorageUsage();
         return;
@@ -894,6 +918,14 @@ pub fn parseMouseButton(button_str: ?[]const u8) cdp.MouseButton {
 
 /// Mouse command dispatcher - handles move, down, up, wheel subcommands
 pub fn mouse(session: *cdp.Session, ctx: CommandCtx) !void {
+    // Check for --help flag
+    for (ctx.positional) |arg| {
+        if (std.mem.eql(u8, arg, "--help")) {
+            printMouseHelp();
+            return;
+        }
+    }
+
     if (ctx.positional.len == 0) {
         printMouseUsage();
         return;
@@ -1029,6 +1061,14 @@ fn mouseWheelCmd(session: *cdp.Session, allocator: std.mem.Allocator, io: std.Io
 // ─── Wait ───────────────────────────────────────────────────────────────────
 
 pub fn wait(session: *cdp.Session, ctx: CommandCtx) !void {
+    // Check for --help flag in positional args
+    for (ctx.positional) |arg| {
+        if (std.mem.eql(u8, arg, "--help")) {
+            printWaitHelp();
+            return;
+        }
+    }
+
     const timeout_ms: u32 = 30_000; // default 30s
 
     if (ctx.wait_text) |text| {
@@ -1232,6 +1272,14 @@ fn globToRegex(allocator: std.mem.Allocator, pattern: []const u8) ![]u8 {
 // ─── Getters ────────────────────────────────────────────────────────────────
 
 pub fn get(session: *cdp.Session, ctx: CommandCtx) !void {
+    // Check for --help flag
+    for (ctx.positional) |arg| {
+        if (std.mem.eql(u8, arg, "--help")) {
+            printGetHelp();
+            return;
+        }
+    }
+
     if (ctx.positional.len == 0) {
         printGetUsage();
         return;
@@ -1415,4 +1463,168 @@ fn writeFile(io: std.Io, path: []const u8, data: []const u8) !void {
         std.debug.print("Error writing {s}: {}\n", .{ path, err });
         return err;
     };
+}
+
+// ─── Help Functions ────────────────────────────────────────────────────────
+
+pub fn printCookiesHelp() void {
+    std.debug.print(
+        \\Usage: cookies [subcommand] [args]
+        \\
+        \\Subcommands:
+        \\  cookies                    List all cookies
+        \\  cookies <domain>         List cookies for specific domain
+        \\  cookies set <name> <value> Set a cookie
+        \\  cookies get <name> [domain] Get specific cookie
+        \\  cookies delete <name> [domain] Delete specific cookie
+        \\  cookies clear [domain]     Clear all cookies (or for domain)
+        \\  cookies export <path> [domain] Export cookies to JSON file
+        \\  cookies import <path> [domain] Import cookies from JSON file
+        \\
+        \\Examples:
+        \\  cookies set session_id abc123
+        \\  cookies get session_id .example.com
+        \\  cookies export cookies.json
+        \\  cookies clear .example.com
+        \\
+    , .{});
+}
+
+pub fn printStorageHelp() void {
+    std.debug.print(
+        \\Usage: storage <local|session> [subcommand] [args]
+        \\
+        \\Subcommands:
+        \\  storage local              Get all localStorage entries (JSON)
+        \\  storage local <key>        Get specific key
+        \\  storage local set <k> <v>  Set value
+        \\  storage local clear        Clear all entries
+        \\  storage local export <f>   Export to JSON/YAML file
+        \\  storage local import <f>   Import from JSON/YAML file
+        \\  storage session          Same commands for sessionStorage
+        \\
+        \\Examples:
+        \\  storage local set theme dark
+        \\  storage local get user_id
+        \\  storage local export storage.json
+        \\  storage session clear
+        \\
+    , .{});
+}
+
+pub fn printGetHelp() void {
+    std.debug.print(
+        \\Usage: get <subcommand> [selector] [args]
+        \\
+        \\Subcommands:
+        \\  get title                Get page title
+        \\  get url                  Get current URL
+        \\  get text <sel>           Get text content
+        \\  get html <sel>           Get innerHTML
+        \\  get dom <sel>            Get outerHTML
+        \\  get value <sel>          Get input value
+        \\  get attr <sel> <attr>    Get attribute value
+        \\  get count <sel>          Count matching elements
+        \\  get box <sel>            Get bounding box (x, y, width, height)
+        \\  get styles <sel>         Get computed styles (JSON)
+        \\
+        \\Examples:
+        \\  get title
+        \\  get text "#header"
+        \\  get attr "#link" href
+        \\  get count "li.item"
+        \\
+    , .{});
+}
+
+pub fn printTabHelp() void {
+    std.debug.print(
+        \\Usage: tab [subcommand] [args]
+        \\
+        \\Subcommands:
+        \\  tab                      List open tabs (numbered)
+        \\  tab new [url]            Open new tab (optionally navigate to URL)
+        \\  tab <n>                  Switch to tab n
+        \\  tab close [n]            Close tab n (default: current)
+        \\
+        \\Examples:
+        \\  tab new https://example.com
+        \\  tab 2
+        \\  tab close
+        \\  tab close 1
+        \\
+    , .{});
+}
+
+pub fn printMouseHelp() void {
+    std.debug.print(
+        \\Usage: mouse <subcommand> [args]
+        \\
+        \\Subcommands:
+        \\  mouse move <x> <y>       Move mouse to coordinates
+        \\  mouse down [button]      Press mouse button (left/right/middle, default: left)
+        \\  mouse up [button]        Release mouse button
+        \\  mouse wheel <dy> [dx]    Scroll mouse wheel
+        \\
+        \\Examples:
+        \\  mouse move 100 200
+        \\  mouse down left
+        \\  mouse up
+        \\  mouse wheel -100
+        \\
+    , .{});
+}
+
+pub fn printWaitHelp() void {
+    std.debug.print(
+        \\Usage: wait <selector|ms> [options]
+        \\
+        \\Options:
+        \\  --text <string>    Wait for text to appear on page
+        \\  --match <pattern>  Wait for URL to match pattern (glob: ** and *)
+        \\  --load <state>     Wait for load state (load, domcontentloaded, networkidle)
+        \\  --fn <expression>  Wait for JS expression to return truthy
+        \\
+        \\Examples:
+        \\  wait "#login-form"           Wait for element to be visible
+        \\  wait 2000                    Wait 2 seconds
+        \\  wait --text "Welcome"        Wait for text
+        \\  wait --match "**/dashboard"   Wait for URL pattern
+        \\  wait --load networkidle       Wait for network idle
+        \\  wait --fn "window.ready"      Wait for JS condition
+        \\
+    , .{});
+}
+
+pub fn printSnapshotHelp() void {
+    std.debug.print(
+        \\Usage: snapshot [options]
+        \\
+        \\Options:
+        \\  -i, --interactive-only   Only include interactive elements
+        \\  -c, --compact            Compact output (skip empty structural elements)
+        \\  -d, --depth <n>          Limit tree depth
+        \\  -s, --selector <sel>     Scope snapshot to CSS selector
+        \\  --output <path>          Output file path (default: zsnap.json)
+        \\
+        \\Examples:
+        \\  snapshot                       # Snapshot current page
+        \\  snapshot -i                    # Interactive elements only
+        \\  snapshot -c -d 3               # Compact mode, depth 3
+        \\  snapshot -s "#main-content"    # Scope to selector
+        \\
+    , .{});
+}
+
+pub fn printWindowHelp() void {
+    std.debug.print(
+        \\Usage: window [subcommand]
+        \\
+        \\Subcommands:
+        \\  window new           Open new browser window
+        \\
+        \\Examples:
+        \\  window new           # Open new browser window
+        \\
+    , .{});
 }

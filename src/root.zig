@@ -45,9 +45,10 @@ pub const CookieParam = @import("domains/storage.zig").CookieParam;
 
 // Utilities
 pub const json = @import("util/json.zig");
-pub const base64 = @import("util/base64.zig");
+pub const yaml = @import("util/yaml.zig");
 pub const url = @import("util/url.zig");
 pub const retry = @import("util/retry.zig");
+pub const base64 = @import("util/base64.zig");
 
 // ─── Error Sets ─────────────────────────────────────────────────────────────
 

@@ -70,6 +70,8 @@ pub fn printHelp() void {
         \\  storage local <key>   Get specific key
         \\  storage local set <k> <v>  Set value
         \\  storage local clear   Clear all localStorage
+        \\  storage local export <file>  Export to JSON/YAML file
+        \\  storage local import <file>  Import from JSON/YAML file
         \\  storage session [..]  Same for sessionStorage
         \\
         \\Element Actions:

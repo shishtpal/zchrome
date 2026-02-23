@@ -95,6 +95,8 @@ COOKIE MANAGEMENT:
   storage local <key>      Get specific localStorage key
   storage local set <k> <v> Set localStorage value
   storage local clear      Clear all localStorage
+  storage local export <f> Export localStorage to JSON/YAML file
+  storage local import <f> Import localStorage from JSON/YAML file
   storage session          Same commands for sessionStorage
 
 SNAPSHOT OPTIONS:

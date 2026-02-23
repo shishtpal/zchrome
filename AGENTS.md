@@ -226,6 +226,7 @@ zig build test
 | `src/browser/process.zig` | Process spawning (stubbed) |
 | `src/domains/*.zig` | CDP domain wrappers |
 | `src/util/json.zig` | JSON parsing helpers |
+| `src/util/yaml.zig` | YAML serialization for flat string maps |
 | `cli/main.zig` | CLI entry point, arg parsing, browser lifecycle |
 | `cli/command_impl.zig` | Shared command implementations (session-level) |
 | `cli/interactive/mod.zig` | REPL loop, tokenizer, command dispatch |

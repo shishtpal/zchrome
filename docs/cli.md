@@ -247,11 +247,15 @@ zchrome storage local                  # Get all localStorage entries (JSON)
 zchrome storage local <key>            # Get specific key
 zchrome storage local set <key> <val>  # Set value
 zchrome storage local clear            # Clear all localStorage
+zchrome storage local export <file>    # Export to JSON/YAML file
+zchrome storage local import <file>    # Import from JSON/YAML file
 
 zchrome storage session                # Same for sessionStorage
 zchrome storage session <key>
 zchrome storage session set <key> <val>
 zchrome storage session clear
+zchrome storage session export <file>
+zchrome storage session import <file>
 ```
 
 **Examples:**
@@ -271,10 +275,36 @@ zchrome storage local set theme light
 # Clear all localStorage
 zchrome storage local clear
 
+# Export localStorage to JSON file
+zchrome storage local export storage.json
+# Output: Exported local storage to storage.json
+
+# Export localStorage to YAML file
+zchrome storage local export storage.yaml
+# Output: Exported local storage to storage.yaml
+
+# Import localStorage from JSON file
+zchrome storage local import storage.json
+# Output: Imported 2 entries into local storage
+
+# Import localStorage from YAML file
+zchrome storage local import storage.yaml
+
 # Same commands work for sessionStorage
 zchrome storage session
 zchrome storage session set token abc123
+zchrome storage session export session.json
+zchrome storage session import session.json
 ```
+
+**File Formats:**
+
+- **JSON**: A flat object with string keys and string values: `{"key1": "value1", "key2": "value2"}`
+- **YAML**: Simple `key: value` lines (detected by `.yaml` or `.yml` extension):
+  ```yaml
+  key1: value1
+  key2: value2
+  ```
 
 ### tab
 

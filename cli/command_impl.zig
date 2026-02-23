@@ -1301,6 +1301,23 @@ pub fn get(session: *cdp.Session, ctx: CommandCtx) !void {
         return;
     }
 
+    if (std.mem.eql(u8, subcommand, "useragent") or std.mem.eql(u8, subcommand, "ua")) {
+        var runtime = cdp.Runtime.init(session);
+        try runtime.enable();
+        var result = runtime.evaluate(ctx.allocator, "navigator.userAgent", .{ .return_by_value = true }) catch |err| {
+            std.debug.print("Error: Failed to evaluate user agent: {}\n", .{err});
+            return;
+        };
+        defer result.deinit(ctx.allocator);
+
+        if (result.asString()) |ua| {
+            std.debug.print("{s}\n", .{ua});
+        } else {
+            std.debug.print("(unknown)\n", .{});
+        }
+        return;
+    }
+
     if (ctx.positional.len < 2) {
         std.debug.print("Error: Missing selector\n", .{});
         printGetUsage();
@@ -1405,6 +1422,7 @@ fn printGetUsage() void {
         \\  attr <sel> <attr>    Get attribute value
         \\  title                Get page title
         \\  url                  Get current URL
+        \\  useragent            Get browser user agent (alias: ua)
         \\  count <sel>          Count matching elements
         \\  box <sel>            Get bounding box
         \\  styles <sel>         Get computed styles (JSON)
@@ -1844,6 +1862,7 @@ pub fn printGetHelp() void {
         \\Subcommands:
         \\  get title                Get page title
         \\  get url                  Get current URL
+        \\  get useragent            Get browser user agent (alias: ua)
         \\  get text <sel>           Get text content
         \\  get html <sel>           Get innerHTML
         \\  get dom <sel>            Get outerHTML
@@ -1855,6 +1874,8 @@ pub fn printGetHelp() void {
         \\
         \\Examples:
         \\  get title
+        \\  get useragent
+        \\  get ua
         \\  get text "#header"
         \\  get attr "#link" href
         \\  get count "li.item"

@@ -262,6 +262,8 @@ fn executeCommand(state: *InteractiveState, line: []const u8) !void {
         try commands.cmdWait(state, args);
     } else if (eql(cmd, "mouse")) {
         try commands.cmdMouse(state, args);
+    } else if (eql(cmd, "set")) {
+        try commands.cmdSet(state, args);
     } else {
         std.debug.print("Unknown command: {s}\nType 'help' for available commands.\n", .{cmd});
     }

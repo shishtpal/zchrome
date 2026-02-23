@@ -1412,6 +1412,250 @@ fn printGetUsage() void {
     , .{});
 }
 
+// ─── Set (Session Emulation) ─────────────────────────────────────────────────
+
+pub fn set(session: *cdp.Session, ctx: CommandCtx) !void {
+    // Check for --help flag
+    for (ctx.positional) |arg| {
+        if (std.mem.eql(u8, arg, "--help")) {
+            printSetHelp();
+            return;
+        }
+    }
+
+    if (ctx.positional.len == 0) {
+        printSetUsage();
+        return;
+    }
+
+    const sub = ctx.positional[0];
+
+    // Load config for persistence
+    var config = config_mod.loadConfig(ctx.allocator, ctx.io) orelse config_mod.Config{};
+    defer config.deinit(ctx.allocator);
+
+    if (std.mem.eql(u8, sub, "viewport")) {
+        if (ctx.positional.len < 3) {
+            std.debug.print("Usage: set viewport <width> <height>\n", .{});
+            return;
+        }
+        const w = std.fmt.parseInt(u32, ctx.positional[1], 10) catch {
+            std.debug.print("Error: Invalid width\n", .{});
+            return;
+        };
+        const h = std.fmt.parseInt(u32, ctx.positional[2], 10) catch {
+            std.debug.print("Error: Invalid height\n", .{});
+            return;
+        };
+
+        // Apply via CDP Emulation.setDeviceMetricsOverride
+        _ = try session.sendCommand("Emulation.setDeviceMetricsOverride", .{
+            .width = w,
+            .height = h,
+            .deviceScaleFactor = 1.0,
+            .mobile = false,
+        });
+
+        config.viewport_width = w;
+        config.viewport_height = h;
+        try config_mod.saveConfig(config, ctx.allocator, ctx.io);
+        std.debug.print("Viewport set to {}x{}\n", .{ w, h });
+    } else if (std.mem.eql(u8, sub, "device")) {
+        if (ctx.positional.len < 2) {
+            std.debug.print("Usage: set device <name>\n", .{});
+            printDeviceList();
+            return;
+        }
+        const device_name = ctx.positional[1];
+        const device = getDeviceMetrics(device_name) orelse {
+            std.debug.print("Unknown device: {s}\n", .{device_name});
+            printDeviceList();
+            return;
+        };
+
+        // Apply via CDP
+        _ = try session.sendCommand("Emulation.setDeviceMetricsOverride", .{
+            .width = device.width,
+            .height = device.height,
+            .deviceScaleFactor = device.scale,
+            .mobile = device.mobile,
+        });
+
+        if (device.user_agent) |ua| {
+            _ = try session.sendCommand("Emulation.setUserAgentOverride", .{
+                .userAgent = ua,
+            });
+        }
+
+        if (config.device_name) |old| ctx.allocator.free(old);
+        config.device_name = ctx.allocator.dupe(u8, device_name) catch null;
+        config.viewport_width = device.width;
+        config.viewport_height = device.height;
+        try config_mod.saveConfig(config, ctx.allocator, ctx.io);
+        std.debug.print("Device emulation: {s} ({}x{})\n", .{ device_name, device.width, device.height });
+    } else if (std.mem.eql(u8, sub, "geo")) {
+        if (ctx.positional.len < 3) {
+            std.debug.print("Usage: set geo <lat> <lng>\n", .{});
+            return;
+        }
+        const lat = std.fmt.parseFloat(f64, ctx.positional[1]) catch {
+            std.debug.print("Error: Invalid latitude\n", .{});
+            return;
+        };
+        const lng = std.fmt.parseFloat(f64, ctx.positional[2]) catch {
+            std.debug.print("Error: Invalid longitude\n", .{});
+            return;
+        };
+
+        // Apply via CDP Emulation.setGeolocationOverride
+        _ = try session.sendCommand("Emulation.setGeolocationOverride", .{
+            .latitude = lat,
+            .longitude = lng,
+            .accuracy = 1.0,
+        });
+
+        config.geo_lat = lat;
+        config.geo_lng = lng;
+        try config_mod.saveConfig(config, ctx.allocator, ctx.io);
+        std.debug.print("Geolocation set to {d}, {d}\n", .{ lat, lng });
+    } else if (std.mem.eql(u8, sub, "offline")) {
+        if (ctx.positional.len < 2) {
+            std.debug.print("Usage: set offline <on|off>\n", .{});
+            return;
+        }
+        const offline = std.mem.eql(u8, ctx.positional[1], "on");
+
+        // Apply via CDP Network.emulateNetworkConditions
+        _ = try session.sendCommand("Network.emulateNetworkConditions", .{
+            .offline = offline,
+            .latency = 0,
+            .downloadThroughput = -1,
+            .uploadThroughput = -1,
+        });
+
+        config.offline = offline;
+        try config_mod.saveConfig(config, ctx.allocator, ctx.io);
+        std.debug.print("Offline mode: {}\n", .{offline});
+    } else if (std.mem.eql(u8, sub, "headers")) {
+        if (ctx.positional.len < 2) {
+            std.debug.print("Usage: set headers <json>\n", .{});
+            std.debug.print("Example: set headers '{{\"X-Custom\": \"value\"}}'\n", .{});
+            return;
+        }
+        const json_str = ctx.positional[1];
+
+        // Validate JSON
+        const parsed = std.json.parseFromSlice(std.json.Value, ctx.allocator, json_str, .{}) catch {
+            std.debug.print("Error: Invalid JSON\n", .{});
+            return;
+        };
+        defer parsed.deinit();
+
+        if (parsed.value != .object) {
+            std.debug.print("Error: Headers must be a JSON object\n", .{});
+            return;
+        }
+
+        // Save to config (applied on next navigate/session)
+        if (config.headers) |old| ctx.allocator.free(old);
+        config.headers = ctx.allocator.dupe(u8, json_str) catch null;
+        try config_mod.saveConfig(config, ctx.allocator, ctx.io);
+        std.debug.print("HTTP headers saved (applied on next navigate)\n", .{});
+    } else if (std.mem.eql(u8, sub, "credentials")) {
+        if (ctx.positional.len < 3) {
+            std.debug.print("Usage: set credentials <username> <password>\n", .{});
+            return;
+        }
+        const username = ctx.positional[1];
+        const password = ctx.positional[2];
+
+        // Save to config (applied on next navigate/session)
+        if (config.auth_user) |old| ctx.allocator.free(old);
+        config.auth_user = ctx.allocator.dupe(u8, username) catch null;
+        if (config.auth_pass) |old| ctx.allocator.free(old);
+        config.auth_pass = ctx.allocator.dupe(u8, password) catch null;
+        try config_mod.saveConfig(config, ctx.allocator, ctx.io);
+        std.debug.print("HTTP basic auth saved (applied on next navigate)\n", .{});
+    } else if (std.mem.eql(u8, sub, "media")) {
+        if (ctx.positional.len < 2) {
+            std.debug.print("Usage: set media <dark|light>\n", .{});
+            return;
+        }
+        const scheme = ctx.positional[1];
+        if (!std.mem.eql(u8, scheme, "dark") and !std.mem.eql(u8, scheme, "light")) {
+            std.debug.print("Error: Use 'dark' or 'light'\n", .{});
+            return;
+        }
+
+        // Apply via CDP Emulation.setEmulatedMedia
+        _ = try session.sendCommand("Emulation.setEmulatedMedia", .{
+            .features = &[_]struct { name: []const u8, value: []const u8 }{
+                .{ .name = "prefers-color-scheme", .value = scheme },
+            },
+        });
+
+        if (config.media_feature) |old| ctx.allocator.free(old);
+        config.media_feature = ctx.allocator.dupe(u8, scheme) catch null;
+        try config_mod.saveConfig(config, ctx.allocator, ctx.io);
+        std.debug.print("Color scheme set to {s}\n", .{scheme});
+    } else {
+        std.debug.print("Unknown subcommand: {s}\n", .{sub});
+        printSetUsage();
+    }
+}
+
+const DeviceMetrics = struct {
+    width: u32,
+    height: u32,
+    scale: f64,
+    mobile: bool,
+    user_agent: ?[]const u8,
+};
+
+fn getDeviceMetrics(name: []const u8) ?DeviceMetrics {
+    const devices = [_]struct { name: []const u8, metrics: DeviceMetrics }{
+        .{ .name = "iPhone 14", .metrics = .{ .width = 390, .height = 844, .scale = 3.0, .mobile = true, .user_agent = "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1" } },
+        .{ .name = "iPhone 14 Pro", .metrics = .{ .width = 393, .height = 852, .scale = 3.0, .mobile = true, .user_agent = "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1" } },
+        .{ .name = "iPhone 15", .metrics = .{ .width = 393, .height = 852, .scale = 3.0, .mobile = true, .user_agent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1" } },
+        .{ .name = "Pixel 7", .metrics = .{ .width = 412, .height = 915, .scale = 2.625, .mobile = true, .user_agent = "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36" } },
+        .{ .name = "Pixel 8", .metrics = .{ .width = 412, .height = 915, .scale = 2.625, .mobile = true, .user_agent = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Mobile Safari/537.36" } },
+        .{ .name = "iPad", .metrics = .{ .width = 768, .height = 1024, .scale = 2.0, .mobile = true, .user_agent = "Mozilla/5.0 (iPad; CPU OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1" } },
+        .{ .name = "iPad Pro", .metrics = .{ .width = 1024, .height = 1366, .scale = 2.0, .mobile = true, .user_agent = "Mozilla/5.0 (iPad; CPU OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1" } },
+        .{ .name = "Desktop", .metrics = .{ .width = 1920, .height = 1080, .scale = 1.0, .mobile = false, .user_agent = null } },
+        .{ .name = "Desktop HD", .metrics = .{ .width = 1366, .height = 768, .scale = 1.0, .mobile = false, .user_agent = null } },
+        .{ .name = "Desktop 4K", .metrics = .{ .width = 3840, .height = 2160, .scale = 1.0, .mobile = false, .user_agent = null } },
+    };
+
+    for (devices) |d| {
+        if (std.ascii.eqlIgnoreCase(d.name, name)) return d.metrics;
+    }
+    return null;
+}
+
+fn printDeviceList() void {
+    std.debug.print("Available devices:\n", .{});
+    std.debug.print("  iPhone 14, iPhone 14 Pro, iPhone 15\n", .{});
+    std.debug.print("  Pixel 7, Pixel 8\n", .{});
+    std.debug.print("  iPad, iPad Pro\n", .{});
+    std.debug.print("  Desktop, Desktop HD, Desktop 4K\n", .{});
+}
+
+fn printSetUsage() void {
+    std.debug.print(
+        \\Usage: set <subcommand> [args]
+        \\
+        \\Subcommands:
+        \\  viewport <w> <h>      Set viewport size
+        \\  device <name>         Emulate device
+        \\  geo <lat> <lng>       Set geolocation
+        \\  offline <on|off>      Toggle offline mode
+        \\  headers <json>        Set extra HTTP headers
+        \\  credentials <u> <p>   Set HTTP basic auth
+        \\  media <dark|light>    Set prefers-color-scheme
+        \\
+    , .{});
+}
+
 // ─── Dispatch ───────────────────────────────────────────────────────────────
 
 /// Dispatch a session-level command. Returns true if handled.
@@ -1447,6 +1691,7 @@ pub fn dispatchSessionCommand(session: *cdp.Session, command: anytype, ctx: Comm
         .keyup => try keyUp(session, ctx),
         .wait => try wait(session, ctx),
         .mouse => try mouse(session, ctx),
+        .set => try set(session, ctx),
         else => {
             std.debug.print("Warning: unhandled command in dispatchSessionCommand\n", .{});
             return false;
@@ -1625,6 +1870,40 @@ pub fn printWindowHelp() void {
         \\
         \\Examples:
         \\  window new           # Open new browser window
+        \\
+    , .{});
+}
+
+pub fn printSetHelp() void {
+    std.debug.print(
+        \\Usage: set <subcommand> [args]
+        \\
+        \\Configure browser session settings. Settings are applied immediately
+        \\via CDP and persisted to zchrome.json for future sessions.
+        \\
+        \\Subcommands:
+        \\  set viewport <w> <h>        Set viewport size in pixels
+        \\  set device <name>           Emulate device (viewport + user agent)
+        \\  set geo <lat> <lng>         Set geolocation coordinates
+        \\  set offline <on|off>        Toggle offline mode
+        \\  set headers <json>          Set extra HTTP headers
+        \\  set credentials <u> <p>     Set HTTP basic auth credentials
+        \\  set media <dark|light>      Set prefers-color-scheme
+        \\
+        \\Available devices:
+        \\  iPhone 14, iPhone 14 Pro, iPhone 15
+        \\  Pixel 7, Pixel 8
+        \\  iPad, iPad Pro
+        \\  Desktop, Desktop HD, Desktop 4K
+        \\
+        \\Examples:
+        \\  set viewport 1920 1080          # Full HD viewport
+        \\  set device "iPhone 14"          # Emulate iPhone 14
+        \\  set geo 37.7749 -122.4194       # San Francisco
+        \\  set offline on                  # Simulate offline
+        \\  set headers '{{"X-Custom":"val"}}'  # Add custom header
+        \\  set credentials admin secret    # HTTP basic auth
+        \\  set media dark                  # Dark mode
         \\
     , .{});
 }

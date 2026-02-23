@@ -412,3 +412,8 @@ pub fn cmdMouse(state: *InteractiveState, args: []const []const u8) !void {
         state.mouse_y = std.fmt.parseFloat(f64, args[2]) catch state.mouse_y;
     }
 }
+
+pub fn cmdSet(state: *InteractiveState, args: []const []const u8) !void {
+    const session = try requireSession(state);
+    try impl.set(session, buildCtx(state, args));
+}

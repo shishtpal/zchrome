@@ -10,11 +10,28 @@ pub const Config = struct {
     last_mouse_x: ?f64 = null,
     last_mouse_y: ?f64 = null,
 
+    // Session settings
+    viewport_width: ?u32 = null,
+    viewport_height: ?u32 = null,
+    device_name: ?[]const u8 = null,
+    geo_lat: ?f64 = null,
+    geo_lng: ?f64 = null,
+    offline: ?bool = null,
+    headers: ?[]const u8 = null,
+    auth_user: ?[]const u8 = null,
+    auth_pass: ?[]const u8 = null,
+    media_feature: ?[]const u8 = null,
+
     pub fn deinit(self: *Config, allocator: std.mem.Allocator) void {
         if (self.chrome_path) |p| allocator.free(p);
         if (self.data_dir) |d| allocator.free(d);
         if (self.ws_url) |u| allocator.free(u);
         if (self.last_target) |t| allocator.free(t);
+        if (self.device_name) |d| allocator.free(d);
+        if (self.headers) |h| allocator.free(h);
+        if (self.auth_user) |u| allocator.free(u);
+        if (self.auth_pass) |p| allocator.free(p);
+        if (self.media_feature) |m| allocator.free(m);
         self.* = .{};
     }
 };
@@ -76,6 +93,39 @@ pub fn loadConfig(allocator: std.mem.Allocator, io: std.Io) ?Config {
     if (parsed.value.object.get("last_mouse_y")) |v| {
         if (v == .float) config.last_mouse_y = v.float;
         if (v == .integer) config.last_mouse_y = @floatFromInt(v.integer);
+    }
+
+    if (parsed.value.object.get("viewport_width")) |v| {
+        if (v == .integer) config.viewport_width = @intCast(v.integer);
+    }
+    if (parsed.value.object.get("viewport_height")) |v| {
+        if (v == .integer) config.viewport_height = @intCast(v.integer);
+    }
+    if (parsed.value.object.get("device_name")) |v| {
+        if (v == .string) config.device_name = allocator.dupe(u8, v.string) catch null;
+    }
+    if (parsed.value.object.get("geo_lat")) |v| {
+        if (v == .float) config.geo_lat = v.float;
+        if (v == .integer) config.geo_lat = @floatFromInt(v.integer);
+    }
+    if (parsed.value.object.get("geo_lng")) |v| {
+        if (v == .float) config.geo_lng = v.float;
+        if (v == .integer) config.geo_lng = @floatFromInt(v.integer);
+    }
+    if (parsed.value.object.get("offline")) |v| {
+        if (v == .bool) config.offline = v.bool;
+    }
+    if (parsed.value.object.get("headers")) |v| {
+        if (v == .string) config.headers = allocator.dupe(u8, v.string) catch null;
+    }
+    if (parsed.value.object.get("auth_user")) |v| {
+        if (v == .string) config.auth_user = allocator.dupe(u8, v.string) catch null;
+    }
+    if (parsed.value.object.get("auth_pass")) |v| {
+        if (v == .string) config.auth_pass = allocator.dupe(u8, v.string) catch null;
+    }
+    if (parsed.value.object.get("media_feature")) |v| {
+        if (v == .string) config.media_feature = allocator.dupe(u8, v.string) catch null;
     }
 
     return config;
@@ -144,6 +194,75 @@ pub fn saveConfig(config: Config, allocator: std.mem.Allocator, io: std.Io) !voi
         const y_str = try std.fmt.allocPrint(allocator, "  \"last_mouse_y\": {d}", .{y});
         defer allocator.free(y_str);
         try json_buf.appendSlice(allocator, y_str);
+    }
+
+    if (config.viewport_width) |w| {
+        if (!first) try json_buf.appendSlice(allocator, ",\n");
+        first = false;
+        const s = try std.fmt.allocPrint(allocator, "  \"viewport_width\": {}", .{w});
+        defer allocator.free(s);
+        try json_buf.appendSlice(allocator, s);
+    }
+    if (config.viewport_height) |h| {
+        if (!first) try json_buf.appendSlice(allocator, ",\n");
+        first = false;
+        const s = try std.fmt.allocPrint(allocator, "  \"viewport_height\": {}", .{h});
+        defer allocator.free(s);
+        try json_buf.appendSlice(allocator, s);
+    }
+    if (config.device_name) |d| {
+        if (!first) try json_buf.appendSlice(allocator, ",\n");
+        first = false;
+        try json_buf.appendSlice(allocator, "  \"device_name\": \"");
+        try appendEscapedString(&json_buf, allocator, d);
+        try json_buf.appendSlice(allocator, "\"");
+    }
+    if (config.geo_lat) |lat| {
+        if (!first) try json_buf.appendSlice(allocator, ",\n");
+        first = false;
+        const s = try std.fmt.allocPrint(allocator, "  \"geo_lat\": {d}", .{lat});
+        defer allocator.free(s);
+        try json_buf.appendSlice(allocator, s);
+    }
+    if (config.geo_lng) |lng| {
+        if (!first) try json_buf.appendSlice(allocator, ",\n");
+        first = false;
+        const s = try std.fmt.allocPrint(allocator, "  \"geo_lng\": {d}", .{lng});
+        defer allocator.free(s);
+        try json_buf.appendSlice(allocator, s);
+    }
+    if (config.offline) |off| {
+        if (!first) try json_buf.appendSlice(allocator, ",\n");
+        first = false;
+        try json_buf.appendSlice(allocator, if (off) "  \"offline\": true" else "  \"offline\": false");
+    }
+    if (config.headers) |h| {
+        if (!first) try json_buf.appendSlice(allocator, ",\n");
+        first = false;
+        try json_buf.appendSlice(allocator, "  \"headers\": \"");
+        try appendEscapedString(&json_buf, allocator, h);
+        try json_buf.appendSlice(allocator, "\"");
+    }
+    if (config.auth_user) |u| {
+        if (!first) try json_buf.appendSlice(allocator, ",\n");
+        first = false;
+        try json_buf.appendSlice(allocator, "  \"auth_user\": \"");
+        try appendEscapedString(&json_buf, allocator, u);
+        try json_buf.appendSlice(allocator, "\"");
+    }
+    if (config.auth_pass) |p| {
+        if (!first) try json_buf.appendSlice(allocator, ",\n");
+        first = false;
+        try json_buf.appendSlice(allocator, "  \"auth_pass\": \"");
+        try appendEscapedString(&json_buf, allocator, p);
+        try json_buf.appendSlice(allocator, "\"");
+    }
+    if (config.media_feature) |m| {
+        if (!first) try json_buf.appendSlice(allocator, ",\n");
+        first = false;
+        try json_buf.appendSlice(allocator, "  \"media_feature\": \"");
+        try appendEscapedString(&json_buf, allocator, m);
+        try json_buf.appendSlice(allocator, "\"");
     }
 
     try json_buf.appendSlice(allocator, "\n}\n");

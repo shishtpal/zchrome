@@ -40,6 +40,8 @@ pub const Fetch = @import("domains/fetch.zig").Fetch;
 pub const Performance = @import("domains/performance.zig").Performance;
 pub const BrowserDomain = @import("domains/browser.zig").BrowserDomain;
 pub const Storage = @import("domains/storage.zig").Storage;
+pub const Cookie = @import("domains/storage.zig").Cookie;
+pub const CookieParam = @import("domains/storage.zig").CookieParam;
 
 // Utilities
 pub const json = @import("util/json.zig");

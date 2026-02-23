@@ -384,6 +384,7 @@ pub fn cookies(session: *cdp.Session, ctx: CommandCtx) !void {
         // cookies clear
         ...
     }
+    // Other subcommands: get, delete, export, import
     // Default: list all cookies
     ...
 }

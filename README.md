@@ -86,7 +86,7 @@ zchrome --url ws://127.0.0.1:9222/devtools/browser/<guid> evaluate "document.tit
 | `evaluate <expr>` | Run JavaScript |
 | `dom <selector>` | Print DOM structure |
 | `network` | Monitor network requests |
-| `cookies` | List, set, or clear cookies |
+| `cookies` | List, get, set, delete, clear, export, import cookies |
 | `storage local\|session` | Get/set/clear web storage |
 | `tab` | List, open, switch, close tabs |
 | `window new` | Open new browser window |
@@ -165,7 +165,7 @@ pub fn main(init: std.process.Init) !void {
 | `evaluate <expr>` | Run JavaScript |
 | `dom` | Print DOM structure |
 | `network` | Monitor network requests |
-| `cookies` | List, set, or clear cookies |
+| `cookies` | List, get, set, delete, clear, export, import cookies |
 | `storage local` | Get/set/clear localStorage |
 | `storage session` | Get/set/clear sessionStorage |
 | `tab` | List, open, switch, close tabs |

@@ -59,9 +59,13 @@ pub fn printHelp() void {
         \\Inspection:
         \\  evaluate <expr>       Evaluate JavaScript (aliases: eval, js)
         \\  dom <selector>        Query DOM element
-        \\  cookies               List cookies
+        \\  cookies               List cookies (optional [domain])
+        \\  cookies get <n> [d]   Get cookie by name (optional [domain])
         \\  cookies set <n> <v>   Set a cookie
-        \\  cookies clear         Clear all cookies
+        \\  cookies delete <n> [d] Delete cookie by name (optional [domain])
+        \\  cookies clear [d]     Clear all cookies (optional [domain])
+        \\  cookies export <p> [d] Export cookies to file (optional [domain])
+        \\  cookies import <p> [d] Import cookies from file (optional [domain])
         \\  storage local         Get all localStorage (JSON)
         \\  storage local <key>   Get specific key
         \\  storage local set <k> <v>  Set value

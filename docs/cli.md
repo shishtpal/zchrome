@@ -197,9 +197,13 @@ Network monitoring is not yet fully implemented in the CLI.
 Manage browser cookies. Without a subcommand, lists all cookies for the current page.
 
 ```bash
-zchrome cookies                   # List all cookies
-zchrome cookies set <name> <val>  # Set a cookie
-zchrome cookies clear             # Clear all cookies
+zchrome cookies [domain]                 # List all cookies (optional domain filter)
+zchrome cookies get <name> [domain]      # Get a specific cookie
+zchrome cookies set <name> <val>         # Set a cookie
+zchrome cookies delete <name> [domain]   # Delete a cookie
+zchrome cookies clear [domain]           # Clear all cookies (optional domain filter)
+zchrome cookies export <path> [domain]   # Export cookies to JSON file
+zchrome cookies import <path> [domain]   # Import cookies from JSON file
 ```
 
 **Examples:**
@@ -207,17 +211,31 @@ zchrome cookies clear             # Clear all cookies
 ```bash
 # List all cookies
 zchrome cookies
-
 # Output:
 # Name                           Value                                    Domain
 # ------------------------------------------------------------------------------------------
 # session_id                     abc123...                                .example.com
 
+# List cookies for a specific domain
+zchrome cookies .google.com
+
+# Get a specific cookie
+zchrome cookies get session_id
+
 # Set a cookie (uses current page URL for domain)
 zchrome cookies set theme dark
 
-# Clear all cookies
-zchrome cookies clear
+# Delete a cookie
+zchrome cookies delete tracking_id
+
+# Clear all cookies for a domain
+zchrome cookies clear .example.com
+
+# Export cookies
+zchrome cookies export cookies.json
+
+# Import cookies (override domain)
+zchrome cookies import cookies.json .staging.example.com
 ```
 
 ### storage

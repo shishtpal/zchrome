@@ -1131,35 +1131,31 @@ fn printUsage() void {
         \\COMMANDS:
         \\  open                     Launch Chrome with remote debugging
         \\  connect                  Connect to running Chrome, get WebSocket URL
-        \\  navigate <url>           Navigate to URL, print final URL + title
         \\  screenshot [url]         Capture PNG screenshot
         \\  pdf [url]                Generate PDF
         \\  evaluate [url] <expr>    Evaluate JS expression
         \\  network [url]            Log network requests
-        \\  cookies                  List all cookies
-        \\  cookies set <n> <v>      Set a cookie
-        \\  cookies clear            Clear all cookies
-        \\  storage local            Get all localStorage entries (JSON)
-        \\  storage local <key>      Get specific localStorage key
-        \\  storage local set <k> <v> Set localStorage value
-        \\  storage local clear      Clear all localStorage
-        \\  storage session          Same commands for sessionStorage
         \\  snapshot                 Capture accessibility tree of active page, save to zsnap.json
+        \\  version                  Print browser version info
+        \\  help                     Show this help message
+        \\
+        \\REPL COMMANDS (interactive mode):
+        \\  interactive              REPL: enter CDP commands as JSON
+        \\
+        \\NAVIGATION:
+        \\  navigate <url>           Navigate to URL, print final URL + title
+        \\  back                     Go back in history
+        \\  forward                  Go forward in history
+        \\  reload                   Reload current page
+        \\
+        \\TAB MANAGEMENT:
         \\  tab                      List open tabs (numbered)
         \\  tab new [url]            Open new tab (optionally navigate to URL)
         \\  tab <n>                  Switch to tab n
         \\  tab close [n]            Close tab n (default: current)
         \\  window new               Open new browser window
-        \\  version                  Print browser version info
         \\  list-targets             List all open targets
         \\  pages                    List all open pages with target IDs
-        \\  interactive              REPL: enter CDP commands as JSON
-        \\  help                     Show this help message
-        \\
-        \\NAVIGATION:
-        \\  back                     Go back in history
-        \\  forward                  Go forward in history
-        \\  reload                   Reload current page
         \\
         \\ELEMENT ACTIONS:
         \\  click <sel>              Click element (CSS selector or @ref)
@@ -1206,6 +1202,16 @@ fn printUsage() void {
         \\  wait --match "pattern"   Wait for URL to match glob pattern
         \\  wait --load <state>      Wait for load state (load, domcontentloaded, networkidle)
         \\  wait --fn "expression"   Wait for JS expression to return truthy
+        \\
+        \\COOKIE MANAGEMENT:
+        \\  cookies                  List all cookies
+        \\  cookies set <n> <v>      Set a cookie
+        \\  cookies clear            Clear all cookies
+        \\  storage local            Get all localStorage entries (JSON)
+        \\  storage local <key>      Get specific localStorage key
+        \\  storage local set <k> <v> Set localStorage value
+        \\  storage local clear      Clear all localStorage
+        \\  storage session          Same commands for sessionStorage
         \\
         \\SNAPSHOT OPTIONS:
         \\  -i, --interactive-only   Only include interactive elements

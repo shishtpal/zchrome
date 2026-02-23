@@ -1008,6 +1008,127 @@ zchrome cursor hover
 
 **Note:** The `cursor hover` command uses the last saved mouse position from `zchrome.json`. You must use `mouse move` first to set the position.
 
+### cursor record
+
+Record mouse and keyboard events to a JSON macro file. Press Enter to stop recording.
+
+```bash
+zchrome cursor record <filename.json>
+```
+
+**Example:**
+
+```bash
+# Start recording
+zchrome cursor record macro.json
+# Recording... Press Enter to stop.
+# (interact with the page)
+# Recorded 42 events to macro.json
+```
+
+**Output Format:**
+
+The macro file is a JSON file with the following structure:
+
+```json
+{
+  "version": 1,
+  "recorded_at": "2026-02-23T15:20:00Z",
+  "events": [
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "x": 100.0,
+      "y": 200.0
+    },
+    {
+      "type": "mousedown",
+      "timestamp": 150,
+      "x": 100.0,
+      "y": 200.0,
+      "button": "left"
+    },
+    {
+      "type": "keydown",
+      "timestamp": 300,
+      "key": "a",
+      "code": "KeyA",
+      "modifiers": 0
+    }
+  ]
+}
+```
+
+**Event Types:**
+- `mousemove` - Mouse movement (x, y coordinates)
+- `mousedown` - Mouse button pressed (button: left/right/middle)
+- `mouseup` - Mouse button released
+- `wheel` - Mouse wheel scroll (deltaX, deltaY)
+- `keydown` - Key pressed (key, code, modifiers)
+- `keyup` - Key released
+
+### cursor replay
+
+Replay recorded events from a macro file.
+
+```bash
+zchrome cursor replay <filename.json>
+```
+
+**Example:**
+
+```bash
+# Replay recorded events
+zchrome cursor replay macro.json
+# Replaying 42 events from macro.json...
+# Replay complete.
+```
+
+**Timing:** Events are replayed with the original timing preserved. The delay between events is calculated from the timestamps in the macro file.
+
+### cursor optimize
+
+Optimize a macro file by removing redundant events and rescaling timing.
+
+```bash
+zchrome cursor optimize <filename.json> [--speed=N]
+```
+
+**Options:**
+- `--speed=N` - Speed multiplier (default: 3)
+  - Positive values speed up playback (divide delays)
+  - Negative values slow down playback (multiply delays)
+  - `0` preserves original timing
+
+**Example:**
+
+```bash
+# Speed up playback by 3x (default)
+zchrome cursor optimize macro.json
+
+# Speed up by 5x
+zchrome cursor optimize macro.json --speed=5
+
+# Slow down by 2x
+zchrome cursor optimize macro.json --speed=-2
+
+# Preserve original timing
+zchrome cursor optimize macro.json --speed=0
+```
+
+**Output:**
+
+```
+Optimized macro.json: 42 -> 38 events (speed=3)
+```
+
+**Optimization Details:**
+- Merges consecutive `mousemove` events within 15ms
+- Rescales all event timestamps based on speed multiplier
+- Reduces file size and improves replay performance
+
+## Wait Commands
+
 Wait for various conditions before proceeding. All wait commands have a default timeout of 30 seconds (configurable with `--timeout`).
 
 ### wait (selector)

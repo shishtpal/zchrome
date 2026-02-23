@@ -70,6 +70,9 @@ MOUSE:
 CURSOR:
   cursor active            Show the currently focused element
   cursor hover             Show the element under the mouse cursor
+  cursor record <file>     Record mouse/keyboard events to JSON file
+  cursor replay <file>     Replay events from JSON file
+  cursor optimize <file>   Optimize macro JSON (remove redundant events)
 
 GETTERS:
   get text <sel>           Get text content
@@ -171,6 +174,10 @@ EXAMPLES:
   # Cursor info
   zchrome cursor active                 # Show focused element
   zchrome cursor hover                  # Show element at mouse position
+
+  # Macro recording and playback
+  zchrome cursor record macro.json      # Record events (Enter to stop)
+  zchrome cursor replay macro.json      # Replay recorded events
 
   # Wait for conditions
   zchrome wait "#login-form"            # Wait for element

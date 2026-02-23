@@ -111,6 +111,14 @@ pub const printMouseHelp = mouse_mod.printMouseHelp;
 pub const cursor = cursor_mod.cursor;
 pub const printCursorHelp = cursor_mod.printCursorHelp;
 
+// ─── Macro Re-exports ────────────────────────────────────────────────────────
+
+const macro_mod = @import("macro.zig");
+pub const Macro = macro_mod.Macro;
+pub const MacroEvent = macro_mod.MacroEvent;
+pub const loadMacro = macro_mod.loadMacro;
+pub const saveMacro = macro_mod.saveMacro;
+
 // ─── Wait Re-exports ─────────────────────────────────────────────────────────
 
 pub const wait = wait_mod.wait;

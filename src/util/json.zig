@@ -227,6 +227,31 @@ pub fn decode(
     }
 }
 
+/// Escape a string for JSON output (handles quotes, backslashes, control chars)
+/// Returns an allocated string with proper JSON escaping
+pub fn escapeString(allocator: std.mem.Allocator, s: []const u8) ![]const u8 {
+    var result: std.ArrayList(u8) = .empty;
+    errdefer result.deinit(allocator);
+
+    for (s) |c| {
+        switch (c) {
+            '"' => try result.appendSlice(allocator, "\\\""),
+            '\\' => try result.appendSlice(allocator, "\\\\"),
+            '\n' => try result.appendSlice(allocator, "\\n"),
+            '\r' => try result.appendSlice(allocator, "\\r"),
+            '\t' => try result.appendSlice(allocator, "\\t"),
+            0...7, 11, 14...31 => {
+                try result.appendSlice(allocator, "\\u00");
+                try result.append(allocator, "0123456789ABCDEF"[c >> 4]);
+                try result.append(allocator, "0123456789ABCDEF"[c & 0xF]);
+            },
+            else => try result.append(allocator, c),
+        }
+    }
+
+    return result.toOwnedSlice(allocator);
+}
+
 /// Serialize a Zig value to a JSON string (returns allocated string)
 pub fn stringifyValueToString(allocator: std.mem.Allocator, value: anytype) ![]const u8 {
     const T = @TypeOf(value);

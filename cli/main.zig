@@ -3,7 +3,7 @@ const cdp = @import("cdp");
 const config_mod = @import("config.zig");
 const http_mod = @import("http.zig");
 const interactive_mod = @import("interactive/mod.zig");
-const impl = @import("command_impl.zig");
+const impl = @import("commands/mod.zig");
 
 /// Save target ID to config file for subsequent commands
 fn saveTargetToConfig(target_id: []const u8, args: Args, allocator: std.mem.Allocator, io: std.Io) void {

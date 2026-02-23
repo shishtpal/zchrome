@@ -8,7 +8,7 @@ const cdp = @import("cdp");
 const help = @import("help.zig");
 const config_mod = @import("../config.zig");
 const snapshot_mod = @import("../snapshot.zig");
-const impl = @import("../command_impl.zig");
+const impl = @import("../commands/mod.zig");
 const InteractiveState = @import("mod.zig").InteractiveState;
 
 fn eql(a: []const u8, b: []const u8) bool {

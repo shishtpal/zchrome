@@ -226,9 +226,9 @@ zig build test
 | `src/util/json.zig` | JSON parsing helpers |
 | `src/util/yaml.zig` | YAML serialization for flat string maps |
 | `cli/main.zig` | CLI entry point, arg parsing, browser lifecycle |
-| `cli/command_impl.zig` | Shared command implementations (session-level) |
+| `cli/commands/*.zig` | Shared command implementations (session-level, modular) |
 | `cli/interactive/mod.zig` | REPL loop, tokenizer, command dispatch |
-| `cli/interactive/commands.zig` | REPL command wrappers (delegate to command_impl) |
+| `cli/interactive/commands.zig` | REPL command wrappers (delegate to commands/mod.zig) |
 | `cli/actions/*.zig` | Low-level element/keyboard/getter actions |
 
 ## CLI Architecture
@@ -239,7 +239,21 @@ Commands are structured in three layers to avoid code duplication:
 
 ```
 cli/main.zig              CLI entry point, arg parsing, browser lifecycle
-cli/command_impl.zig      Shared command implementations (session + CommandCtx → action)
+cli/commands/              Modular command implementations
+  mod.zig                 Re-exports all command modules
+  types.zig               CommandCtx struct
+  emulation.zig           Browser emulation helpers
+  navigation.zig          navigate, back, forward, reload
+  capture.zig             screenshot, pdf, snapshot
+  cookies.zig             Cookie management
+  storage.zig             localStorage/sessionStorage
+  elements.zig            click, fill, check, etc.
+  keyboard.zig            press, keyDown, keyUp
+  mouse.zig               mouse move/down/up/wheel
+  wait.zig                Wait conditions
+  getters.zig             get text/html/value/attr
+  setters.zig             set viewport/device/ua/geo
+  dispatch.zig            dispatchSessionCommand
 cli/interactive/           REPL mode
   mod.zig                 REPL loop, tokenizer, command dispatch
   commands.zig            Thin wrappers: requireSession → impl.xxx()
@@ -253,8 +267,8 @@ cli/actions/               Low-level element/keyboard actions
   types.zig               ResolvedElement, ElementPosition
 ```
 
-**`cli/command_impl.zig`** is the single source of truth for all session-level
-command logic. Every function has the signature:
+**`cli/commands/`** is the single source of truth for all session-level
+command logic. Each command module contains functions with the signature:
 
 ```zig
 pub fn click(session: *cdp.Session, ctx: CommandCtx) !void { ... }
@@ -263,9 +277,10 @@ pub fn click(session: *cdp.Session, ctx: CommandCtx) !void { ... }
 `CommandCtx` is a lightweight struct containing `allocator`, `io`,
 `positional` args, and optional flags (`output`, `full_page`, `snap_*`).
 
-A `dispatchSessionCommand(session, command_enum, ctx)` function switches on the
-command enum and calls the right implementation. It returns `false` for
-commands it doesn't handle (e.g. `version`, `pages`).
+The `dispatchSessionCommand(session, command_enum, ctx)` function in
+`cli/commands/dispatch.zig` switches on the command enum and calls the right
+implementation. It returns `false` for commands it doesn't handle (e.g.
+`version`, `pages`).
 
 **`cli/main.zig`** handles two categories of commands:
 - **Browser-level** commands that manage their own session/page lifecycle
@@ -313,10 +328,12 @@ for dispatch. The first positional becomes the subcommand (`set`, `clear`,
 Session-level commands (that operate on an existing page) require 4 steps:
 
 1. **Add to enum** — `Args.Command` in `cli/main.zig`
-2. **Implement** — Add a `pub fn myCommand(session, ctx)` in `cli/command_impl.zig`
-3. **Register dispatch** — Add a `.mycommand => try myCommand(session, ctx)` arm
-   to `dispatchSessionCommand()` in `cli/command_impl.zig`
-4. **Wire up REPL** — Add a `cmdMyCommand()` wrapper in
+2. **Implement** — Create or add to appropriate file in `cli/commands/` (e.g.
+   `elements.zig` for element actions, `getters.zig` for data retrieval)
+3. **Re-export** — Add re-export in `cli/commands/mod.zig`
+4. **Register dispatch** — Add a `.mycommand => try ...` arm to
+   `dispatchSessionCommand()` in `cli/commands/dispatch.zig`
+5. **Wire up REPL** — Add a `cmdMyCommand()` wrapper in
    `cli/interactive/commands.zig` and its dispatch entry in
    `cli/interactive/mod.zig`'s `executeCommand()`
 
@@ -343,7 +360,7 @@ const Command = enum {
     // ...
 };
 
-// 2. cli/command_impl.zig — implement
+// 2. cli/commands/elements.zig — implement
 pub fn highlight(session: *cdp.Session, ctx: CommandCtx) !void {
     if (ctx.positional.len == 0) {
         std.debug.print("Usage: highlight <selector>\n", .{});
@@ -353,16 +370,19 @@ pub fn highlight(session: *cdp.Session, ctx: CommandCtx) !void {
     std.debug.print("Highlighted: {s}\n", .{ctx.positional[0]});
 }
 
-// 3. cli/command_impl.zig — add to dispatchSessionCommand switch
-.highlight => try highlight(session, ctx),
+// 3. cli/commands/mod.zig — add re-export
+pub const highlight = elements.highlight;
 
-// 4. cli/interactive/commands.zig — add REPL wrapper
+// 4. cli/commands/dispatch.zig — add to dispatchSessionCommand switch
+.highlight => try elements.highlight(session, ctx),
+
+// 5. cli/interactive/commands.zig — add REPL wrapper
 pub fn cmdHighlight(state: *InteractiveState, args: []const []const u8) !void {
     const session = try requireSession(state);
     try impl.highlight(session, buildCtx(state, args));
 }
 
-// 5. cli/interactive/mod.zig — add to executeCommand()
+// 6. cli/interactive/mod.zig — add to executeCommand()
 } else if (eql(cmd, "highlight")) {
     try commands.cmdHighlight(state, args);
 }
@@ -373,7 +393,7 @@ pub fn cmdHighlight(state: *InteractiveState, args: []const []const u8) !void {
 Commands like `cookies` and `storage` use positional args as subcommands:
 
 ```zig
-// In command_impl.zig:
+// In cli/commands/cookies.zig:
 pub fn cookies(session: *cdp.Session, ctx: CommandCtx) !void {
     if (ctx.positional.len > 0 and std.mem.eql(u8, ctx.positional[0], "set")) {
         // cookies set <name> <value>

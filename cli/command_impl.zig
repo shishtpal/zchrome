@@ -1472,12 +1472,12 @@ pub fn printCookiesHelp() void {
         \\Usage: cookies [subcommand] [args]
         \\
         \\Subcommands:
-        \\  cookies                    List all cookies
-        \\  cookies <domain>         List cookies for specific domain
-        \\  cookies set <name> <value> Set a cookie
-        \\  cookies get <name> [domain] Get specific cookie
+        \\  cookies                        List all cookies
+        \\  cookies <domain>               List cookies for specific domain
+        \\  cookies set <name> <value>     Set a cookie
+        \\  cookies get <name> [domain]    Get specific cookie
         \\  cookies delete <name> [domain] Delete specific cookie
-        \\  cookies clear [domain]     Clear all cookies (or for domain)
+        \\  cookies clear [domain]         Clear all cookies (or for domain)
         \\  cookies export <path> [domain] Export cookies to JSON file
         \\  cookies import <path> [domain] Import cookies from JSON file
         \\

@@ -645,7 +645,7 @@ fn printTabUsage() void {
 /// Window command - new window
 fn cmdWindow(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
     _ = allocator;
-    
+
     // Check for --help flag
     for (args.positional) |arg| {
         if (std.mem.eql(u8, arg, "--help")) {
@@ -653,7 +653,7 @@ fn cmdWindow(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !v
             return;
         }
     }
-    
+
     if (args.positional.len >= 1 and std.mem.eql(u8, args.positional[0], "new")) {
         _ = try browser.connection.sendCommand("Target.createTarget", .{
             .url = "about:blank",
@@ -815,7 +815,7 @@ fn cmdSnapshot(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) 
 }
 
 /// Find the first "real" page (skipping devtools://, chrome://, etc.)
-fn findFirstRealPage(pages: []const cdp.TargetInfo) ?*const cdp.TargetInfo {
+fn findFirstRealPage(pages: []cdp.TargetInfo) ?*cdp.TargetInfo {
     for (pages) |*p| {
         // Skip internal browser pages
         if (std.mem.startsWith(u8, p.url, "devtools://")) continue;
@@ -827,113 +827,6 @@ fn findFirstRealPage(pages: []const cdp.TargetInfo) ?*const cdp.TargetInfo {
     // Fallback to first page if no "real" page found
     if (pages.len > 0) return &pages[0];
     return null;
-}
-
-/// Set command - update config without browser connection
-fn cmdSet(args: Args, allocator: std.mem.Allocator, io: std.Io) !void {
-    // Check for --help flag
-    for (args.positional) |arg| {
-        if (std.mem.eql(u8, arg, "--help")) {
-            impl.printSetHelp();
-            return;
-        }
-    }
-
-    if (args.positional.len < 1) {
-        std.debug.print(
-            \\Usage: zchrome set <subcommand> [args]
-            \\
-            \\Subcommands:
-            \\  viewport <w> <h>      Set viewport size
-            \\  device <name>         Emulate device ("iPhone 14", "Pixel 7", "Desktop")
-            \\  geo <lat> <lng>       Set geolocation
-            \\  offline <on|off>      Toggle offline mode
-            \\  headers <json>        Set extra HTTP headers
-            \\  credentials <u> <p>   Set HTTP basic auth credentials
-            \\  media <dark|light>    Set prefers-color-scheme
-            \\
-        , .{});
-        return;
-    }
-    const sub = args.positional[0];
-
-    var config = config_mod.loadConfig(allocator, io) orelse config_mod.Config{};
-    defer config.deinit(allocator);
-
-    if (std.mem.eql(u8, sub, "viewport")) {
-        if (args.positional.len < 3) {
-            std.debug.print("Usage: set viewport <width> <height>\n", .{});
-            return;
-        }
-        const w = try std.fmt.parseInt(u32, args.positional[1], 10);
-        const h = try std.fmt.parseInt(u32, args.positional[2], 10);
-        config.viewport_width = w;
-        config.viewport_height = h;
-        std.debug.print("Viewport set to {}x{}\n", .{ w, h });
-    } else if (std.mem.eql(u8, sub, "device")) {
-        if (args.positional.len < 2) {
-            std.debug.print("Usage: set device <name>\n", .{});
-            return;
-        }
-        if (config.device_name) |old| allocator.free(old);
-        config.device_name = try allocator.dupe(u8, args.positional[1]);
-        std.debug.print("Device set to {s}\n", .{config.device_name.?});
-    } else if (std.mem.eql(u8, sub, "geo")) {
-        if (args.positional.len < 3) {
-            std.debug.print("Usage: set geo <lat> <lng>\n", .{});
-            return;
-        }
-        const lat = try std.fmt.parseFloat(f64, args.positional[1]);
-        const lng = try std.fmt.parseFloat(f64, args.positional[2]);
-        config.geo_lat = lat;
-        config.geo_lng = lng;
-        std.debug.print("Geolocation set to {d}, {d}\n", .{ lat, lng });
-    } else if (std.mem.eql(u8, sub, "offline")) {
-        if (args.positional.len < 2) {
-            std.debug.print("Usage: set offline <on|off>\n", .{});
-            return;
-        }
-        config.offline = std.mem.eql(u8, args.positional[1], "on");
-        std.debug.print("Offline mode: {}\n", .{config.offline.?});
-    } else if (std.mem.eql(u8, sub, "headers")) {
-        if (args.positional.len < 2) {
-            std.debug.print("Usage: set headers <json>\n", .{});
-            return;
-        }
-        const json_str = args.positional[1];
-        const parsed = std.json.parseFromSlice(std.json.Value, allocator, json_str, .{}) catch {
-            std.debug.print("Error: Invalid JSON\n", .{});
-            return;
-        };
-        parsed.deinit();
-
-        if (config.headers) |old| allocator.free(old);
-        config.headers = try allocator.dupe(u8, json_str);
-        std.debug.print("Headers updated\n", .{});
-    } else if (std.mem.eql(u8, sub, "credentials")) {
-        if (args.positional.len < 3) {
-            std.debug.print("Usage: set credentials <user> <pass>\n", .{});
-            return;
-        }
-        if (config.auth_user) |old| allocator.free(old);
-        config.auth_user = try allocator.dupe(u8, args.positional[1]);
-        if (config.auth_pass) |old| allocator.free(old);
-        config.auth_pass = try allocator.dupe(u8, args.positional[2]);
-        std.debug.print("Credentials updated\n", .{});
-    } else if (std.mem.eql(u8, sub, "media")) {
-        if (args.positional.len < 2) {
-            std.debug.print("Usage: set media <dark|light>\n", .{});
-            return;
-        }
-        if (config.media_feature) |old| allocator.free(old);
-        config.media_feature = try allocator.dupe(u8, args.positional[1]);
-        std.debug.print("Media feature set to {s}\n", .{config.media_feature.?});
-    } else {
-        std.debug.print("Unknown subcommand: {s}\n", .{sub});
-        return;
-    }
-
-    try config_mod.saveConfig(config, allocator, io);
 }
 
 /// Open command - launch Chrome with remote debugging

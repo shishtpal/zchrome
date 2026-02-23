@@ -14,7 +14,7 @@ const Network = cdp.Network;
 ```zig
 var session = try browser.newPage();
 var network = Network.init(session);
-try network.enable(.{});
+try network.enable();
 ```
 
 ## Methods
@@ -24,10 +24,18 @@ try network.enable(.{});
 Enable network tracking.
 
 ```zig
-pub fn enable(self: *Network, params: EnableParams) !void
+pub fn enable(self: *Network) !void
 ```
 
-**Parameters:**
+### enableWithOptions
+
+Enable network tracking with buffer size options.
+
+```zig
+pub fn enableWithOptions(self: *Network, opts: EnableOptions) !void
+```
+
+**Options:**
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -45,7 +53,7 @@ pub fn disable(self: *Network) !void
 
 ### getResponseBody
 
-Get the body of a response.
+Get the body of a response by request ID.
 
 ```zig
 pub fn getResponseBody(
@@ -66,6 +74,18 @@ pub const ResponseBody = struct {
 };
 ```
 
+### getRequestPostData
+
+Get POST data of a request.
+
+```zig
+pub fn getRequestPostData(
+    self: *Network,
+    allocator: Allocator,
+    request_id: []const u8,
+) ![]const u8
+```
+
 ### setCacheDisabled
 
 Enable or disable caching.
@@ -74,34 +94,40 @@ Enable or disable caching.
 pub fn setCacheDisabled(self: *Network, disabled: bool) !void
 ```
 
-### setUserAgentOverride
-
-Override the user agent.
-
-```zig
-pub fn setUserAgentOverride(self: *Network, user_agent: []const u8) !void
-```
-
 ### setExtraHTTPHeaders
 
 Set extra HTTP headers for all requests.
 
 ```zig
-pub fn setExtraHTTPHeaders(self: *Network, headers: std.StringHashMap([]const u8)) !void
+pub fn setExtraHTTPHeaders(self: *Network, headers: std.json.Value) !void
 ```
 
 ### emulateNetworkConditions
 
-Emulate network conditions.
+Emulate network conditions (offline, latency, throughput).
 
 ```zig
-pub fn emulateNetworkConditions(
-    self: *Network,
-    offline: bool,
-    latency: f64,
-    download_throughput: f64,
-    upload_throughput: f64,
-) !void
+pub fn emulateNetworkConditions(self: *Network, opts: NetworkConditions) !void
+```
+
+**Options:**
+
+```zig
+pub const NetworkConditions = struct {
+    offline: bool = false,
+    latency: f64 = 0,
+    download_throughput: f64 = -1,  // -1 = no limit
+    upload_throughput: f64 = -1,
+    connection_type: ?[]const u8 = null,  // "cellular3g", "wifi", etc.
+};
+```
+
+### setBlockedURLs
+
+Block requests to specific URLs.
+
+```zig
+pub fn setBlockedURLs(self: *Network, urls: []const []const u8) !void
 ```
 
 ### clearBrowserCache
@@ -120,6 +146,63 @@ Clear browser cookies.
 pub fn clearBrowserCookies(self: *Network) !void
 ```
 
+### setRequestInterception
+
+Set request interception patterns (deprecated, use Fetch domain instead).
+
+```zig
+pub fn setRequestInterception(self: *Network, patterns: []const RequestPattern) !void
+```
+
+### continueInterceptedRequest
+
+Continue an intercepted request with optional modifications.
+
+```zig
+pub fn continueInterceptedRequest(
+    self: *Network,
+    interception_id: []const u8,
+    opts: ContinueInterceptedRequestOptions,
+) !void
+```
+
+### searchInResponseBody
+
+Search for content in a response body.
+
+```zig
+pub fn searchInResponseBody(
+    self: *Network,
+    allocator: Allocator,
+    request_id: []const u8,
+    query: []const u8,
+    case_sensitive: bool,
+    is_regex: bool,
+) ![]SearchMatch
+```
+
+### replayXHR
+
+Replay an XHR request.
+
+```zig
+pub fn replayXHR(self: *Network, request_id: []const u8) !void
+```
+
+### loadNetworkResource
+
+Load a network resource (for service workers).
+
+```zig
+pub fn loadNetworkResource(
+    self: *Network,
+    allocator: Allocator,
+    frame_id: ?[]const u8,
+    url: []const u8,
+    opts: LoadNetworkResourceOptions,
+) !LoadedResource
+```
+
 ## Events
 
 Network events are fired as requests are made:
@@ -131,6 +214,12 @@ Network events are fired as requests are made:
 | `LoadingFinished` | Request completed |
 | `LoadingFailed` | Request failed |
 | `DataReceived` | Data chunk received |
+| `RequestIntercepted` | Request intercepted (when interception enabled) |
+| `WebSocketCreated` | WebSocket connection opened |
+| `WebSocketClosed` | WebSocket connection closed |
+| `WebSocketFrameReceived` | WebSocket frame received |
+| `WebSocketFrameSent` | WebSocket frame sent |
+| `EventSourceMessageReceived` | Server-sent event received |
 
 ## Types
 
@@ -140,8 +229,13 @@ Network events are fired as requests are made:
 pub const Request = struct {
     url: []const u8,
     method: []const u8,
-    headers: std.StringHashMap([]const u8),
+    headers: std.json.Value,
     post_data: ?[]const u8 = null,
+    has_post_data: ?bool = null,
+    mixed_content_type: ?[]const u8 = null,
+    initial_priority: ?[]const u8 = null,
+    referrer_policy: ?[]const u8 = null,
+    is_link_preload: ?bool = null,
 };
 ```
 
@@ -152,8 +246,42 @@ pub const Response = struct {
     url: []const u8,
     status: i64,
     status_text: []const u8,
-    headers: std.StringHashMap([]const u8),
+    headers: std.json.Value,
     mime_type: []const u8,
+    charset: ?[]const u8 = null,
+    request_headers: ?std.json.Value = null,
+    connection_reused: ?bool = null,
+    remote_ip_address: ?[]const u8 = null,
+    remote_port: ?i64 = null,
+    from_disk_cache: ?bool = null,
+    from_service_worker: ?bool = null,
+    protocol: ?[]const u8 = null,
+    security_state: ?[]const u8 = null,
+};
+```
+
+### ResourceType
+
+```zig
+pub const ResourceType = enum {
+    Document,
+    Stylesheet,
+    Image,
+    Media,
+    Font,
+    Script,
+    TextTrack,
+    XHR,
+    Fetch,
+    Prefetch,
+    EventSource,
+    WebSocket,
+    Manifest,
+    SignedExchange,
+    Ping,
+    CSPViolationReport,
+    Preflight,
+    Other,
 };
 ```
 
@@ -180,17 +308,44 @@ pub fn main(init: std.process.Init) !void {
     var network = cdp.Network.init(session);
     
     try page.enable();
-    try network.enable(.{});
+    try network.enable();
 
     // Disable cache
     try network.setCacheDisabled(true);
 
-    // Set custom user agent
-    try network.setUserAgentOverride("MyBot/1.0");
+    // Block tracking URLs
+    try network.setBlockedURLs(&.{
+        "*://analytics.*",
+        "*://tracking.*",
+    });
 
-    _ = try page.navigate(allocator, "https://httpbin.org/get");
+    // Emulate slow 3G connection
+    try network.emulateNetworkConditions(.{
+        .offline = false,
+        .latency = 400,
+        .download_throughput = 500 * 1024,  // 500 KB/s
+        .upload_throughput = 500 * 1024,
+        .connection_type = "cellular3g",
+    });
+
+    _ = try page.navigate(allocator, "https://example.com");
 
     // Note: To capture request/response data, you'd need to
-    // listen to network events
+    // listen to network events via the session's event system
 }
+```
+
+## User Agent Override
+
+To override the user agent, use the **Emulation** domain:
+
+```zig
+var emulation = cdp.Emulation.init(session);
+try emulation.setUserAgentOverride("MyBot/1.0", null);
+```
+
+Or via CLI:
+
+```bash
+zchrome set ua "MyBot/1.0"
 ```

@@ -33,7 +33,7 @@ zchrome [options] <command> [command-args]
 
 ## Config File (zchrome.json)
 
-zchrome stores session information in `zchrome.json` in the current directory. This makes the tool portable and allows subsequent commands to reuse connection information.
+zchrome stores session information in `zchrome.json` alongside the executable. This makes the tool portable and allows subsequent commands to reuse connection information and session settings.
 
 ```json
 {
@@ -41,9 +41,37 @@ zchrome stores session information in `zchrome.json` in the current directory. T
   "data_dir": "D:\\tmp\\chrome-dev-profile",
   "port": 9222,
   "ws_url": "ws://127.0.0.1:9222/devtools/browser/...",
-  "last_target": "DC6E72F7B31F6A70C4C2B7A2D5A9ED74"
+  "last_target": "DC6E72F7B31F6A70C4C2B7A2D5A9ED74",
+  "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Firefox/121.0",
+  "viewport_width": 1920,
+  "viewport_height": 1080,
+  "device_name": "Desktop",
+  "geo_lat": 40.7128,
+  "geo_lng": -74.0060,
+  "offline": false,
+  "media_feature": "dark"
 }
 ```
+
+**Configuration fields:**
+
+| Field | Description |
+|-------|-------------|
+| `chrome_path` | Path to Chrome executable |
+| `data_dir` | User data directory for Chrome profile |
+| `port` | Debug port (default: 9222) |
+| `ws_url` | WebSocket URL for browser connection |
+| `last_target` | Last used target ID (for `--use` flag) |
+| `user_agent` | Custom user agent string |
+| `viewport_width` | Viewport width in pixels |
+| `viewport_height` | Viewport height in pixels |
+| `device_name` | Emulated device name |
+| `geo_lat` | Geolocation latitude |
+| `geo_lng` | Geolocation longitude |
+| `offline` | Offline mode enabled |
+| `media_feature` | Preferred color scheme (dark/light) |
+
+**Note:** Session settings (user_agent, viewport, geo, offline, media_feature) are automatically re-applied when connecting to a page.
 
 Options from command line override config file values.
 
@@ -182,14 +210,14 @@ zchrome --url $url --use 75E5402CE67C63D19659EEFDC1CF292D evaluate "document.tit
 
 ### network
 
-Navigate to a URL and log network requests.
+Network monitoring command.
 
 ```bash
 zchrome network <url>
 ```
 
-::: warning
-Network monitoring is not yet fully implemented in the CLI.
+::: info
+Network monitoring CLI is a placeholder. For network interception, use the programmatic API with the Network or Fetch domains.
 :::
 
 ### cookies
@@ -1092,6 +1120,22 @@ Get the current page URL.
 zchrome get url
 ```
 
+### get useragent
+
+Get the browser's user agent string.
+
+```bash
+zchrome get useragent
+zchrome get ua  # alias
+```
+
+**Example:**
+
+```bash
+zchrome get ua
+# Output: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36...
+```
+
 ### get count
 
 Count elements matching a selector.
@@ -1141,17 +1185,219 @@ zchrome get styles @e3
 
 **Output:** JSON object with all computed CSS properties.
 
+## Session Emulation (set)
+
+Configure browser session settings. Settings are applied immediately via CDP and persisted to `zchrome.json` for future sessions.
+
+### set viewport
+
+Set the viewport (window) size.
+
+```bash
+zchrome set viewport <width> <height>
+```
+
+**Example:**
+
+```bash
+zchrome set viewport 1920 1080
+zchrome set viewport 375 667   # iPhone SE size
+```
+
+### set device
+
+Emulate a specific device (sets viewport, device scale, and user agent).
+
+```bash
+zchrome set device <name>
+```
+
+**Available devices:**
+- **Mobile:** `iPhone 14`, `iPhone 14 Pro`, `iPhone 15`, `Pixel 7`, `Pixel 8`
+- **Tablet:** `iPad`, `iPad Pro`
+- **Desktop:** `Desktop` (1920x1080), `Desktop HD` (1366x768), `Desktop 4K` (3840x2160)
+
+**Example:**
+
+```bash
+zchrome set device "iPhone 14"
+zchrome set device "Pixel 8"
+zchrome set device "iPad Pro"
+```
+
+### set useragent
+
+Override the browser's user agent string. Can use a preset name or a custom string.
+
+```bash
+zchrome set useragent <name|custom-string>
+zchrome set ua <name|custom-string>  # alias
+```
+
+**Built-in user agents:**
+- **Desktop:** `chrome`, `chrome-mac`, `chrome-linux`, `edge`, `firefox`, `firefox-mac`, `safari`, `brave`, `opera`, `vivaldi`
+- **Mobile:** `chrome-android`, `chrome-ios`, `safari-ios`, `firefox-android`, `samsung`
+- **Bots:** `googlebot`, `bingbot`
+- **Other:** `curl`
+
+**Example:**
+
+```bash
+# Use a preset
+zchrome set ua firefox
+zchrome set ua googlebot
+zchrome set ua safari-ios
+
+# Use a custom string
+zchrome set ua "Mozilla/5.0 (Custom Browser) AppleWebKit/537.36"
+```
+
+### set geo
+
+Override the browser's geolocation.
+
+```bash
+zchrome set geo <latitude> <longitude>
+```
+
+**Example:**
+
+```bash
+zchrome set geo 40.7128 -74.0060   # New York
+zchrome set geo 51.5074 -0.1278    # London
+zchrome set geo 35.6762 139.6503   # Tokyo
+```
+
+### set offline
+
+Toggle offline mode to simulate network disconnection.
+
+```bash
+zchrome set offline <on|off>
+```
+
+**Example:**
+
+```bash
+zchrome set offline on    # Simulate offline
+zchrome set offline off   # Back online
+```
+
+### set headers
+
+Set extra HTTP headers to be sent with every request.
+
+```bash
+zchrome set headers <json>
+```
+
+**Example:**
+
+```bash
+zchrome set headers '{"X-Custom-Header": "value", "Authorization": "Bearer token123"}'
+```
+
+**Note:** Headers are saved to config and applied on subsequent navigations.
+
+### set credentials
+
+Set HTTP basic authentication credentials.
+
+```bash
+zchrome set credentials <username> <password>
+```
+
+**Example:**
+
+```bash
+zchrome set credentials admin secretpass
+```
+
+**Note:** Credentials are saved to config and applied on subsequent navigations.
+
+### set media
+
+Set the preferred color scheme (for `prefers-color-scheme` CSS media query).
+
+```bash
+zchrome set media <dark|light>
+```
+
+**Example:**
+
+```bash
+zchrome set media dark    # Enable dark mode
+zchrome set media light   # Enable light mode
+```
+
+## Navigation Commands
+
+### back
+
+Navigate to the previous page in history.
+
+```bash
+zchrome back
+```
+
+### forward
+
+Navigate to the next page in history.
+
+```bash
+zchrome forward
+```
+
+### reload
+
+Reload the current page.
+
+```bash
+zchrome reload
+```
+
 ### interactive
 
-Start an interactive REPL session.
+Start an interactive REPL session. This provides a command prompt where you can run any zchrome command without the `zchrome` prefix.
 
 ```bash
 zchrome interactive
 ```
 
-::: warning
-Interactive mode is not yet fully implemented.
-:::
+**Example session:**
+
+```
+zchrome> navigate https://example.com
+URL: https://example.com
+Title: Example Domain
+
+zchrome> snapshot -i
+- link "More information..." [ref=e1]
+--- 1 element(s) with refs ---
+
+zchrome> click @e1
+Clicked: @e1
+
+zchrome> get title
+IANA-managed Reserved Domains
+
+zchrome> tab
+  1: Example Domain                 https://example.com
+* 2: IANA — IANA-managed...         https://www.iana.org/...
+Total: 2 tab(s). * = current
+
+zchrome> exit
+```
+
+**Interactive commands:**
+
+All CLI commands work in interactive mode without the `zchrome` prefix. Additional commands:
+- `help` - Show available commands
+- `exit` or `quit` - Exit interactive mode
+- `version` - Show browser version
+- `pages` - List all open pages
+- `tab` - Manage tabs
+- `use <target-id>` - Switch to a different page
 
 ### help
 

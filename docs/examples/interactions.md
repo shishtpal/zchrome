@@ -440,61 +440,15 @@ zchrome snapshot -i
 
 ## Macro Recording
 
-Record and replay browser interactions for automation.
-
-### Record a Session
+Record and replay browser interactions for automation. See the dedicated [Macro Recording](/examples/macros) guide for full documentation.
 
 ```bash
-# Navigate to starting page
-zchrome navigate https://example.com/app
-
-# Start recording (WebSocket server on port 4040)
+# Record interactions
 zchrome cursor record workflow.json
-# Recording on port 4040... Press Enter to stop.
-#   (browser connected)
 
-# Perform your actions in the browser:
-# - Click buttons, fill forms, navigate
-# - Even reload pages - events are preserved!
-
-# Press Enter to stop
-# Recorded 156 events to workflow.json
+# Replay with custom interval
+zchrome cursor replay workflow.json --interval=200-500
 ```
-
-### Replay a Recording
-
-```bash
-# Navigate to the same starting page
-zchrome navigate https://example.com/app
-
-# Replay the recorded events
-zchrome cursor replay workflow.json
-# Replaying 156 events from workflow.json...
-# Replay complete.
-```
-
-### Optimize for Speed
-
-```bash
-# Speed up playback 3x (default)
-zchrome cursor optimize workflow.json
-
-# Custom speed multiplier
-zchrome cursor optimize workflow.json --speed=5
-
-# Preserve original timing
-zchrome cursor optimize workflow.json --speed=0
-```
-
-### How Recording Works
-
-The recording uses WebSocket streaming for reliability:
-
-1. **WebSocket server** starts on port 4040
-2. **JavaScript injected** via CDP `Page.addScriptToEvaluateOnNewDocument`
-3. **Events stream** in real-time as you interact
-4. **Survives page reloads** - script auto-injects on each navigation
-5. **Server-side timestamps** ensure consistent timing
 
 ## Troubleshooting
 

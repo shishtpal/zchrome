@@ -80,7 +80,6 @@ pub fn print() void {
         \\  cursor hover          Show element at mouse position
         \\  cursor record <file>  Record mouse/keyboard events to file
         \\  cursor replay <file>  Replay events from file
-        \\  cursor optimize <file> Optimize macro JSON (remove redundant events)
         \\
         \\Getters:
         \\  get text <sel>        Get text content

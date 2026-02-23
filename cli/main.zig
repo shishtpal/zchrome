@@ -1126,6 +1126,9 @@ fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
                 wait_fn = try allocator.dupe(u8, val);
             } else if (std.mem.eql(u8, arg, "--js")) {
                 click_js = true;
+            } else {
+                // Unknown flag - pass to subcommand (e.g., --interval for cursor replay)
+                try positional.append(allocator, try allocator.dupe(u8, arg));
             }
         } else {
             if (command == .help) {

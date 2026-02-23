@@ -1,11 +1,255 @@
 //! Macro recording and playback data structures.
 //!
 //! This module provides types for representing recorded mouse/keyboard events
-//! and functions for loading/saving macros to JSON files.
+//! and semantic commands, with functions for loading/saving macros to JSON files.
+//!
+//! Two formats are supported:
+//! - Version 1: Raw events (mouseMove, keyDown, etc.) - low-level, coordinate-based
+//! - Version 2: Semantic commands (click, fill, press, etc.) - high-level, selector-based
 
 const std = @import("std");
 const cdp = @import("cdp");
 const json_util = cdp.json;
+
+// ============================================================================
+// Version 2: Semantic Commands (high-level, human-readable)
+// ============================================================================
+
+/// Action types for semantic command recording
+pub const ActionType = enum {
+    click,
+    dblclick,
+    fill,
+    check,
+    uncheck,
+    select,
+    press,
+    scroll,
+    hover,
+    navigate,
+    wait,
+
+    pub fn toString(self: ActionType) []const u8 {
+        return switch (self) {
+            .click => "click",
+            .dblclick => "dblclick",
+            .fill => "fill",
+            .check => "check",
+            .uncheck => "uncheck",
+            .select => "select",
+            .press => "press",
+            .scroll => "scroll",
+            .hover => "hover",
+            .navigate => "navigate",
+            .wait => "wait",
+        };
+    }
+
+    pub fn fromString(s: []const u8) ?ActionType {
+        if (std.mem.eql(u8, s, "click")) return .click;
+        if (std.mem.eql(u8, s, "dblclick")) return .dblclick;
+        if (std.mem.eql(u8, s, "fill")) return .fill;
+        if (std.mem.eql(u8, s, "check")) return .check;
+        if (std.mem.eql(u8, s, "uncheck")) return .uncheck;
+        if (std.mem.eql(u8, s, "select")) return .select;
+        if (std.mem.eql(u8, s, "press")) return .press;
+        if (std.mem.eql(u8, s, "scroll")) return .scroll;
+        if (std.mem.eql(u8, s, "hover")) return .hover;
+        if (std.mem.eql(u8, s, "navigate")) return .navigate;
+        if (std.mem.eql(u8, s, "wait")) return .wait;
+        return null;
+    }
+};
+
+/// A semantic command (click, fill, press, etc.)
+pub const MacroCommand = struct {
+    action: ActionType,
+    selector: ?[]const u8 = null, // CSS selector for element
+    value: ?[]const u8 = null, // Text value for fill/select, URL for navigate
+    key: ?[]const u8 = null, // Key name for press
+    scroll_x: ?i32 = null, // Scroll delta X
+    scroll_y: ?i32 = null, // Scroll delta Y
+
+    pub fn deinit(self: *MacroCommand, allocator: std.mem.Allocator) void {
+        if (self.selector) |s| allocator.free(s);
+        if (self.value) |v| allocator.free(v);
+        if (self.key) |k| allocator.free(k);
+    }
+
+    pub fn clone(self: *const MacroCommand, allocator: std.mem.Allocator) !MacroCommand {
+        return .{
+            .action = self.action,
+            .selector = if (self.selector) |s| try allocator.dupe(u8, s) else null,
+            .value = if (self.value) |v| try allocator.dupe(u8, v) else null,
+            .key = if (self.key) |k| try allocator.dupe(u8, k) else null,
+            .scroll_x = self.scroll_x,
+            .scroll_y = self.scroll_y,
+        };
+    }
+};
+
+/// Command-based macro (version 2)
+pub const CommandMacro = struct {
+    version: u32 = 2,
+    commands: []MacroCommand,
+
+    pub fn deinit(self: *CommandMacro, allocator: std.mem.Allocator) void {
+        for (self.commands) |*c| {
+            c.deinit(allocator);
+        }
+        allocator.free(self.commands);
+    }
+};
+
+/// Save a command macro to JSON file
+pub fn saveCommandMacro(allocator: std.mem.Allocator, io: std.Io, path: []const u8, macro: *const CommandMacro) !void {
+    var json_buf: std.ArrayList(u8) = .empty;
+    defer json_buf.deinit(allocator);
+
+    try json_buf.appendSlice(allocator, "{\n");
+    try json_buf.appendSlice(allocator, "  \"version\": 2,\n");
+    try json_buf.appendSlice(allocator, "  \"commands\": [\n");
+
+    for (macro.commands, 0..) |cmd, i| {
+        if (i > 0) try json_buf.appendSlice(allocator, ",\n");
+        try json_buf.appendSlice(allocator, "    {");
+
+        // Action
+        try json_buf.appendSlice(allocator, "\"action\": \"");
+        try json_buf.appendSlice(allocator, cmd.action.toString());
+        try json_buf.appendSlice(allocator, "\"");
+
+        // Selector
+        if (cmd.selector) |sel| {
+            const escaped = try json_util.escapeString(allocator, sel);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"selector\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
+
+        // Value
+        if (cmd.value) |val| {
+            const escaped = try json_util.escapeString(allocator, val);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"value\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
+
+        // Key
+        if (cmd.key) |key| {
+            const escaped = try json_util.escapeString(allocator, key);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"key\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
+
+        // Scroll
+        if (cmd.scroll_x) |sx| {
+            const sx_str = try std.fmt.allocPrint(allocator, ", \"scrollX\": {}", .{sx});
+            defer allocator.free(sx_str);
+            try json_buf.appendSlice(allocator, sx_str);
+        }
+        if (cmd.scroll_y) |sy| {
+            const sy_str = try std.fmt.allocPrint(allocator, ", \"scrollY\": {}", .{sy});
+            defer allocator.free(sy_str);
+            try json_buf.appendSlice(allocator, sy_str);
+        }
+
+        try json_buf.appendSlice(allocator, "}");
+    }
+
+    try json_buf.appendSlice(allocator, "\n  ]\n}\n");
+
+    // Write to file
+    const dir = std.Io.Dir.cwd();
+    dir.writeFile(io, .{
+        .sub_path = path,
+        .data = json_buf.items,
+    }) catch |err| {
+        std.debug.print("Error writing macro file: {}\n", .{err});
+        return err;
+    };
+}
+
+/// Load a command macro from JSON file
+pub fn loadCommandMacro(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !CommandMacro {
+    const dir = std.Io.Dir.cwd();
+    var file_buf: [256 * 1024]u8 = undefined;
+    const content = dir.readFile(io, path, &file_buf) catch |err| {
+        std.debug.print("Error reading macro file: {}\n", .{err});
+        return err;
+    };
+
+    const parsed = std.json.parseFromSlice(std.json.Value, allocator, content, .{}) catch |err| {
+        std.debug.print("Error parsing macro JSON: {}\n", .{err});
+        return err;
+    };
+    defer parsed.deinit();
+
+    var macro = CommandMacro{
+        .version = 2,
+        .commands = &[_]MacroCommand{},
+    };
+
+    if (parsed.value.object.get("commands")) |cmds_val| {
+        if (cmds_val == .array) {
+            var cmds_list: std.ArrayList(MacroCommand) = .empty;
+            errdefer {
+                for (cmds_list.items) |*c| c.deinit(allocator);
+                cmds_list.deinit(allocator);
+            }
+
+            for (cmds_val.array.items) |cmd_val| {
+                if (cmd_val != .object) continue;
+                const obj = cmd_val.object;
+
+                var cmd = MacroCommand{ .action = .click };
+
+                if (obj.get("action")) |a| {
+                    if (a == .string) {
+                        if (ActionType.fromString(a.string)) |action| {
+                            cmd.action = action;
+                        }
+                    }
+                }
+
+                if (obj.get("selector")) |s| {
+                    if (s == .string) cmd.selector = try allocator.dupe(u8, s.string);
+                }
+                if (obj.get("value")) |v| {
+                    if (v == .string) {
+                        cmd.value = try allocator.dupe(u8, v.string);
+                    } else if (v == .integer) {
+                        // Handle numeric values (e.g., wait time in ms)
+                        cmd.value = try std.fmt.allocPrint(allocator, "{}", .{v.integer});
+                    }
+                }
+                if (obj.get("key")) |k| {
+                    if (k == .string) cmd.key = try allocator.dupe(u8, k.string);
+                }
+                if (obj.get("scrollX")) |sx| {
+                    if (sx == .integer) cmd.scroll_x = @intCast(sx.integer);
+                }
+                if (obj.get("scrollY")) |sy| {
+                    if (sy == .integer) cmd.scroll_y = @intCast(sy.integer);
+                }
+
+                try cmds_list.append(allocator, cmd);
+            }
+
+            macro.commands = try cmds_list.toOwnedSlice(allocator);
+        }
+    }
+
+    return macro;
+}
+
+// ============================================================================
+// Version 1: Raw Events (low-level, for backward compatibility)
+// ============================================================================
 
 /// Event types that can be recorded
 pub const EventType = enum {
@@ -331,99 +575,7 @@ pub fn saveMacro(allocator: std.mem.Allocator, io: std.Io, path: []const u8, mac
     };
 }
 
-fn scaledDelay(delay: i64, speed: i32) i64 {
-    if (speed == 0) return delay;
-    if (speed > 0) {
-        const s: i64 = @intCast(speed);
-        return @max(@divTrunc(delay, s), 0);
-    }
-    const s: i64 = @intCast(-speed);
-    return @max(delay * s, 0);
-}
-
-fn shouldMergeMouseMove(prev: *const MacroEvent, next: *const MacroEvent, sample_ms: i64) bool {
-    if (prev.event_type != .mouseMove or next.event_type != .mouseMove) return false;
-    if (prev.button != next.button) return false;
-    if (prev.timestamp > next.timestamp) return false;
-    const dt = next.timestamp - prev.timestamp;
-    return dt >= 0 and dt < sample_ms;
-}
-
-fn cloneEvent(allocator: std.mem.Allocator, src: *const MacroEvent) !MacroEvent {
-    var dst = src.*;
-    if (src.key) |k| dst.key = try allocator.dupe(u8, k);
-    if (src.code) |c| dst.code = try allocator.dupe(u8, c);
-    return dst;
-}
-
-pub fn optimizeMacro(allocator: std.mem.Allocator, macro: *Macro, speed: i32) !void {
-    const sample_ms: i64 = 15;
-
-    var out: std.ArrayList(MacroEvent) = .empty;
-    errdefer {
-        for (out.items) |*e| e.deinit(allocator);
-        out.deinit(allocator);
-    }
-
-    var pending_move: ?MacroEvent = null;
-    defer if (pending_move) |*e| e.deinit(allocator);
-
-    var prev_in_ts: i64 = 0;
-    var prev_out_ts: i64 = 0;
-
-    for (macro.events) |*in_event| {
-        if (in_event.event_type == .mouseMove) {
-            if (pending_move) |*p| {
-                if (shouldMergeMouseMove(p, in_event, sample_ms)) {
-                    p.deinit(allocator);
-                    pending_move = try cloneEvent(allocator, in_event);
-                    continue;
-                }
-                const flush_ts = p.timestamp;
-                const d = scaledDelay(flush_ts - prev_in_ts, speed);
-                prev_out_ts += d;
-                p.timestamp = prev_out_ts;
-                try out.append(allocator, p.*);
-                pending_move = null;
-                prev_in_ts = flush_ts;
-            }
-            pending_move = try cloneEvent(allocator, in_event);
-            continue;
-        }
-
-        if (pending_move) |*p| {
-            const flush_ts = p.timestamp;
-            const d = scaledDelay(flush_ts - prev_in_ts, speed);
-            prev_out_ts += d;
-            p.timestamp = prev_out_ts;
-            try out.append(allocator, p.*);
-            pending_move = null;
-            prev_in_ts = flush_ts;
-        }
-
-        const d = scaledDelay(in_event.timestamp - prev_in_ts, speed);
-        prev_out_ts += d;
-        prev_in_ts = in_event.timestamp;
-        var cloned = try cloneEvent(allocator, in_event);
-        cloned.timestamp = prev_out_ts;
-        try out.append(allocator, cloned);
-    }
-
-    if (pending_move) |*p| {
-        const flush_ts = p.timestamp;
-        const d = scaledDelay(flush_ts - prev_in_ts, speed);
-        prev_out_ts += d;
-        p.timestamp = prev_out_ts;
-        try out.append(allocator, p.*);
-        pending_move = null;
-    }
-
-    for (macro.events) |*e| e.deinit(allocator);
-    allocator.free(macro.events);
-    macro.events = try out.toOwnedSlice(allocator);
-}
-
-/// JavaScript code to inject for event recording
+/// JavaScript code to inject for event recording (legacy v1)
 pub const RECORD_INIT_JS =
     \\(function() {
     \\  if (window.__zchrome_macro) return 'already_initialized';

@@ -72,7 +72,6 @@ CURSOR:
   cursor hover             Show the element under the mouse cursor
   cursor record <file>     Record mouse/keyboard events to JSON file
   cursor replay <file>     Replay events from JSON file
-  cursor optimize <file>   Optimize macro JSON (remove redundant events)
 
 GETTERS:
   get text <sel>           Get text content

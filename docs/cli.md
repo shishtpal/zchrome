@@ -1033,111 +1033,78 @@ zchrome cursor record macro.json
 # (Events stream in real-time, survives page reloads)
 #   (browser connected)
 # (interact with the page, navigate, reload - all captured)
-# Recorded 42 events to macro.json
+# Recorded 12 commands to macro.json
 ```
 
 **Note:** The recording survives page reloads because the JavaScript is injected via `Page.addScriptToEvaluateOnNewDocument`, which automatically runs on every new page load.
 
-**Output Format:**
+**Output Format (v2):**
 
-The macro file is a JSON file with the following structure:
+The macro file contains semantic commands:
 
 ```json
 {
-  "version": 1,
-  "recorded_at": "2026-02-23T15:20:00Z",
-  "events": [
-    {
-      "type": "mousemove",
-      "timestamp": 0,
-      "x": 100.0,
-      "y": 200.0
-    },
-    {
-      "type": "mousedown",
-      "timestamp": 150,
-      "x": 100.0,
-      "y": 200.0,
-      "button": "left"
-    },
-    {
-      "type": "keydown",
-      "timestamp": 300,
-      "key": "a",
-      "code": "KeyA",
-      "modifiers": 0
-    }
+  "version": 2,
+  "commands": [
+    {"action": "click", "selector": "#login-btn"},
+    {"action": "fill", "selector": "#email", "value": "user@example.com"},
+    {"action": "fill", "selector": "#password", "value": "secret"},
+    {"action": "press", "key": "Enter"},
+    {"action": "wait", "value": 2000},
+    {"action": "click", "selector": ".dashboard"}
   ]
 }
 ```
 
-**Event Types:**
-- `mousemove` - Mouse movement (x, y coordinates)
-- `mousedown` - Mouse button pressed (button: left/right/middle)
-- `mouseup` - Mouse button released
-- `wheel` - Mouse wheel scroll (deltaX, deltaY)
-- `keydown` - Key pressed (key, code, modifiers)
-- `keyup` - Key released
+**Supported Actions:**
+- `click` - Click element
+- `dblclick` - Double-click element
+- `fill` - Fill input field (selector + value)
+- `check` / `uncheck` - Toggle checkbox
+- `select` - Select dropdown option
+- `press` - Press key (e.g., "Enter", "Tab", "Control+a")
+- `scroll` - Scroll page (scrollY)
+- `hover` - Hover over element
+- `navigate` - Navigate to URL
+- `wait` - Wait for element (selector), time (ms), or text (value)
 
 ### cursor replay
 
-Replay recorded events from a macro file.
+Replay commands from a macro file.
 
 ```bash
-zchrome cursor replay <filename.json>
-```
-
-**Example:**
-
-```bash
-# Replay recorded events
-zchrome cursor replay macro.json
-# Replaying 42 events from macro.json...
-# Replay complete.
-```
-
-**Timing:** Events are replayed with the original timing preserved. The delay between events is calculated from the timestamps in the macro file.
-
-### cursor optimize
-
-Optimize a macro file by removing redundant events and rescaling timing.
-
-```bash
-zchrome cursor optimize <filename.json> [--speed=N]
+zchrome cursor replay <filename.json> [--interval=<ms>|<min-max>]
 ```
 
 **Options:**
-- `--speed=N` - Speed multiplier (default: 3)
-  - Positive values speed up playback (divide delays)
-  - Negative values slow down playback (multiply delays)
-  - `0` preserves original timing
+- `--interval=N` - Fixed delay in ms between commands (default: 100)
+- `--interval=N-M` - Random delay between N and M ms (more human-like)
 
 **Example:**
 
 ```bash
-# Speed up playback by 3x (default)
-zchrome cursor optimize macro.json
+# Replay with default 100ms interval
+zchrome cursor replay macro.json
 
-# Speed up by 5x
-zchrome cursor optimize macro.json --speed=5
+# Fixed 500ms between commands
+zchrome cursor replay macro.json --interval=500
 
-# Slow down by 2x
-zchrome cursor optimize macro.json --speed=-2
-
-# Preserve original timing
-zchrome cursor optimize macro.json --speed=0
+# Random 200-500ms between commands
+zchrome cursor replay macro.json --interval=200-500
 ```
 
 **Output:**
 
 ```
-Optimized macro.json: 42 -> 38 events (speed=3)
+Replaying 12 commands from macro.json (interval: 200-500ms)...
+  [1/12] click "#login-btn"
+  [2/12] fill "#email" "user@example.com"
+  [3/12] press Enter
+  [4/12] wait ".dashboard"
+Replay complete.
 ```
 
-**Optimization Details:**
-- Merges consecutive `mousemove` events within 15ms
-- Rescales all event timestamps based on speed multiplier
-- Reduces file size and improves replay performance
+See the [Macro Recording](/examples/macros) guide for full documentation on the macro format and supported actions.
 
 ## Wait Commands
 

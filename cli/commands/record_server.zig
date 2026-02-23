@@ -9,46 +9,41 @@ const macro_mod = @import("macro.zig");
 
 pub const DEFAULT_PORT: u16 = 4040;
 
-/// Thread-safe event storage
-const EventStorage = struct {
-    events: std.ArrayList(macro_mod.MacroEvent),
+/// Thread-safe command storage
+const CommandStorage = struct {
+    commands: std.ArrayList(macro_mod.MacroCommand),
     mutex: std.atomic.Mutex,
     allocator: std.mem.Allocator,
-    start_time: i64,
 
-    fn init(allocator: std.mem.Allocator, io: std.Io) EventStorage {
-        const now_ns = std.Io.Timestamp.now(io, .real).nanoseconds;
-        const now_ms: i64 = @intCast(@divTrunc(now_ns, std.time.ns_per_ms));
+    fn init(allocator: std.mem.Allocator) CommandStorage {
         return .{
-            .events = .empty,
+            .commands = .empty,
             .mutex = .unlocked,
             .allocator = allocator,
-            .start_time = now_ms,
         };
     }
 
-    fn addEvent(self: *EventStorage, event: macro_mod.MacroEvent) void {
-        // Spin until we get the lock
+    fn addCommand(self: *CommandStorage, cmd: macro_mod.MacroCommand) void {
         while (!self.mutex.tryLock()) {
             std.atomic.spinLoopHint();
         }
         defer self.mutex.unlock();
-        self.events.append(self.allocator, event) catch {};
+        self.commands.append(self.allocator, cmd) catch {};
     }
 
-    fn getEvents(self: *EventStorage) []macro_mod.MacroEvent {
+    fn getCommands(self: *CommandStorage) []macro_mod.MacroCommand {
         while (!self.mutex.tryLock()) {
             std.atomic.spinLoopHint();
         }
         defer self.mutex.unlock();
-        return self.events.items;
+        return self.commands.items;
     }
 
-    fn deinit(self: *EventStorage) void {
-        for (self.events.items) |*e| {
-            e.deinit(self.allocator);
+    fn deinit(self: *CommandStorage) void {
+        for (self.commands.items) |*c| {
+            c.deinit(self.allocator);
         }
-        self.events.deinit(self.allocator);
+        self.commands.deinit(self.allocator);
     }
 };
 
@@ -56,7 +51,7 @@ const EventStorage = struct {
 pub const RecordServer = struct {
     allocator: std.mem.Allocator,
     io: std.Io,
-    storage: *EventStorage,
+    storage: *CommandStorage,
     port: u16,
     should_stop: std.atomic.Value(bool),
     thread: ?std.Thread,
@@ -65,8 +60,8 @@ pub const RecordServer = struct {
 
     /// Start the recording server in a background thread
     pub fn init(allocator: std.mem.Allocator, io: std.Io, port: u16) !*Self {
-        const storage = try allocator.create(EventStorage);
-        storage.* = EventStorage.init(allocator, io);
+        const storage = try allocator.create(CommandStorage);
+        storage.* = CommandStorage.init(allocator);
 
         const self = try allocator.create(Self);
         self.* = .{
@@ -119,9 +114,9 @@ pub const RecordServer = struct {
                 // Handle close frame
                 if (frame.opcode == 0x8) break;
 
-                // Handle text frame (event data)
+                // Handle text frame (command data)
                 if (frame.opcode == 0x1) {
-                    self.parseAndStoreEvent(frame.data);
+                    self.parseAndStoreCommand(frame.data);
                 }
             }
 
@@ -129,91 +124,60 @@ pub const RecordServer = struct {
         }
     }
 
-    fn parseAndStoreEvent(self: *Self, data: []const u8) void {
+    fn parseAndStoreCommand(self: *Self, data: []const u8) void {
         const parsed = std.json.parseFromSlice(std.json.Value, self.allocator, data, .{}) catch return;
         defer parsed.deinit();
 
         if (parsed.value != .object) return;
         const obj = parsed.value.object;
 
-        var event = macro_mod.MacroEvent{
-            .event_type = .mouseMove,
-            .timestamp = 0,
-        };
+        var cmd = macro_mod.MacroCommand{ .action = .click };
 
-        // Parse event type
-        if (obj.get("type")) |t| {
-            if (t == .string) {
-                if (std.mem.eql(u8, t.string, "mousemove")) {
-                    event.event_type = .mouseMove;
-                } else if (std.mem.eql(u8, t.string, "mousedown")) {
-                    event.event_type = .mouseDown;
-                } else if (std.mem.eql(u8, t.string, "mouseup")) {
-                    event.event_type = .mouseUp;
-                } else if (std.mem.eql(u8, t.string, "wheel")) {
-                    event.event_type = .mouseWheel;
-                } else if (std.mem.eql(u8, t.string, "keydown")) {
-                    event.event_type = .keyDown;
-                } else if (std.mem.eql(u8, t.string, "keyup")) {
-                    event.event_type = .keyUp;
+        // Parse action type
+        if (obj.get("action")) |a| {
+            if (a == .string) {
+                if (macro_mod.ActionType.fromString(a.string)) |action| {
+                    cmd.action = action;
                 } else return;
             }
+        } else return;
+
+        // Parse selector
+        if (obj.get("selector")) |s| {
+            if (s == .string) cmd.selector = self.allocator.dupe(u8, s.string) catch null;
         }
 
-        // Use current timestamp relative to start
-        const now_ns = std.Io.Timestamp.now(self.io, .real).nanoseconds;
-        const now_ms: i64 = @intCast(@divTrunc(now_ns, std.time.ns_per_ms));
-        event.timestamp = now_ms - self.storage.start_time;
-
-        // Parse coordinates
-        if (obj.get("x")) |x| {
-            if (x == .float) event.x = x.float;
-            if (x == .integer) event.x = @floatFromInt(x.integer);
-        }
-        if (obj.get("y")) |y| {
-            if (y == .float) event.y = y.float;
-            if (y == .integer) event.y = @floatFromInt(y.integer);
+        // Parse value
+        if (obj.get("value")) |v| {
+            if (v == .string) cmd.value = self.allocator.dupe(u8, v.string) catch null;
         }
 
-        // Parse mouse button
-        if (obj.get("button")) |b| {
-            if (b == .integer) event.button = macro_mod.MouseButton.fromInt(b.integer);
-        }
-
-        // Parse wheel deltas
-        if (obj.get("deltaX")) |dx| {
-            if (dx == .float) event.delta_x = dx.float;
-            if (dx == .integer) event.delta_x = @floatFromInt(dx.integer);
-        }
-        if (obj.get("deltaY")) |dy| {
-            if (dy == .float) event.delta_y = dy.float;
-            if (dy == .integer) event.delta_y = @floatFromInt(dy.integer);
-        }
-
-        // Parse key properties
+        // Parse key
         if (obj.get("key")) |k| {
-            if (k == .string) event.key = self.allocator.dupe(u8, k.string) catch null;
-        }
-        if (obj.get("code")) |c| {
-            if (c == .string) event.code = self.allocator.dupe(u8, c.string) catch null;
-        }
-        if (obj.get("modifiers")) |m| {
-            if (m == .integer) event.modifiers = @intCast(m.integer);
+            if (k == .string) cmd.key = self.allocator.dupe(u8, k.string) catch null;
         }
 
-        self.storage.addEvent(event);
+        // Parse scroll
+        if (obj.get("scrollX")) |sx| {
+            if (sx == .integer) cmd.scroll_x = @intCast(sx.integer);
+        }
+        if (obj.get("scrollY")) |sy| {
+            if (sy == .integer) cmd.scroll_y = @intCast(sy.integer);
+        }
+
+        self.storage.addCommand(cmd);
     }
 
-    /// Stop recording and get events
-    pub fn stop(self: *Self) []macro_mod.MacroEvent {
+    /// Stop recording and get commands
+    pub fn stop(self: *Self) []macro_mod.MacroCommand {
         self.should_stop.store(true, .release);
 
         // Connect to self to unblock accept
-        const addr = std.Io.net.IpAddress.parse("127.0.0.1", self.port) catch return self.storage.getEvents();
+        const addr = std.Io.net.IpAddress.parse("127.0.0.1", self.port) catch return self.storage.getCommands();
         const conn = std.Io.net.IpAddress.connect(addr, self.io, .{
             .mode = .stream,
             .protocol = .tcp,
-        }) catch return self.storage.getEvents();
+        }) catch return self.storage.getCommands();
         conn.close(self.io);
 
         // Wait for thread to finish
@@ -221,7 +185,7 @@ pub const RecordServer = struct {
             t.join();
         }
 
-        return self.storage.getEvents();
+        return self.storage.getCommands();
     }
 
     /// Clean up
@@ -232,33 +196,159 @@ pub const RecordServer = struct {
     }
 };
 
-/// JavaScript to inject that connects to WebSocket and streams events
+/// JavaScript to inject that tracks semantic actions and sends commands
 pub fn getRecordingJs(allocator: std.mem.Allocator, port: u16) ![]const u8 {
     return std.fmt.allocPrint(allocator,
         \\(function() {{
-        \\  if (window.__zchrome_ws) return;
+        \\  if (window.__zchrome_rec) return;
         \\  var ws = new WebSocket('ws://127.0.0.1:{d}/');
-        \\  window.__zchrome_ws = ws;
-        \\  ws.onopen = function() {{
-        \\    console.log('[zchrome] Recording connected');
+        \\  var state = {{
+        \\    focusEl: null,
+        \\    focusSel: null,
+        \\    typedText: '',
+        \\    lastValue: '',
+        \\    scrollY: 0
         \\  }};
-        \\  ws.onclose = function() {{
-        \\    window.__zchrome_ws = null;
-        \\    console.log('[zchrome] Recording disconnected');
-        \\  }};
-        \\  function send(e) {{
-        \\    if (!ws || ws.readyState !== 1) return;
-        \\    var ev = {{ type: e.type }};
-        \\    if (e.clientX !== undefined) {{ ev.x = e.clientX; ev.y = e.clientY; }}
-        \\    if (e.button !== undefined) ev.button = e.button;
-        \\    if (e.deltaX !== undefined) {{ ev.deltaX = e.deltaX; ev.deltaY = e.deltaY; }}
-        \\    if (e.key !== undefined) {{ ev.key = e.key; ev.code = e.code; }}
-        \\    ev.modifiers = (e.altKey ? 1 : 0) | (e.ctrlKey ? 2 : 0) | (e.metaKey ? 4 : 0) | (e.shiftKey ? 8 : 0);
-        \\    ws.send(JSON.stringify(ev));
+        \\  window.__zchrome_rec = state;
+        \\
+        \\  // Generate best CSS selector for element
+        \\  function getSelector(el) {{
+        \\    if (!el || el === document.body || el === document.documentElement) return null;
+        \\    // ID
+        \\    if (el.id) return '#' + CSS.escape(el.id);
+        \\    // name attribute (for form inputs)
+        \\    if (el.name) return el.tagName.toLowerCase() + '[name="' + el.name + '"]';
+        \\    // type for inputs
+        \\    if (el.tagName === 'INPUT' && el.type) {{
+        \\      var inputs = document.querySelectorAll('input[type="' + el.type + '"]');
+        \\      if (inputs.length === 1) return 'input[type="' + el.type + '"]';
+        \\    }}
+        \\    // aria-label
+        \\    if (el.getAttribute('aria-label')) {{
+        \\      return el.tagName.toLowerCase() + '[aria-label="' + el.getAttribute('aria-label') + '"]';
+        \\    }}
+        \\    // placeholder
+        \\    if (el.placeholder) {{
+        \\      return el.tagName.toLowerCase() + '[placeholder="' + el.placeholder + '"]';
+        \\    }}
+        \\    // Unique class
+        \\    if (el.classList.length > 0) {{
+        \\      for (var i = 0; i < el.classList.length; i++) {{
+        \\        var cls = '.' + CSS.escape(el.classList[i]);
+        \\        if (document.querySelectorAll(cls).length === 1) return cls;
+        \\      }}
+        \\    }}
+        \\    // data-testid
+        \\    if (el.dataset.testid) return '[data-testid="' + el.dataset.testid + '"]';
+        \\    // Fallback: nth-of-type
+        \\    var parent = el.parentElement;
+        \\    if (parent) {{
+        \\      var siblings = parent.querySelectorAll(':scope > ' + el.tagName.toLowerCase());
+        \\      var idx = Array.prototype.indexOf.call(siblings, el) + 1;
+        \\      var parentSel = getSelector(parent);
+        \\      if (parentSel) return parentSel + ' > ' + el.tagName.toLowerCase() + ':nth-of-type(' + idx + ')';
+        \\    }}
+        \\    return el.tagName.toLowerCase();
         \\  }}
-        \\  ['mousedown', 'mouseup', 'mousemove', 'wheel', 'keydown', 'keyup'].forEach(function(t) {{
-        \\    document.addEventListener(t, send, true);
-        \\  }});
+        \\
+        \\  function send(cmd) {{
+        \\    if (ws && ws.readyState === 1) {{
+        \\      ws.send(JSON.stringify(cmd));
+        \\      console.log('[zchrome]', cmd);
+        \\    }}
+        \\  }}
+        \\
+        \\  function flushTyped() {{
+        \\    if (state.focusEl && state.focusSel) {{
+        \\      var val = state.focusEl.value || '';
+        \\      if (val && val !== state.lastValue) {{
+        \\        send({{ action: 'fill', selector: state.focusSel, value: val }});
+        \\      }}
+        \\    }}
+        \\    state.typedText = '';
+        \\    state.lastValue = '';
+        \\  }}
+        \\
+        \\  // Click handler
+        \\  document.addEventListener('click', function(e) {{
+        \\    var el = e.target;
+        \\    var sel = getSelector(el);
+        \\    if (!sel) return;
+        \\
+        \\    // Check if it's a checkbox
+        \\    if (el.type === 'checkbox') {{
+        \\      send({{ action: el.checked ? 'check' : 'uncheck', selector: sel }});
+        \\      return;
+        \\    }}
+        \\
+        \\    // Regular click
+        \\    send({{ action: 'click', selector: sel }});
+        \\  }}, true);
+        \\
+        \\  // Double click
+        \\  document.addEventListener('dblclick', function(e) {{
+        \\    var sel = getSelector(e.target);
+        \\    if (sel) send({{ action: 'dblclick', selector: sel }});
+        \\  }}, true);
+        \\
+        \\  // Focus tracking
+        \\  document.addEventListener('focus', function(e) {{
+        \\    flushTyped();
+        \\    state.focusEl = e.target;
+        \\    state.focusSel = getSelector(e.target);
+        \\    state.lastValue = e.target.value || '';
+        \\  }}, true);
+        \\
+        \\  // Blur - emit fill if value changed
+        \\  document.addEventListener('blur', function(e) {{
+        \\    flushTyped();
+        \\    state.focusEl = null;
+        \\    state.focusSel = null;
+        \\  }}, true);
+        \\
+        \\  // Select change
+        \\  document.addEventListener('change', function(e) {{
+        \\    var el = e.target;
+        \\    var sel = getSelector(el);
+        \\    if (!sel) return;
+        \\    if (el.tagName === 'SELECT') {{
+        \\      send({{ action: 'select', selector: sel, value: el.value }});
+        \\    }}
+        \\  }}, true);
+        \\
+        \\  // Key press for special keys
+        \\  document.addEventListener('keydown', function(e) {{
+        \\    // Special keys that should be recorded as press commands
+        \\    var special = ['Enter', 'Tab', 'Escape', 'Backspace', 'Delete',
+        \\                   'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+        \\                   'Home', 'End', 'PageUp', 'PageDown'];
+        \\    if (special.includes(e.key) || e.ctrlKey || e.altKey || e.metaKey) {{
+        \\      var keyStr = '';
+        \\      if (e.ctrlKey) keyStr += 'Control+';
+        \\      if (e.altKey) keyStr += 'Alt+';
+        \\      if (e.metaKey) keyStr += 'Meta+';
+        \\      if (e.shiftKey && (e.ctrlKey || e.altKey || e.metaKey)) keyStr += 'Shift+';
+        \\      keyStr += e.key;
+        \\      send({{ action: 'press', key: keyStr }});
+        \\    }}
+        \\  }}, true);
+        \\
+        \\  // Scroll tracking (debounced)
+        \\  var scrollTimeout = null;
+        \\  window.addEventListener('scroll', function() {{
+        \\    if (scrollTimeout) clearTimeout(scrollTimeout);
+        \\    scrollTimeout = setTimeout(function() {{
+        \\      var delta = window.scrollY - state.scrollY;
+        \\      if (Math.abs(delta) > 50) {{
+        \\        send({{ action: 'scroll', scrollY: delta > 0 ? Math.abs(delta) : -Math.abs(delta) }});
+        \\        state.scrollY = window.scrollY;
+        \\      }}
+        \\    }}, 150);
+        \\  }}, true);
+        \\  state.scrollY = window.scrollY;
+        \\
+        \\  ws.onopen = function() {{ console.log('[zchrome] Recording connected'); }};
+        \\  ws.onclose = function() {{ window.__zchrome_rec = null; }};
         \\}})();
     , .{port});
 }

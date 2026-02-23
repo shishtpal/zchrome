@@ -14,7 +14,7 @@ pub fn click(session: *cdp.Session, ctx: CommandCtx) !void {
     }
     var resolved = try actions_mod.resolveSelector(ctx.allocator, ctx.io, ctx.positional[0]);
     defer resolved.deinit();
-    try actions_mod.clickElement(session, ctx.allocator, &resolved, 1);
+    try actions_mod.clickElement(session, ctx.allocator, &resolved, 1, ctx.click_js);
     std.debug.print("Clicked: {s}\n", .{ctx.positional[0]});
 }
 
@@ -25,7 +25,7 @@ pub fn dblclick(session: *cdp.Session, ctx: CommandCtx) !void {
     }
     var resolved = try actions_mod.resolveSelector(ctx.allocator, ctx.io, ctx.positional[0]);
     defer resolved.deinit();
-    try actions_mod.clickElement(session, ctx.allocator, &resolved, 2);
+    try actions_mod.clickElement(session, ctx.allocator, &resolved, 2, ctx.click_js);
     std.debug.print("Double-clicked: {s}\n", .{ctx.positional[0]});
 }
 

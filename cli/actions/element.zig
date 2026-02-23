@@ -78,58 +78,69 @@ pub fn getElementCenter(
     };
 }
 
-/// Click an element
+/// Click an element.
+/// use_js=false (default): real CDP Input events (isTrusted: true) — works with
+///   Vue/React/Angular and native browser controls like listbox/select.
+/// use_js=true: synthetic JS dispatchEvent — use for sites that need JS-driven
+///   anchor navigation (e.g. Google search links).
 pub fn clickElement(
     session: *cdp.Session,
     allocator: std.mem.Allocator,
     resolved: *const ResolvedElement,
     click_count: i32,
+    use_js: bool,
 ) !void {
     _ = click_count;
 
-    var runtime = cdp.Runtime.init(session);
-    try runtime.enable();
+    if (use_js) {
+        // Synthetic JS click path: dispatches a MouseEvent via JS.
+        // isTrusted: false — not suitable for SPA frameworks but useful for
+        // sites that intercept CDP mouse events.
+        var runtime = cdp.Runtime.init(session);
+        try runtime.enable();
 
-    // Build JS to find the element and click it via JavaScript.
-    // For <a href> links this navigates via window.location.href which
-    // bypasses Google-style JS event interception that blocks synthetic
-    // CDP mouse events from triggering navigation.
-    var js: []const u8 = undefined;
-    defer allocator.free(js);
+        var js: []const u8 = undefined;
+        defer allocator.free(js);
 
-    if (resolved.css_selector) |css| {
-        const escaped_css = try helpers.escapeJsString(allocator, css);
-        defer allocator.free(escaped_css);
-        js = try std.fmt.allocPrint(allocator,
-            \\(function(s) {{
-            \\  var el = document.querySelector(s);
-            \\  if (!el) return false;
-            \\  if (el.tagName === 'A' && el.href) {{
-            \\    window.location.href = el.href;
-            \\    return true;
-            \\  }}
-            \\  el.dispatchEvent(new MouseEvent('click', {{bubbles: true, cancelable: true, view: window}}));
-            \\  return true;
-            \\}})({s})
-        , .{escaped_css});
+        if (resolved.css_selector) |css| {
+            const escaped_css = try helpers.escapeJsString(allocator, css);
+            defer allocator.free(escaped_css);
+            js = try std.fmt.allocPrint(allocator,
+                \\(function(s) {{
+                \\  var el = document.querySelector(s);
+                \\  if (!el) return false;
+                \\  if (el.tagName === 'A' && el.href) {{
+                \\    window.location.href = el.href;
+                \\    return true;
+                \\  }}
+                \\  el.dispatchEvent(new MouseEvent('click', {{bubbles: true, cancelable: true, view: window}}));
+                \\  return true;
+                \\}})({s})
+            , .{escaped_css});
+        } else {
+            const role = resolved.role orelse return error.InvalidSelector;
+            const name_arg = if (resolved.name) |n|
+                try helpers.escapeJsString(allocator, n)
+            else
+                try allocator.dupe(u8, "null");
+            defer allocator.free(name_arg);
+
+            const nth_arg = if (resolved.nth) |n|
+                try std.fmt.allocPrint(allocator, "{}", .{n})
+            else
+                try allocator.dupe(u8, "0");
+            defer allocator.free(nth_arg);
+
+            js = try std.fmt.allocPrint(allocator, "{s}('{s}', {s}, {s})", .{ helpers.FIND_AND_CLICK_JS, role, name_arg, nth_arg });
+        }
+
+        _ = try runtime.evaluate(allocator, js, .{ .return_by_value = true });
     } else {
-        const role = resolved.role orelse return error.InvalidSelector;
-        const name_arg = if (resolved.name) |n|
-            try helpers.escapeJsString(allocator, n)
-        else
-            try allocator.dupe(u8, "null");
-        defer allocator.free(name_arg);
-
-        const nth_arg = if (resolved.nth) |n|
-            try std.fmt.allocPrint(allocator, "{}", .{n})
-        else
-            try allocator.dupe(u8, "0");
-        defer allocator.free(nth_arg);
-
-        js = try std.fmt.allocPrint(allocator, "{s}('{s}', {s}, {s})", .{ helpers.FIND_AND_CLICK_JS, role, name_arg, nth_arg });
+        // Real CDP mouse event path: isTrusted: true, works with all frameworks.
+        const center = try getElementCenter(session, allocator, resolved);
+        var input = cdp.Input.init(session);
+        try input.click(center.x, center.y, .{});
     }
-
-    _ = try runtime.evaluate(allocator, js, .{ .return_by_value = true });
 }
 
 /// Focus an element using JavaScript

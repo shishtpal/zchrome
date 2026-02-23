@@ -19,4 +19,6 @@ pub const CommandCtx = struct {
     wait_url: ?[]const u8 = null,
     wait_load: ?[]const u8 = null,
     wait_fn: ?[]const u8 = null,
+    // Click options
+    click_js: bool = false,
 };

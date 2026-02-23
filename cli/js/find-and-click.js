@@ -6,10 +6,18 @@
     'checkbox': 'input[type="checkbox"]',
     'radio': 'input[type="radio"]',
     'combobox': 'select',
+    'listbox': 'select[multiple]',
     'heading': 'h1, h2, h3, h4, h5, h6',
     'img': 'img',
     'list': 'ul, ol',
-    'listitem': 'li'
+    'listitem': 'li',
+    'navigation': 'nav',
+    'main': 'main',
+    'form': 'form',
+    'table': 'table',
+    'row': 'tr',
+    'cell': 'td',
+    'columnheader': 'th'
   };
 
   function queryAll(root, selector) {

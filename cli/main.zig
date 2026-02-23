@@ -74,6 +74,8 @@ const Args = struct {
     wait_url: ?[]const u8 = null,
     wait_load: ?[]const u8 = null,
     wait_fn: ?[]const u8 = null,
+    // Click options
+    click_js: bool = false,
 
     const Command = enum {
         open,
@@ -255,6 +257,7 @@ fn buildCtx(args: Args, allocator: std.mem.Allocator) impl.CommandCtx {
         .wait_url = args.wait_url,
         .wait_load = args.wait_load,
         .wait_fn = args.wait_fn,
+        .click_js = args.click_js,
     };
 }
 
@@ -1036,6 +1039,7 @@ fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
     var wait_url: ?[]const u8 = null;
     var wait_load: ?[]const u8 = null;
     var wait_fn: ?[]const u8 = null;
+    var click_js: bool = false;
 
     _ = iter.skip(); // Skip program name
 
@@ -1119,6 +1123,8 @@ fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
             } else if (std.mem.eql(u8, arg, "--fn")) {
                 const val = iter.next() orelse return error.MissingArgument;
                 wait_fn = try allocator.dupe(u8, val);
+            } else if (std.mem.eql(u8, arg, "--js")) {
+                click_js = true;
             }
         } else {
             if (command == .help) {
@@ -1159,6 +1165,7 @@ fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
         .wait_url = wait_url,
         .wait_load = wait_load,
         .wait_fn = wait_fn,
+        .click_js = click_js,
     };
 }
 

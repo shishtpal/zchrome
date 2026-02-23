@@ -200,6 +200,10 @@ fn executeCommand(state: *InteractiveState, line: []const u8) !void {
         try commands.cmdPages(state);
     } else if (eql(cmd, "use")) {
         try commands.cmdUse(state, args);
+    } else if (eql(cmd, "tab")) {
+        try commands.cmdTab(state, args);
+    } else if (eql(cmd, "window")) {
+        try commands.cmdWindow(state, args);
     } else if (eql(cmd, "navigate") or eql(cmd, "nav") or eql(cmd, "goto")) {
         try commands.cmdNavigate(state, args);
     } else if (eql(cmd, "screenshot") or eql(cmd, "ss")) {

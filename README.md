@@ -88,6 +88,8 @@ zchrome --url ws://127.0.0.1:9222/devtools/browser/<guid> evaluate "document.tit
 | `network` | Monitor network requests |
 | `cookies` | List, set, or clear cookies |
 | `storage local\|session` | Get/set/clear web storage |
+| `tab` | List, open, switch, close tabs |
+| `window new` | Open new browser window |
 | `list-targets` | List all targets |
 | `pages` | List all pages with target IDs |
 | `interactive` | Interactive REPL mode |
@@ -166,6 +168,8 @@ pub fn main(init: std.process.Init) !void {
 | `cookies` | List, set, or clear cookies |
 | `storage local` | Get/set/clear localStorage |
 | `storage session` | Get/set/clear sessionStorage |
+| `tab` | List, open, switch, close tabs |
+| `window new` | Open new browser window |
 | `list-targets` | List open targets |
 | `interactive` | Interactive REPL mode |
 

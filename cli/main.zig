@@ -85,6 +85,8 @@ const Args = struct {
         network,
         cookies,
         storage,
+        tab,
+        window,
         version,
         list_targets,
         pages,
@@ -161,7 +163,7 @@ pub fn main(init: std.process.Init) !void {
     // Only apply last_target for page-level commands (not version, pages, list_targets, etc.)
     const needs_target = switch (args.command) {
         .navigate, .screenshot, .pdf, .evaluate, .network, .cookies, .storage, .snapshot, .click, .dblclick, .focus, .type, .fill, .select, .hover, .check, .uncheck, .scroll, .scrollintoview, .drag, .get, .upload, .back, .forward, .reload, .press, .keydown, .keyup, .wait, .mouse => true,
-        .version, .list_targets, .pages, .interactive, .open, .connect, .help => false,
+        .tab, .window, .version, .list_targets, .pages, .interactive, .open, .connect, .help => false,
     };
     if (needs_target and args.use_target == null and config.last_target != null) {
         args.use_target = allocator.dupe(u8, config.last_target.?) catch null;
@@ -222,6 +224,8 @@ pub fn main(init: std.process.Init) !void {
             .screenshot => try cmdScreenshot(browser, args, allocator),
             .pdf => try cmdPdf(browser, args, allocator),
             .evaluate => try cmdEvaluate(browser, args, allocator),
+            .tab => try cmdTab(browser, args, allocator),
+            .window => try cmdWindow(browser, args, allocator),
             .version => try cmdVersion(browser, allocator),
             .list_targets => try cmdListTargets(browser, allocator),
             .pages => try cmdPages(browser, allocator),
@@ -520,6 +524,134 @@ fn cmdEvaluate(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) 
     } else {
         std.debug.print("{s}\n", .{result.description orelse "undefined"});
     }
+}
+
+/// Tab command - list, new, switch, close tabs
+fn cmdTab(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
+    var target = cdp.Target.init(browser.connection);
+
+    // tab new [url]
+    if (args.positional.len >= 1 and std.mem.eql(u8, args.positional[0], "new")) {
+        const url = if (args.positional.len >= 2) args.positional[1] else "about:blank";
+        const target_id = try target.createTarget(url);
+        std.debug.print("New tab: {s}\n", .{target_id});
+        saveTargetToConfig(target_id, args, allocator, args.io);
+        return;
+    }
+
+    // tab close [n]
+    if (args.positional.len >= 1 and std.mem.eql(u8, args.positional[0], "close")) {
+        const page_tabs = try browser.pages();
+        defer {
+            for (page_tabs) |*p| {
+                var pi = p.*;
+                pi.deinit(allocator);
+            }
+            allocator.free(page_tabs);
+        }
+        if (page_tabs.len == 0) {
+            std.debug.print("No tabs open\n", .{});
+            return;
+        }
+        // Default: close current (last_target from config, or last tab)
+        var close_idx: usize = page_tabs.len - 1;
+        if (args.positional.len >= 2) {
+            close_idx = std.fmt.parseInt(usize, args.positional[1], 10) catch {
+                std.debug.print("Invalid tab number: {s}\n", .{args.positional[1]});
+                return;
+            };
+            if (close_idx == 0 or close_idx > page_tabs.len) {
+                std.debug.print("Tab number out of range (1-{})\n", .{page_tabs.len});
+                return;
+            }
+            close_idx -= 1; // Convert 1-based to 0-based
+        }
+        const success = try target.closeTarget(page_tabs[close_idx].target_id);
+        if (success) {
+            std.debug.print("Closed tab {}: {s}\n", .{ close_idx + 1, page_tabs[close_idx].title });
+        } else {
+            std.debug.print("Failed to close tab\n", .{});
+        }
+        return;
+    }
+
+    // tab <n> — switch to tab n
+    if (args.positional.len >= 1) {
+        const tab_num = std.fmt.parseInt(usize, args.positional[0], 10) catch {
+            std.debug.print("Unknown subcommand: {s}\n", .{args.positional[0]});
+            printTabUsage();
+            return;
+        };
+        const page_tabs = try browser.pages();
+        defer {
+            for (page_tabs) |*p| {
+                var pi = p.*;
+                pi.deinit(allocator);
+            }
+            allocator.free(page_tabs);
+        }
+        if (tab_num == 0 or tab_num > page_tabs.len) {
+            std.debug.print("Tab number out of range (1-{})\n", .{page_tabs.len});
+            return;
+        }
+        const selected = page_tabs[tab_num - 1];
+        try target.activateTarget(selected.target_id);
+        saveTargetToConfig(selected.target_id, args, allocator, args.io);
+        std.debug.print("Switched to tab {}: {s} ({s})\n", .{ tab_num, selected.title, selected.url });
+        return;
+    }
+
+    // Default: list tabs with 1-based numbers
+    const page_tabs = try browser.pages();
+    defer {
+        for (page_tabs) |*p| {
+            var pi = p.*;
+            pi.deinit(allocator);
+        }
+        allocator.free(page_tabs);
+    }
+    if (page_tabs.len == 0) {
+        std.debug.print("No tabs open\n", .{});
+        return;
+    }
+    for (page_tabs, 1..) |t, i| {
+        std.debug.print("  {}: {s:<30} {s}\n", .{ i, t.title, t.url });
+    }
+    std.debug.print("\nTotal: {} tab(s)\n", .{page_tabs.len});
+}
+
+fn printTabUsage() void {
+    std.debug.print(
+        \\Usage: tab [subcommand]
+        \\
+        \\Subcommands:
+        \\  tab                  List open tabs
+        \\  tab new [url]        Open new tab (optionally navigate to URL)
+        \\  tab <n>              Switch to tab n
+        \\  tab close [n]        Close tab n (default: current)
+        \\
+    , .{});
+}
+
+/// Window command - new window
+fn cmdWindow(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
+    _ = allocator;
+    if (args.positional.len >= 1 and std.mem.eql(u8, args.positional[0], "new")) {
+        _ = try browser.connection.sendCommand("Target.createTarget", .{
+            .url = "about:blank",
+            .newWindow = true,
+        }, null);
+        std.debug.print("New window opened\n", .{});
+        return;
+    }
+
+    std.debug.print(
+        \\Usage: window <subcommand>
+        \\
+        \\Subcommands:
+        \\  window new           Open new browser window
+        \\
+    , .{});
 }
 
 /// Version command
@@ -1013,6 +1145,11 @@ fn printUsage() void {
         \\  storage local clear      Clear all localStorage
         \\  storage session          Same commands for sessionStorage
         \\  snapshot                 Capture accessibility tree of active page, save to zsnap.json
+        \\  tab                      List open tabs (numbered)
+        \\  tab new [url]            Open new tab (optionally navigate to URL)
+        \\  tab <n>                  Switch to tab n
+        \\  tab close [n]            Close tab n (default: current)
+        \\  window new               Open new browser window
         \\  version                  Print browser version info
         \\  list-targets             List all open targets
         \\  pages                    List all open pages with target IDs

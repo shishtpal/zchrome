@@ -258,6 +258,52 @@ zchrome storage session
 zchrome storage session set token abc123
 ```
 
+### tab
+
+Manage browser tabs with simple numbered references.
+
+```bash
+zchrome tab                     # List tabs (numbered)
+zchrome tab new [url]           # Open new tab (optionally with URL)
+zchrome tab <n>                 # Switch to tab n
+zchrome tab close [n]           # Close tab n (default: current)
+```
+
+**Examples:**
+
+```bash
+# List all tabs
+zchrome tab
+#   1: Example Domain               https://example.com
+#   2: Google                        https://www.google.com
+# Total: 2 tab(s)
+
+# Open new tab
+zchrome tab new
+zchrome tab new https://github.com
+
+# Switch to tab 2
+zchrome tab 2
+
+# Close tab 1
+zchrome tab close 1
+```
+
+### window
+
+Manage browser windows.
+
+```bash
+zchrome window new              # Open new browser window
+```
+
+**Example:**
+
+```bash
+zchrome window new
+# New window opened
+```
+
 ### version
 
 Print browser version information.

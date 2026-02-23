@@ -270,7 +270,8 @@ commands it doesn't handle (e.g. `version`, `pages`).
 
 **`cli/main.zig`** handles two categories of commands:
 - **Browser-level** commands that manage their own session/page lifecycle
-  (e.g. `navigate` creates or reuses a page and saves target to config).
+  (e.g. `navigate` creates or reuses a page and saves target to config,
+  `tab`/`window` manage targets directly via the Target domain).
   These have explicit `cmdXxx()` functions in `main.zig`.
 - **Session-level** commands that just need a page session. These fall
   through to `withFirstPage()`, which finds the first real page, attaches a
@@ -291,7 +292,7 @@ CLI dispatch (main.zig)
   ├─ page-level URL?      → executeDirectly()   → executeWithSession("", ...)
   ├─ --use <target-id>?   → executeOnTarget()    → executeWithSession(sid, ...)
   └─ else                 → switch on command:
-       ├─ browser-level   → cmdNavigate / cmdScreenshot / cmdVersion / ...
+       ├─ browser-level   → cmdNavigate / cmdScreenshot / cmdTab / cmdWindow / cmdVersion / ...
        └─ session-level   → withFirstPage()      → dispatchSessionCommand()
 ```
 
@@ -327,6 +328,11 @@ handles CLI invocation, `--use`, and page-level URL routing.
 a page and saves config, `screenshot` accepts an optional URL to navigate to
 first), add an explicit `cmdXxx()` in `main.zig` and list it in the
 `switch (args.command)` block. These are the minority of commands.
+
+**Browser-level commands that don't need a session** (e.g. `tab`, `window`)
+use the `Target` domain directly via `browser.connection`. They get their own
+`cmdTab()`/`cmdWindow()` in `main.zig` and equivalent handlers in
+`interactive/commands.zig` (which use `state.browser` instead of a session).
 
 ### Example: Adding a "highlight" Command
 

@@ -38,6 +38,11 @@ pub fn printHelp() void {
         \\  version               Show browser version
         \\  pages                 List open pages
         \\  use <target-id>       Switch to a different page
+        \\  tab                   List open tabs (numbered)
+        \\  tab new [url]         Open new tab
+        \\  tab <n>               Switch to tab n
+        \\  tab close [n]         Close tab n (default: current)
+        \\  window new            Open new browser window
         \\
         \\Navigation:
         \\  navigate <url>        Navigate to URL (aliases: nav, goto)
@@ -108,6 +113,130 @@ pub fn printHelp() void {
         \\  wait --fn "expr"      Wait for JS condition to be true
         \\
         \\Selectors can be CSS selectors or @refs from snapshot (e.g., @e3)
+        \\
+    , .{});
+}
+
+pub fn cmdTab(state: *InteractiveState, args: []const []const u8) !void {
+    var target = cdp.Target.init(state.browser.connection);
+
+    // tab new [url]
+    if (args.len >= 1 and eql(args[0], "new")) {
+        const url = if (args.len >= 2) args[1] else "about:blank";
+        const target_id = try target.createTarget(url);
+        std.debug.print("New tab: {s}\n", .{target_id});
+        return;
+    }
+
+    // tab close [n]
+    if (args.len >= 1 and eql(args[0], "close")) {
+        const page_tabs = try state.browser.pages();
+        defer {
+            for (page_tabs) |*p| p.*.deinit(state.allocator);
+            state.allocator.free(page_tabs);
+        }
+        if (page_tabs.len == 0) {
+            std.debug.print("No tabs open\n", .{});
+            return;
+        }
+        var close_idx: usize = page_tabs.len - 1;
+        if (args.len >= 2) {
+            close_idx = std.fmt.parseInt(usize, args[1], 10) catch {
+                std.debug.print("Invalid tab number: {s}\n", .{args[1]});
+                return;
+            };
+            if (close_idx == 0 or close_idx > page_tabs.len) {
+                std.debug.print("Tab number out of range (1-{})\n", .{page_tabs.len});
+                return;
+            }
+            close_idx -= 1;
+        }
+        const success = try target.closeTarget(page_tabs[close_idx].target_id);
+        if (success) {
+            std.debug.print("Closed tab {}: {s}\n", .{ close_idx + 1, page_tabs[close_idx].title });
+            // If we closed our current tab, clear session
+            if (state.target_id != null and std.mem.eql(u8, state.target_id.?, page_tabs[close_idx].target_id)) {
+                if (state.session) |s| s.deinit();
+                state.session = null;
+                state.allocator.free(state.target_id.?);
+                state.target_id = null;
+            }
+        } else {
+            std.debug.print("Failed to close tab\n", .{});
+        }
+        return;
+    }
+
+    // tab <n> — switch to tab n
+    if (args.len >= 1) {
+        const tab_num = std.fmt.parseInt(usize, args[0], 10) catch {
+            std.debug.print("Unknown subcommand: {s}\n", .{args[0]});
+            printTabUsage();
+            return;
+        };
+        const page_tabs = try state.browser.pages();
+        defer {
+            for (page_tabs) |*p| p.*.deinit(state.allocator);
+            state.allocator.free(page_tabs);
+        }
+        if (tab_num == 0 or tab_num > page_tabs.len) {
+            std.debug.print("Tab number out of range (1-{})\n", .{page_tabs.len});
+            return;
+        }
+        const selected = page_tabs[tab_num - 1];
+        try target.activateTarget(selected.target_id);
+        // Switch session to this tab
+        if (state.session) |s| s.deinit();
+        if (state.target_id) |t| state.allocator.free(t);
+        const session_id = try target.attachToTarget(state.allocator, selected.target_id, true);
+        state.session = try cdp.Session.init(session_id, state.browser.connection, state.allocator);
+        state.target_id = try state.allocator.dupe(u8, selected.target_id);
+        std.debug.print("Switched to tab {}: {s} ({s})\n", .{ tab_num, selected.title, selected.url });
+        return;
+    }
+
+    // Default: list tabs
+    const page_tabs = try state.browser.pages();
+    defer {
+        for (page_tabs) |*p| p.*.deinit(state.allocator);
+        state.allocator.free(page_tabs);
+    }
+    if (page_tabs.len == 0) {
+        std.debug.print("No tabs open\n", .{});
+        return;
+    }
+    for (page_tabs, 1..) |t, i| {
+        const marker: []const u8 = if (state.target_id != null and std.mem.eql(u8, t.target_id, state.target_id.?)) "* " else "  ";
+        std.debug.print("{s}{}: {s:<30} {s}\n", .{ marker, i, t.title, t.url });
+    }
+    std.debug.print("\nTotal: {} tab(s). * = current\n", .{page_tabs.len});
+}
+
+fn printTabUsage() void {
+    std.debug.print(
+        \\Usage: tab [subcommand]
+        \\
+        \\  tab                  List open tabs
+        \\  tab new [url]        Open new tab
+        \\  tab <n>              Switch to tab n
+        \\  tab close [n]        Close tab n (default: current)
+        \\
+    , .{});
+}
+
+pub fn cmdWindow(state: *InteractiveState, args: []const []const u8) !void {
+    if (args.len >= 1 and eql(args[0], "new")) {
+        _ = try state.browser.connection.sendCommand("Target.createTarget", .{
+            .url = "about:blank",
+            .newWindow = true,
+        }, null);
+        std.debug.print("New window opened\n", .{});
+        return;
+    }
+    std.debug.print(
+        \\Usage: window <subcommand>
+        \\
+        \\  window new           Open new browser window
         \\
     , .{});
 }

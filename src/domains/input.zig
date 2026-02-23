@@ -36,6 +36,7 @@ pub const Input = struct {
             .x = x,
             .y = y,
             .button = .none,
+            .pointer_type = opts.pointer_type,
         });
 
         try self.dispatchMouseEvent(.{
@@ -44,6 +45,7 @@ pub const Input = struct {
             .y = y,
             .button = opts.button,
             .click_count = opts.click_count,
+            .pointer_type = opts.pointer_type,
         });
 
         // Sleep using spinloop (Zig 0.16 changed time API)
@@ -59,6 +61,7 @@ pub const Input = struct {
             .y = y,
             .button = opts.button,
             .click_count = opts.click_count,
+            .pointer_type = opts.pointer_type,
         });
     }
 
@@ -168,6 +171,7 @@ pub const MouseEvent = struct {
     modifiers: ?i32 = null,
     delta_x: ?f64 = null,
     delta_y: ?f64 = null,
+    pointer_type: ?[]const u8 = null,
 };
 
 /// Key event type
@@ -211,4 +215,5 @@ pub const ClickOptions = struct {
     button: MouseButton = .left,
     click_count: i32 = 1,
     delay_ms: u64 = 0,
+    pointer_type: ?[]const u8 = null,
 };

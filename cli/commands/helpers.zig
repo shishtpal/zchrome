@@ -30,7 +30,4 @@ pub fn jsStringLiteral(allocator: std.mem.Allocator, s: []const u8) ![]const u8 
     return result.toOwnedSlice(allocator);
 }
 
-/// Placeholder for network monitoring (not yet implemented).
-pub fn network() void {
-    std.debug.print("Network monitoring not yet implemented\n", .{});
-}
+

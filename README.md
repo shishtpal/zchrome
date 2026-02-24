@@ -6,6 +6,16 @@ A Chrome DevTools Protocol (CDP) client library for Zig.
 
 `zchrome` provides a pure Zig implementation of the Chrome DevTools Protocol client, enabling programmatic control of Chrome/Chromium browsers. Use it for browser automation, web scraping, testing, and more.
 
+
+## Project Goals
+- A pure Zig implementation of the Chrome DevTools Protocol client
+- A [CLI tool](#cli-commands)/[Zig library](#library-usage) for quick browser automation
+- Fully portable without any daemon or service
+- Ability to record and replay browser actions
+- Inspired by [agent-browser](https://github.com/vercel-labs/agent-browser)
+    - I have learned many things from it, although
+    - I was working upon such kind of project (using rust lang), that also works, but it's not public.
+
 ## Features
 
 - **WebSocket Transport** - Direct WebSocket connection to Chrome's DevTools Protocol
@@ -58,21 +68,26 @@ curl http://127.0.0.1:9222/json/version
 
 ### 3. Use the CLI
 
+> Cli state is being saved into `zchrome.json` file
+
 ```bash
 # Build
 zig build -Doptimize=ReleaseFast
 
+# Connect to Browser
+zchrome connect
+
 # Get browser version
-zchrome --url ws://127.0.0.1:9222/devtools/browser/<guid> version
+zchrome version
 
 # Navigate to a page
-zchrome --url ws://127.0.0.1:9222/devtools/browser/<guid> navigate https://example.com
+zchrome navigate https://example.com
 
 # Take a screenshot
-zchrome --url ws://127.0.0.1:9222/devtools/browser/<guid> screenshot output.png
+zchrome screenshot output.png
 
 # Evaluate JavaScript
-zchrome --url ws://127.0.0.1:9222/devtools/browser/<guid> evaluate "document.title"
+zchrome evaluate "document.title"
 ```
 
 ## CLI Commands
@@ -96,7 +111,9 @@ zchrome --url ws://127.0.0.1:9222/devtools/browser/<guid> evaluate "document.tit
 
 ### Working with Existing Pages
 
-Use the `--use <target-id>` flag to run commands on existing pages:
+> Use the `--url <ws-url>` flag to connect to an existing browser window
+> Use the `--use <target-id>` flag to run commands on existing page
+
 
 ```bash
 # List open pages
@@ -258,4 +275,5 @@ zig build test
 ## Resources
 
 - [Chrome DevTools Protocol Documentation](https://chromedevtools.github.io/devtools-protocol/)
+- [Agent Browser](https://github.com/vercel-labs/agent-browser)
 - [Zig Documentation](https://ziglang.org/documentation/)

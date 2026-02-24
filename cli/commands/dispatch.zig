@@ -4,6 +4,7 @@ const std = @import("std");
 const cdp = @import("cdp");
 const types = @import("types.zig");
 const helpers = @import("helpers.zig");
+const network_cmd = @import("network.zig");
 const navigation = @import("navigation.zig");
 const capture = @import("capture.zig");
 const cookies_cmd = @import("cookies.zig");
@@ -29,7 +30,7 @@ pub fn dispatchSessionCommand(session: *cdp.Session, command: anytype, ctx: Comm
         .screenshot => try capture.screenshot(session, ctx),
         .pdf => try capture.pdf(session, ctx),
         .evaluate => try evaluate_cmd.evaluate(session, ctx),
-        .network => helpers.network(),
+        .network => try network_cmd.network(session, ctx),
         .cookies => try cookies_cmd.cookies(session, ctx),
         .storage => try storage_cmd.webStorage(session, ctx),
         .snapshot => try capture.snapshot(session, ctx),

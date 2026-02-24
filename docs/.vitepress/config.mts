@@ -83,6 +83,9 @@ export default defineConfig({
             { text: 'DOM Manipulation', link: '/examples/dom' },
             { text: 'JavaScript Evaluation', link: '/examples/javascript' },
             { text: 'Network Interception', link: '/examples/network' },
+            { text: 'Network Commands', link: '/examples/network-commands' },
+            { text: 'Browser Interactions', link: '/examples/interactions' },
+            { text: 'Macro Recording', link: '/examples/macros' },
           ]
         },
       ],

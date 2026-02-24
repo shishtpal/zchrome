@@ -210,15 +210,66 @@ zchrome --url $url --use 75E5402CE67C63D19659EEFDC1CF292D evaluate "document.tit
 
 ### network
 
-Network monitoring command.
+Intercept, block, or mock network requests using the CDP Fetch domain.
+
+#### network route
+
+Intercept requests matching a URL pattern. Uses wildcard matching (`*`).
 
 ```bash
-zchrome network <url>
+# Log intercepted requests (continue them after logging)
+zchrome network route "*api/v1*"
+
+# Block matching requests entirely
+zchrome network route "*.png" --abort
+
+# Mock response with custom JSON body
+zchrome network route "*api/user*" --body '{"name":"test","id":1}'
 ```
 
-::: info
-Network monitoring CLI is a placeholder. For network interception, use the programmatic API with the Network or Fetch domains.
-:::
+The `route` command enables the Fetch domain and enters an intercept loop that processes matching requests in real-time. Press `Ctrl+C` to stop.
+
+**Options:**
+- `--abort` — Block matching requests (responds with `BlockedByClient`)
+- `--body <json>` — Mock response with the given JSON body (HTTP 200, `application/json`)
+
+#### network unroute
+
+Remove all active routes by disabling the Fetch domain.
+
+```bash
+zchrome network unroute
+```
+
+#### network requests
+
+View tracked network requests using the Performance Resource Timing API.
+
+```bash
+# List all tracked requests
+zchrome network requests
+
+# Filter by URL substring
+zchrome network requests --filter "api"
+
+# Clear request log (re-enables network tracking)
+zchrome network requests --clear
+```
+
+**Options:**
+- `--filter <pattern>` — Only show requests whose URL contains the pattern
+- `--clear` — Clear the request log
+
+**Example output:**
+
+```
+METHOD   URL                                                          STATUS
+--------------------------------------------------------------------------------
+fetch    https://api.example.com/v1/users                             45ms 1234B
+script   https://cdn.example.com/app.js                               120ms 45678B
+
+Total: 2 request(s)
+```
 
 ### cookies
 

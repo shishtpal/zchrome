@@ -434,3 +434,8 @@ pub fn cmdCursor(state: *InteractiveState, args: []const []const u8) !void {
     const session = try requireSession(state);
     try impl.cursor(session, buildCtx(state, args));
 }
+
+pub fn cmdNetwork(state: *InteractiveState, args: []const []const u8) !void {
+    const session = try requireSession(state);
+    try impl.network(session, buildCtx(state, args));
+}

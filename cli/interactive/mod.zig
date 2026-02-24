@@ -266,6 +266,8 @@ fn executeCommand(state: *InteractiveState, line: []const u8) !void {
         try commands.cmdCursor(state, args);
     } else if (eql(cmd, "set")) {
         try commands.cmdSet(state, args);
+    } else if (eql(cmd, "network") or eql(cmd, "net")) {
+        try commands.cmdNetwork(state, args);
     } else {
         std.debug.print("Unknown command: {s}\nType 'help' for available commands.\n", .{cmd});
     }

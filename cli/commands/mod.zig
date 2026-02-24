@@ -25,6 +25,7 @@ const cursor_mod = @import("cursor.zig");
 const wait_mod = @import("wait.zig");
 const getters_mod = @import("getters.zig");
 const setters_mod = @import("setters.zig");
+const network_mod = @import("network.zig");
 const dispatch_mod = @import("dispatch.zig");
 const help_mod = @import("help.zig");
 
@@ -143,7 +144,11 @@ pub const dispatchSessionCommand = dispatch_mod.dispatchSessionCommand;
 pub const printTabHelp = help_mod.printTabHelp;
 pub const printWindowHelp = help_mod.printWindowHelp;
 
+// ─── Network Re-exports ──────────────────────────────────────────────────────
+
+pub const network = network_mod.network;
+pub const printNetworkHelp = network_mod.printNetworkHelp;
+
 // ─── Helper Re-exports ───────────────────────────────────────────────────────
 
-pub const network = helpers_mod.network;
 pub const writeFile = helpers_mod.writeFile;

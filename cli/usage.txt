@@ -1,4 +1,4 @@
-zchrome [options] <command> [command-args>
+zchrome [options] <command> [command-args]
 
 GLOBAL OPTIONS:
   --url <ws-url>           Connect to existing Chrome (ws://...)
@@ -18,7 +18,6 @@ COMMANDS:
   screenshot [url]         Capture PNG screenshot
   pdf [url]                Generate PDF
   evaluate [url] <expr>    Evaluate JS expression
-  network [url]            Log network requests
   snapshot                 Capture accessibility tree of active page, save to zsnap.json
   version                  Print browser version info
   help                     Show this help message
@@ -104,6 +103,17 @@ COOKIE MANAGEMENT:
   storage local export <f> Export localStorage to JSON/YAML file
   storage local import <f> Import localStorage from JSON/YAML file
   storage session          Same commands for sessionStorage
+
+NETWORK:
+  network route <url>                Intercept requests matching URL pattern
+  network route <url> --abort        Block matching requests
+  network route <url> --body <json>  Mock response with JSON body
+  network route <url> --file <path>  Mock response with file contents
+  network route <url> --redirect <target>  Redirect to another host
+  network unroute                    Remove all routes
+  network requests                   View tracked requests
+  network requests --clear           Clear request log
+  network requests --filter <pat>    Filter by URL substring
 
 SNAPSHOT OPTIONS:
   -i, --interactive-only   Only include interactive elements

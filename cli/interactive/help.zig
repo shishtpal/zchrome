@@ -99,6 +99,15 @@ pub fn print() void {
         \\  wait --load <state>   Wait for load state (load, domcontentloaded, networkidle)
         \\  wait --fn "expr"      Wait for JS condition to be true
         \\
+        \\Network:
+        \\  network route <url>           Intercept & log matching requests
+        \\  network route <url> --abort   Block matching requests
+        \\  network route <url> --body <j> Mock response with JSON body
+        \\  network unroute               Remove all routes
+        \\  network requests              View tracked requests
+        \\  network requests --clear      Clear request log
+        \\  network requests --filter <p> Filter by URL substring
+        \\
         \\Selectors can be CSS selectors or @refs from snapshot (e.g., @e3)
         \\
     , .{});

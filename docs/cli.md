@@ -1564,6 +1564,64 @@ zchrome set media dark    # Enable dark mode
 zchrome set media light   # Enable light mode
 ```
 
+## Dialog Commands
+
+Handle JavaScript dialogs (alert, confirm, prompt) that appear on the page.
+
+### dialog accept
+
+Accept a dialog. For `prompt` dialogs, an optional text argument sets the input value.
+
+```bash
+zchrome dialog accept
+zchrome dialog accept <text>
+```
+
+**Examples:**
+
+```bash
+# Accept an alert or confirm dialog
+zchrome dialog accept
+
+# Accept a prompt dialog and supply input text
+zchrome dialog accept "my answer"
+
+# Multi-word prompt text (tokens are joined with spaces)
+zchrome dialog accept hello world
+```
+
+### dialog dismiss
+
+Dismiss (cancel) a dialog.
+
+```bash
+zchrome dialog dismiss
+```
+
+**Example:**
+
+```bash
+zchrome dialog dismiss
+```
+
+**Notes:**
+
+- The Page domain is enabled automatically before handling the dialog.
+- `dialog accept` without text sends an empty string for prompt dialogs.
+- Extra tokens after `dismiss` are silently ignored.
+- If no subcommand is given, usage help is printed.
+
+**REPL usage:**
+
+```
+> dialog accept
+Dialog accepted
+> dialog accept hello world
+Dialog accepted with text: hello world
+> dialog dismiss
+Dialog dismissed
+```
+
 ## Navigation Commands
 
 ### back

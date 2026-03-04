@@ -83,6 +83,12 @@ pub const PrintToPDFParams = struct {
     prefer_css_page_size: ?bool = null,
 };
 
+/// Handle JavaScript dialog parameters
+pub const HandleJavaScriptDialogParams = struct {
+    accept: bool,
+    prompt_text: ?[]const u8 = null,
+};
+
 /// Page domain client
 pub const Page = struct {
     session: *Session,
@@ -260,6 +266,14 @@ pub const Page = struct {
     /// Bring page to front
     pub fn bringToFront(self: *Self) !void {
         _ = try self.session.sendCommand("Page.bringToFront", .{});
+    }
+
+    /// Handle a JavaScript dialog (alert/confirm/prompt)
+    pub fn handleJavaScriptDialog(self: *Self, params: HandleJavaScriptDialogParams) !void {
+        _ = try self.session.sendCommand("Page.handleJavaScriptDialog", .{
+            .accept = params.accept,
+            .promptText = params.prompt_text,
+        });
     }
 
     /// Set document content

@@ -26,6 +26,7 @@ const wait_mod = @import("wait.zig");
 const getters_mod = @import("getters.zig");
 const setters_mod = @import("setters.zig");
 const network_mod = @import("network.zig");
+const dialog_mod = @import("dialog.zig");
 const dispatch_mod = @import("dispatch.zig");
 const help_mod = @import("help.zig");
 
@@ -134,6 +135,12 @@ pub const printGetHelp = getters_mod.printGetHelp;
 
 pub const set = setters_mod.set;
 pub const printSetHelp = setters_mod.printSetHelp;
+
+// ─── Dialog Re-exports ───────────────────────────────────────────────────────
+
+pub const dialog = dialog_mod.dialog;
+pub const parseDialogArgs = dialog_mod.parseDialogArgs;
+pub const deinitDialogAction = dialog_mod.deinitDialogAction;
 
 // ─── Dispatch Re-exports ─────────────────────────────────────────────────────
 

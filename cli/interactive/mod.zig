@@ -266,6 +266,8 @@ fn executeCommand(state: *InteractiveState, line: []const u8) !void {
         try commands.cmdCursor(state, args);
     } else if (eql(cmd, "set")) {
         try commands.cmdSet(state, args);
+    } else if (eql(cmd, "dialog")) {
+        try commands.cmdDialog(state, args);
     } else if (eql(cmd, "network") or eql(cmd, "net")) {
         try commands.cmdNetwork(state, args);
     } else {

@@ -187,3 +187,44 @@ test "ScreenshotFormat - enum values" {
     try std.testing.expectEqual(ScreenshotFormat.png, @as(ScreenshotFormat, @enumFromInt(1)));
     try std.testing.expectEqual(ScreenshotFormat.webp, @as(ScreenshotFormat, @enumFromInt(2)));
 }
+
+test "Page.handleJavaScriptDialog - accept payload shape" {
+    const command = try cdp.protocol.serializeCommand(
+        std.testing.allocator,
+        1,
+        "Page.handleJavaScriptDialog",
+        .{ .accept = true, .promptText = @as(?[]const u8, null) },
+        null,
+    );
+    defer std.testing.allocator.free(command);
+
+    try std.testing.expect(std.mem.indexOf(u8, command, "\"method\":\"Page.handleJavaScriptDialog\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, command, "\"accept\":true") != null);
+}
+
+test "Page.handleJavaScriptDialog - prompt text payload shape" {
+    const command = try cdp.protocol.serializeCommand(
+        std.testing.allocator,
+        1,
+        "Page.handleJavaScriptDialog",
+        .{ .accept = true, .promptText = @as(?[]const u8, "hello world") },
+        null,
+    );
+    defer std.testing.allocator.free(command);
+
+    try std.testing.expect(std.mem.indexOf(u8, command, "\"accept\":true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, command, "\"promptText\":\"hello world\"") != null);
+}
+
+test "Page.handleJavaScriptDialog - dismiss payload shape" {
+    const command = try cdp.protocol.serializeCommand(
+        std.testing.allocator,
+        1,
+        "Page.handleJavaScriptDialog",
+        .{ .accept = false, .promptText = @as(?[]const u8, null) },
+        null,
+    );
+    defer std.testing.allocator.free(command);
+
+    try std.testing.expect(std.mem.indexOf(u8, command, "\"accept\":false") != null);
+}

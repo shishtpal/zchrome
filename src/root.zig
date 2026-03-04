@@ -59,7 +59,7 @@ pub const HighlightConfig = @import("domains/overlay.zig").HighlightConfig;
 pub const RGBA = @import("domains/overlay.zig").RGBA;
 
 // Utilities
-pub const json = @import("util/json.zig");
+pub const json = @import("json");
 pub const yaml = @import("util/yaml.zig");
 pub const url = @import("util/url.zig");
 pub const retry = @import("util/retry.zig");

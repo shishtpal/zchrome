@@ -1,6 +1,5 @@
 const std = @import("std");
 const Session = @import("../core/session.zig").Session;
-const json_util = @import("../util/json.zig");
 
 /// Overlay domain client for DOM element highlighting
 pub const Overlay = struct {

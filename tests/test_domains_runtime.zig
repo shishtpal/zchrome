@@ -1,13 +1,12 @@
 const std = @import("std");
-const cdp = @import("cdp");
-const json = cdp.json;
+const json = @import("json");
 
 // Remote object representation
 pub const RemoteObject = struct {
     type: []const u8,
     subtype: ?[]const u8 = null,
     class_name: ?[]const u8 = null,
-    value: ?std.json.Value = null,
+    value: ?json.Value = null,
     description: ?[]const u8 = null,
     object_id: ?[]const u8 = null,
 
@@ -59,24 +58,36 @@ pub const RemoteObject = struct {
     }
 };
 
-fn parseRemoteObject(allocator: std.mem.Allocator, obj: std.json.Value) !RemoteObject {
+fn parseRemoteObject(allocator: std.mem.Allocator, obj: json.Value) !RemoteObject {
     return .{
-        .type = try allocator.dupe(u8, try json.getString(obj, "type")),
-        .subtype = if (obj.object.get("subtype")) |v| try allocator.dupe(u8, v.string) else null,
-        .class_name = if (obj.object.get("className")) |v| try allocator.dupe(u8, v.string) else null,
-        .value = obj.object.get("value"),
-        .description = if (obj.object.get("description")) |v| try allocator.dupe(u8, v.string) else null,
-        .object_id = if (obj.object.get("objectId")) |v| try allocator.dupe(u8, v.string) else null,
+        .type = try allocator.dupe(u8, try obj.getString("type")),
+        .subtype = if (obj.get("subtype")) |v| switch (v) {
+            .string => |s| try allocator.dupe(u8, s),
+            else => null,
+        } else null,
+        .class_name = if (obj.get("className")) |v| switch (v) {
+            .string => |s| try allocator.dupe(u8, s),
+            else => null,
+        } else null,
+        .value = obj.get("value"),
+        .description = if (obj.get("description")) |v| switch (v) {
+            .string => |s| try allocator.dupe(u8, s),
+            else => null,
+        } else null,
+        .object_id = if (obj.get("objectId")) |v| switch (v) {
+            .string => |s| try allocator.dupe(u8, s),
+            else => null,
+        } else null,
     };
 }
 
 // RemoteObject Parsing Tests
 test "RemoteObject - parse with string value" {
     const json_str = "{\"type\":\"string\",\"value\":\"hello world\"}";
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    var obj = try parseRemoteObject(std.testing.allocator, parsed.value);
+    var obj = try parseRemoteObject(std.testing.allocator, parsed);
     defer obj.deinit(std.testing.allocator);
 
     try std.testing.expectEqualStrings("string", obj.type);
@@ -86,10 +97,10 @@ test "RemoteObject - parse with string value" {
 
 test "RemoteObject - parse with number value" {
     const json_str = "{\"type\":\"number\",\"value\":42}";
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    var obj = try parseRemoteObject(std.testing.allocator, parsed.value);
+    var obj = try parseRemoteObject(std.testing.allocator, parsed);
     defer obj.deinit(std.testing.allocator);
 
     try std.testing.expectEqualStrings("number", obj.type);
@@ -99,10 +110,10 @@ test "RemoteObject - parse with number value" {
 
 test "RemoteObject - parse with boolean value" {
     const json_str = "{\"type\":\"boolean\",\"value\":true}";
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    var obj = try parseRemoteObject(std.testing.allocator, parsed.value);
+    var obj = try parseRemoteObject(std.testing.allocator, parsed);
     defer obj.deinit(std.testing.allocator);
 
     try std.testing.expectEqualStrings("boolean", obj.type);
@@ -111,10 +122,10 @@ test "RemoteObject - parse with boolean value" {
 
 test "RemoteObject - parse with undefined type" {
     const json_str = "{\"type\":\"undefined\"}";
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    var obj = try parseRemoteObject(std.testing.allocator, parsed.value);
+    var obj = try parseRemoteObject(std.testing.allocator, parsed);
     defer obj.deinit(std.testing.allocator);
 
     try std.testing.expectEqualStrings("undefined", obj.type);
@@ -123,10 +134,10 @@ test "RemoteObject - parse with undefined type" {
 
 test "RemoteObject - parse with object type" {
     const json_str = "{\"type\":\"object\",\"className\":\"Object\",\"description\":\"Object\",\"objectId\":\"obj-123\"}";
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    var obj = try parseRemoteObject(std.testing.allocator, parsed.value);
+    var obj = try parseRemoteObject(std.testing.allocator, parsed);
     defer obj.deinit(std.testing.allocator);
 
     try std.testing.expectEqualStrings("object", obj.type);
@@ -138,10 +149,10 @@ test "RemoteObject - parse with object type" {
 
 test "RemoteObject - parse with subtype" {
     const json_str = "{\"type\":\"object\",\"subtype\":\"array\",\"className\":\"Array\",\"description\":\"Array(3)\"}";
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    var obj = try parseRemoteObject(std.testing.allocator, parsed.value);
+    var obj = try parseRemoteObject(std.testing.allocator, parsed);
     defer obj.deinit(std.testing.allocator);
 
     try std.testing.expect(obj.subtype != null);

@@ -1,7 +1,7 @@
 const std = @import("std");
+const json = @import("json");
 const Session = @import("../core/session.zig").Session;
 const Event = @import("../core/protocol.zig").Event;
-const json_util = @import("../util/json.zig");
 
 /// Runtime domain client
 pub const Runtime = struct {
@@ -36,7 +36,7 @@ pub const Runtime = struct {
             .user_gesture = opts.user_gesture,
         });
 
-        const result_obj = result.object.get("result") orelse return error.MissingField;
+        const result_obj = result.get("result") orelse return error.MissingField;
         return try parseRemoteObject(allocator, result_obj);
     }
 
@@ -58,7 +58,7 @@ pub const Runtime = struct {
             .execution_context_id = opts.execution_context_id,
         });
 
-        const result_obj = result.object.get("result") orelse return error.MissingField;
+        const result_obj = result.get("result") orelse return error.MissingField;
         return try parseRemoteObject(allocator, result_obj);
     }
 
@@ -69,7 +69,7 @@ pub const Runtime = struct {
             .own_properties = own_properties,
         });
 
-        const props = try json_util.getArray(result, "result");
+        const props = try result.getArray("result");
         var properties = std.ArrayList(PropertyDescriptor).init(allocator);
         errdefer properties.deinit();
 
@@ -118,7 +118,7 @@ pub const Runtime = struct {
             .return_by_value = true,
         });
 
-        const result_obj = result.object.get("result") orelse return error.MissingField;
+        const result_obj = result.get("result") orelse return error.MissingField;
         return try parseRemoteObject(allocator, result_obj);
     }
 
@@ -129,8 +129,8 @@ pub const Runtime = struct {
             .return_by_value = true,
         });
 
-        const result_obj = result.object.get("result") orelse return error.MissingField;
-        const value = result_obj.object.get("value") orelse return error.MissingField;
+        const result_obj = result.get("result") orelse return error.MissingField;
+        const value = result_obj.get("value") orelse return error.MissingField;
 
         return switch (@typeInfo(T)) {
             .int => @intCast(switch (value) {
@@ -184,7 +184,7 @@ pub const RemoteObject = struct {
     type: []const u8,
     subtype: ?[]const u8 = null,
     class_name: ?[]const u8 = null,
-    value: ?std.json.Value = null,
+    value: ?json.Value = null,
     description: ?[]const u8 = null,
     object_id: ?[]const u8 = null,
 
@@ -244,7 +244,7 @@ pub const RemoteObject = struct {
 
 /// Call argument
 pub const CallArgument = struct {
-    value: ?std.json.Value = null,
+    value: ?json.Value = null,
     unserializable_value: ?[]const u8 = null,
     object_id: ?[]const u8 = null,
 };
@@ -270,49 +270,49 @@ pub const PropertyDescriptor = struct {
 };
 
 /// Parse a remote object from JSON
-fn parseRemoteObject(allocator: std.mem.Allocator, obj: std.json.Value) !RemoteObject {
+fn parseRemoteObject(allocator: std.mem.Allocator, obj: json.Value) !RemoteObject {
     return .{
-        .type = try allocator.dupe(u8, try json_util.getString(obj, "type")),
-        .subtype = if (obj.object.get("subtype")) |v|
-            try allocator.dupe(u8, v.string)
-        else
-            null,
-        .class_name = if (obj.object.get("className")) |v|
-            try allocator.dupe(u8, v.string)
-        else
-            null,
-        .value = obj.object.get("value"),
-        .description = if (obj.object.get("description")) |v|
-            try allocator.dupe(u8, v.string)
-        else
-            null,
-        .object_id = if (obj.object.get("objectId")) |v|
-            try allocator.dupe(u8, v.string)
-        else
-            null,
+        .type = try allocator.dupe(u8, try obj.getString("type")),
+        .subtype = if (obj.get("subtype")) |v| switch (v) {
+            .string => |s| try allocator.dupe(u8, s),
+            else => null,
+        } else null,
+        .class_name = if (obj.get("className")) |v| switch (v) {
+            .string => |s| try allocator.dupe(u8, s),
+            else => null,
+        } else null,
+        .value = obj.get("value"),
+        .description = if (obj.get("description")) |v| switch (v) {
+            .string => |s| try allocator.dupe(u8, s),
+            else => null,
+        } else null,
+        .object_id = if (obj.get("objectId")) |v| switch (v) {
+            .string => |s| try allocator.dupe(u8, s),
+            else => null,
+        } else null,
     };
 }
 
 /// Parse a property descriptor from JSON
-fn parsePropertyDescriptor(allocator: std.mem.Allocator, obj: std.json.Value) !PropertyDescriptor {
+fn parsePropertyDescriptor(allocator: std.mem.Allocator, obj: json.Value) !PropertyDescriptor {
     return .{
-        .name = try allocator.dupe(u8, try json_util.getString(obj, "name")),
-        .value = if (obj.object.get("value")) |v|
+        .name = try allocator.dupe(u8, try obj.getString("name")),
+        .value = if (obj.get("value")) |v|
             try parseRemoteObject(allocator, v)
         else
             null,
-        .writable = if (obj.object.get("writable")) |v| v.bool else null,
-        .get = if (obj.object.get("get")) |v|
+        .writable = if (obj.get("writable")) |v| switch (v) { .bool => |b| b, else => null } else null,
+        .get = if (obj.get("get")) |v|
             try parseRemoteObject(allocator, v)
         else
             null,
-        .set = if (obj.object.get("set")) |v|
+        .set = if (obj.get("set")) |v|
             try parseRemoteObject(allocator, v)
         else
             null,
-        .configurable = if (obj.object.get("configurable")) |v| v.bool else null,
-        .enumerable = if (obj.object.get("enumerable")) |v| v.bool else null,
-        .symbol = if (obj.object.get("symbol")) |v|
+        .configurable = if (obj.get("configurable")) |v| switch (v) { .bool => |b| b, else => null } else null,
+        .enumerable = if (obj.get("enumerable")) |v| switch (v) { .bool => |b| b, else => null } else null,
+        .symbol = if (obj.get("symbol")) |v|
             try parseRemoteObject(allocator, v)
         else
             null,
@@ -356,7 +356,7 @@ pub const ExecutionContextDescription = struct {
     id: i64,
     origin: []const u8,
     name: []const u8,
-    aux_data: ?std.json.Value = null,
+    aux_data: ?json.Value = null,
 };
 
 pub const StackTrace = struct {

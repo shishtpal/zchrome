@@ -1,6 +1,7 @@
 //! Cookie management commands.
 
 const std = @import("std");
+const json = @import("json");
 const cdp = @import("cdp");
 const types = @import("types.zig");
 const helpers = @import("helpers.zig");
@@ -184,7 +185,7 @@ pub fn cookies(session: *cdp.Session, ctx: CommandCtx) !void {
         }
 
         // Serialize the filtered cookies while all_cookies is still alive (strings are valid)
-        const json_str = try cdp.json.stringify(ctx.allocator, filtered.items);
+        const json_str = try json.encode(ctx.allocator, filtered.items, .{});
         defer ctx.allocator.free(json_str);
 
         try helpers.writeFile(ctx.io, path, json_str);
@@ -208,31 +209,30 @@ pub fn cookies(session: *cdp.Session, ctx: CommandCtx) !void {
         };
         defer ctx.allocator.free(content);
 
-        const parsed = std.json.parseFromSlice(std.json.Value, ctx.allocator, content, .{}) catch |err| {
+        var parsed = json.parse(ctx.allocator, content, .{}) catch |err| {
             std.debug.print("Error parsing JSON from {s}: {}\n", .{ path, err });
             return;
         };
-        defer parsed.deinit();
 
-        if (parsed.value != .array) {
+        if (parsed != .array) {
             std.debug.print("Error: JSON file must contain an array of cookies\n", .{});
             return;
         }
 
         var count: usize = 0;
         var params: std.ArrayList(cdp.CookieParam) = .empty;
-        try params.ensureTotalCapacity(ctx.allocator, parsed.value.array.items.len);
+        try params.ensureTotalCapacity(ctx.allocator, parsed.array.items.len);
         defer params.deinit(ctx.allocator);
 
-        for (parsed.value.array.items) |item| {
+        for (parsed.array.items) |item| {
             if (item != .object) continue;
-            const name = if (item.object.get("name")) |v| (if (v == .string) v.string else "") else "";
-            const value = if (item.object.get("value")) |v| (if (v == .string) v.string else "") else "";
-            var domain = if (item.object.get("domain")) |v| (if (v == .string) v.string else "") else "";
-            const path_str = if (item.object.get("path")) |v| (if (v == .string) v.string else "/") else "/";
-            const secure = if (item.object.get("secure")) |v| (if (v == .bool) v.bool else false) else false;
+            const name = if (item.get("name")) |v| (if (v == .string) v.string else "") else "";
+            const value = if (item.get("value")) |v| (if (v == .string) v.string else "") else "";
+            var domain = if (item.get("domain")) |v| (if (v == .string) v.string else "") else "";
+            const path_str = if (item.get("path")) |v| (if (v == .string) v.string else "/") else "/";
+            const secure = if (item.get("secure")) |v| (if (v == .bool) v.bool else false) else false;
             // Handle both httpOnly (JSON standard) and http_only (internal field name if leaked)
-            const http_only = if (item.object.get("httpOnly")) |v| (if (v == .bool) v.bool else false) else if (item.object.get("http_only")) |v| (if (v == .bool) v.bool else false) else false;
+            const http_only = if (item.get("httpOnly")) |v| (if (v == .bool) v.bool else false) else if (item.get("http_only")) |v| (if (v == .bool) v.bool else false) else false;
 
             if (domain_override) |d| {
                 domain = d;

@@ -1,6 +1,6 @@
 const std = @import("std");
+const json = @import("json");
 const Session = @import("../core/session.zig").Session;
-const json_util = @import("../util/json.zig");
 
 /// Fetch domain client (for request interception)
 pub const Fetch = struct {
@@ -58,8 +58,8 @@ pub const Fetch = struct {
         });
 
         return .{
-            .body = try allocator.dupe(u8, try json_util.getString(result, "body")),
-            .base64_encoded = try json_util.getBool(result, "base64Encoded"),
+            .body = try allocator.dupe(u8, try result.getString("body")),
+            .base64_encoded = try result.getBool("base64Encoded"),
         };
     }
 };
@@ -127,6 +127,6 @@ pub const RequestPaused = struct {
 pub const NetworkRequest = struct {
     url: []const u8,
     method: []const u8,
-    headers: std.json.Value,
+    headers: json.Value,
     post_data: ?[]const u8 = null,
 };

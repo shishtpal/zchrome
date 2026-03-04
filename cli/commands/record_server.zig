@@ -4,6 +4,7 @@
 //! the main thread waits for user input.
 
 const std = @import("std");
+const json = @import("json");
 const cdp = @import("cdp");
 const macro_mod = @import("macro.zig");
 
@@ -125,11 +126,11 @@ pub const RecordServer = struct {
     }
 
     fn parseAndStoreCommand(self: *Self, data: []const u8) void {
-        const parsed = std.json.parseFromSlice(std.json.Value, self.allocator, data, .{}) catch return;
-        defer parsed.deinit();
+        var parsed = json.parse(self.allocator, data, .{}) catch return;
+        defer parsed.deinit(self.allocator);
 
-        if (parsed.value != .object) return;
-        const obj = parsed.value.object;
+        if (parsed != .object) return;
+        const obj = parsed.object;
 
         var cmd = macro_mod.MacroCommand{ .action = .click };
 

@@ -1,6 +1,7 @@
 //! Web storage commands (localStorage, sessionStorage).
 
 const std = @import("std");
+const json = @import("json");
 const cdp = @import("cdp");
 const types = @import("types.zig");
 const helpers = @import("helpers.zig");
@@ -115,17 +116,17 @@ pub fn webStorage(session: *cdp.Session, ctx: CommandCtx) !void {
         else
             content;
         defer if (is_yaml) ctx.allocator.free(json_str);
-        const parsed = std.json.parseFromSlice(std.json.Value, ctx.allocator, json_str, .{}) catch |err| {
+        var parsed = json.parse(ctx.allocator, json_str, .{}) catch |err| {
             std.debug.print("Error parsing JSON from {s}: {}\n", .{ path, err });
             return;
         };
-        defer parsed.deinit();
-        if (parsed.value != .object) {
+        defer parsed.deinit(ctx.allocator);
+        if (parsed != .object) {
             std.debug.print("Error: file must contain a JSON object\n", .{});
             return;
         }
         var count: usize = 0;
-        var it = parsed.value.object.iterator();
+        var it = parsed.object.iterator();
         while (it.next()) |entry| {
             if (entry.value_ptr.* != .string) continue;
             const key_lit = try helpers.jsStringLiteral(ctx.allocator, entry.key_ptr.*);

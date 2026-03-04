@@ -1,6 +1,6 @@
 const std = @import("std");
+const json = @import("json");
 const Session = @import("../core/session.zig").Session;
-const json_util = @import("../util/json.zig");
 
 /// Network domain client
 pub const Network = struct {
@@ -29,8 +29,8 @@ pub const Network = struct {
         });
 
         return .{
-            .body = try allocator.dupe(u8, try json_util.getString(result, "body")),
-            .base64_encoded = try json_util.getBool(result, "base64Encoded"),
+            .body = try allocator.dupe(u8, try result.getString("body")),
+            .base64_encoded = try result.getBool("base64Encoded"),
         };
     }
 
@@ -39,7 +39,7 @@ pub const Network = struct {
         const result = try self.session.sendCommand("Network.getRequestPostData", .{
             .requestId = request_id,
         });
-        return try allocator.dupe(u8, try json_util.getString(result, "postData"));
+        return try allocator.dupe(u8, try result.getString("postData"));
     }
 
     /// Set request interception (deprecated, use Fetch domain instead)
@@ -80,7 +80,7 @@ pub const Network = struct {
     }
 
     /// Set extra HTTP headers to be sent with every request
-    pub fn setExtraHTTPHeaders(self: *Self, headers: std.json.Value) !void {
+    pub fn setExtraHTTPHeaders(self: *Self, headers: json.Value) !void {
         _ = try self.session.sendCommand("Network.setExtraHTTPHeaders", .{
             .headers = headers,
         });
@@ -136,7 +136,7 @@ pub const Network = struct {
             .isRegex = is_regex,
         });
 
-        const matches_val = result.object.get("result") orelse return &[_]SearchMatch{};
+        const matches_val = result.get("result") orelse return &[_]SearchMatch{};
         if (matches_val != .array) return &[_]SearchMatch{};
 
         var matches = std.ArrayList(SearchMatch).init(allocator);
@@ -145,8 +145,8 @@ pub const Network = struct {
         for (matches_val.array.items) |item| {
             if (item != .object) continue;
             try matches.append(.{
-                .line_number = if (item.object.get("lineNumber")) |v| (if (v == .integer) @intCast(v.integer) else 0) else 0,
-                .line_content = if (item.object.get("lineContent")) |v| (if (v == .string) try allocator.dupe(u8, v.string) else "") else "",
+                .line_number = if (item.get("lineNumber")) |v| (if (v == .integer) @intCast(v.integer) else 0) else 0,
+                .line_content = if (item.get("lineContent")) |v| (if (v == .string) try allocator.dupe(u8, v.string) else "") else "",
             });
         }
         return try matches.toOwnedSlice();
@@ -159,8 +159,8 @@ pub const Network = struct {
         });
         _ = allocator;
         return .{
-            .coop = if (result.object.get("coop")) |v| v else null,
-            .coep = if (result.object.get("coep")) |v| v else null,
+            .coop = if (result.get("coop")) |v| v else null,
+            .coep = if (result.get("coep")) |v| v else null,
         };
     }
 
@@ -181,15 +181,15 @@ pub const Network = struct {
             },
         });
 
-        const resource = result.object.get("resource") orelse return error.InvalidResponse;
+        const resource = result.get("resource") orelse return error.InvalidResponse;
         if (resource != .object) return error.InvalidResponse;
 
         return .{
-            .success = if (resource.object.get("success")) |v| (if (v == .bool) v.bool else false) else false,
-            .http_status_code = if (resource.object.get("httpStatusCode")) |v| (if (v == .integer) @intCast(v.integer) else 0) else 0,
-            .net_error = if (resource.object.get("netError")) |v| (if (v == .integer) @intCast(v.integer) else null) else null,
-            .net_error_name = if (resource.object.get("netErrorName")) |v| (if (v == .string) try allocator.dupe(u8, v.string) else null) else null,
-            .stream = if (resource.object.get("stream")) |v| (if (v == .string) try allocator.dupe(u8, v.string) else null) else null,
+            .success = if (resource.get("success")) |v| (if (v == .bool) v.bool else false) else false,
+            .http_status_code = if (resource.get("httpStatusCode")) |v| (if (v == .integer) @intCast(v.integer) else 0) else 0,
+            .net_error = if (resource.get("netError")) |v| (if (v == .integer) @intCast(v.integer) else null) else null,
+            .net_error_name = if (resource.get("netErrorName")) |v| (if (v == .string) try allocator.dupe(u8, v.string) else null) else null,
+            .stream = if (resource.get("stream")) |v| (if (v == .string) try allocator.dupe(u8, v.string) else null) else null,
         };
     }
 };
@@ -216,7 +216,7 @@ pub const ContinueInterceptedRequestOptions = struct {
     url: ?[]const u8 = null,
     method: ?[]const u8 = null,
     post_data: ?[]const u8 = null,
-    headers: ?std.json.Value = null,
+    headers: ?json.Value = null,
 };
 
 pub const LoadNetworkResourceOptions = struct {
@@ -248,8 +248,8 @@ pub const SearchMatch = struct {
 
 /// Security isolation status
 pub const SecurityIsolationStatus = struct {
-    coop: ?std.json.Value = null,
-    coep: ?std.json.Value = null,
+    coop: ?json.Value = null,
+    coep: ?json.Value = null,
 };
 
 /// Loaded resource result
@@ -299,7 +299,7 @@ pub const ResourceType = enum {
 pub const Request = struct {
     url: []const u8,
     method: []const u8,
-    headers: std.json.Value,
+    headers: json.Value,
     post_data: ?[]const u8 = null,
     has_post_data: ?bool = null,
     mixed_content_type: ?[]const u8 = null,
@@ -313,10 +313,10 @@ pub const Response = struct {
     url: []const u8,
     status: i64,
     status_text: []const u8,
-    headers: std.json.Value,
+    headers: json.Value,
     mime_type: []const u8,
     charset: ?[]const u8 = null,
-    request_headers: ?std.json.Value = null,
+    request_headers: ?json.Value = null,
     connection_reused: ?bool = null,
     connection_id: ?f64 = null,
     remote_ip_address: ?[]const u8 = null,
@@ -338,7 +338,7 @@ pub const RequestWillBeSent = struct {
     request: Request,
     timestamp: f64,
     wall_time: ?f64 = null,
-    initiator: ?std.json.Value = null,
+    initiator: ?json.Value = null,
     redirect_has_extra_info: ?bool = null,
     redirect_response: ?Response = null,
     type: ?[]const u8 = null,
@@ -369,7 +369,7 @@ pub const LoadingFailed = struct {
     error_text: []const u8,
     canceled: ?bool = null,
     blocked_reason: ?[]const u8 = null,
-    cors_error_status: ?std.json.Value = null,
+    cors_error_status: ?json.Value = null,
 };
 
 pub const RequestIntercepted = struct {
@@ -380,10 +380,10 @@ pub const RequestIntercepted = struct {
     is_navigation_request: bool,
     is_download: ?bool = null,
     redirect_url: ?[]const u8 = null,
-    auth_challenge: ?std.json.Value = null,
+    auth_challenge: ?json.Value = null,
     response_error_reason: ?[]const u8 = null,
     response_status_code: ?i64 = null,
-    response_headers: ?std.json.Value = null,
+    response_headers: ?json.Value = null,
 };
 
 pub const DataReceived = struct {
@@ -396,7 +396,7 @@ pub const DataReceived = struct {
 pub const WebSocketCreated = struct {
     request_id: []const u8,
     url: []const u8,
-    initiator: ?std.json.Value = null,
+    initiator: ?json.Value = null,
 };
 
 pub const WebSocketClosed = struct {

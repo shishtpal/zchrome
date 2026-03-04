@@ -1,4 +1,5 @@
 const std = @import("std");
+const json = @import("json");
 
 /// Simple HTTP GET request result
 pub const HttpResponse = struct {
@@ -115,12 +116,12 @@ pub fn getChromeWsUrl(allocator: std.mem.Allocator, io: std.Io, port: u16) ![]co
     }
 
     // Parse JSON response
-    const parsed = std.json.parseFromSlice(std.json.Value, allocator, response.body, .{}) catch
+    var parsed = json.parse(allocator, response.body, .{}) catch
         return error.InvalidJson;
-    defer parsed.deinit();
+    defer parsed.deinit(allocator);
 
     // Extract webSocketDebuggerUrl
-    const ws_url = parsed.value.object.get("webSocketDebuggerUrl") orelse
+    const ws_url = parsed.get("webSocketDebuggerUrl") orelse
         return error.NoWebSocketUrl;
 
     if (ws_url != .string) return error.InvalidJson;

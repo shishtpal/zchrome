@@ -1,6 +1,6 @@
 const std = @import("std");
+const json = @import("json");
 const Session = @import("../core/session.zig").Session;
-const json_util = @import("../util/json.zig");
 
 /// Profiler domain client for CPU profiling
 pub const Profiler = struct {
@@ -37,7 +37,7 @@ pub const Profiler = struct {
     /// Stop CPU profiling and return the profile
     pub fn stop(self: *Self, allocator: std.mem.Allocator) !Profile {
         const result = try self.session.sendCommand("Profiler.stop", .{});
-        const profile_val = result.object.get("profile") orelse return error.MissingField;
+        const profile_val = result.get("profile") orelse return error.MissingField;
         return try parseProfile(allocator, profile_val);
     }
 
@@ -48,7 +48,7 @@ pub const Profiler = struct {
             .detailed = opts.detailed,
             .allowTriggeredUpdates = opts.allow_triggered_updates,
         });
-        return try json_util.getFloat(result, "timestamp");
+        return try result.getFloat("timestamp");
     }
 
     /// Stop coverage collection
@@ -60,7 +60,7 @@ pub const Profiler = struct {
     pub fn takePreciseCoverage(self: *Self, allocator: std.mem.Allocator) !CoverageResult {
         const result = try self.session.sendCommand("Profiler.takePreciseCoverage", .{});
 
-        const coverage_arr = try json_util.getArray(result, "result");
+        const coverage_arr = try result.getArray("result");
         var scripts: std.ArrayList(ScriptCoverage) = .empty;
         errdefer scripts.deinit(allocator);
 
@@ -70,7 +70,7 @@ pub const Profiler = struct {
 
         return .{
             .result = try scripts.toOwnedSlice(allocator),
-            .timestamp = try json_util.getFloat(result, "timestamp"),
+            .timestamp = try result.getFloat("timestamp"),
         };
     }
 
@@ -78,7 +78,7 @@ pub const Profiler = struct {
     pub fn getBestEffortCoverage(self: *Self, allocator: std.mem.Allocator) ![]ScriptCoverage {
         const result = try self.session.sendCommand("Profiler.getBestEffortCoverage", .{});
 
-        const coverage_arr = try json_util.getArray(result, "result");
+        const coverage_arr = try result.getArray("result");
         var scripts: std.ArrayList(ScriptCoverage) = .empty;
         errdefer scripts.deinit(allocator);
 
@@ -262,8 +262,8 @@ pub const CoverageResult = struct {
 
 // ─── Parsing Functions ──────────────────────────────────────────────────────
 
-fn parseProfile(allocator: std.mem.Allocator, obj: std.json.Value) !Profile {
-    const nodes_arr = try json_util.getArray(obj, "nodes");
+fn parseProfile(allocator: std.mem.Allocator, obj: json.Value) !Profile {
+    const nodes_arr = try obj.getArray("nodes");
     var nodes: std.ArrayList(ProfileNode) = .empty;
     errdefer nodes.deinit(allocator);
 
@@ -272,10 +272,11 @@ fn parseProfile(allocator: std.mem.Allocator, obj: std.json.Value) !Profile {
     }
 
     var samples: ?[]i64 = null;
-    if (obj.object.get("samples")) |s_arr| {
+    if (obj.get("samples")) |s_arr| {
         if (s_arr == .array) {
+            const items = s_arr.asArray() orelse return error.InvalidJson;
             var s_list: std.ArrayList(i64) = .empty;
-            for (s_arr.array.items) |s| {
+            for (items) |s| {
                 if (s == .integer) try s_list.append(allocator, s.integer);
             }
             samples = try s_list.toOwnedSlice(allocator);
@@ -283,10 +284,11 @@ fn parseProfile(allocator: std.mem.Allocator, obj: std.json.Value) !Profile {
     }
 
     var time_deltas: ?[]i64 = null;
-    if (obj.object.get("timeDeltas")) |t_arr| {
+    if (obj.get("timeDeltas")) |t_arr| {
         if (t_arr == .array) {
+            const items = t_arr.asArray() orelse return error.InvalidJson;
             var t_list: std.ArrayList(i64) = .empty;
-            for (t_arr.array.items) |t| {
+            for (items) |t| {
                 if (t == .integer) try t_list.append(allocator, t.integer);
             }
             time_deltas = try t_list.toOwnedSlice(allocator);
@@ -295,21 +297,22 @@ fn parseProfile(allocator: std.mem.Allocator, obj: std.json.Value) !Profile {
 
     return .{
         .nodes = try nodes.toOwnedSlice(allocator),
-        .start_time = try json_util.getFloat(obj, "startTime"),
-        .end_time = try json_util.getFloat(obj, "endTime"),
+        .start_time = try obj.getFloat("startTime"),
+        .end_time = try obj.getFloat("endTime"),
         .samples = samples,
         .time_deltas = time_deltas,
     };
 }
 
-fn parseProfileNode(allocator: std.mem.Allocator, obj: std.json.Value) !ProfileNode {
-    const call_frame = obj.object.get("callFrame") orelse return error.MissingField;
+fn parseProfileNode(allocator: std.mem.Allocator, obj: json.Value) !ProfileNode {
+    const call_frame = obj.get("callFrame") orelse return error.MissingField;
 
     var children: ?[]i64 = null;
-    if (obj.object.get("children")) |c_arr| {
+    if (obj.get("children")) |c_arr| {
         if (c_arr == .array) {
+            const items = c_arr.asArray() orelse return error.InvalidJson;
             var c_list: std.ArrayList(i64) = .empty;
-            for (c_arr.array.items) |c| {
+            for (items) |c| {
                 if (c == .integer) try c_list.append(allocator, c.integer);
             }
             children = try c_list.toOwnedSlice(allocator);
@@ -317,23 +320,23 @@ fn parseProfileNode(allocator: std.mem.Allocator, obj: std.json.Value) !ProfileN
     }
 
     return .{
-        .id = try json_util.getInt(obj, "id"),
+        .id = try obj.getInt("id"),
         .call_frame = .{
-            .function_name = try allocator.dupe(u8, try json_util.getString(call_frame, "functionName")),
-            .script_id = try allocator.dupe(u8, try json_util.getString(call_frame, "scriptId")),
-            .url = try allocator.dupe(u8, try json_util.getString(call_frame, "url")),
-            .line_number = @intCast(try json_util.getInt(call_frame, "lineNumber")),
-            .column_number = @intCast(try json_util.getInt(call_frame, "columnNumber")),
+            .function_name = try allocator.dupe(u8, try call_frame.getString("functionName")),
+            .script_id = try allocator.dupe(u8, try call_frame.getString("scriptId")),
+            .url = try allocator.dupe(u8, try call_frame.getString("url")),
+            .line_number = @intCast(try call_frame.getInt("lineNumber")),
+            .column_number = @intCast(try call_frame.getInt("columnNumber")),
         },
-        .hit_count = if (obj.object.get("hitCount")) |v| (if (v == .integer) v.integer else null) else null,
+        .hit_count = if (obj.get("hitCount")) |v| (if (v == .integer) v.integer else null) else null,
         .children = children,
-        .deopt_reason = if (obj.object.get("deoptReason")) |v| (if (v == .string) try allocator.dupe(u8, v.string) else null) else null,
+        .deopt_reason = if (obj.get("deoptReason")) |v| (if (v == .string) try allocator.dupe(u8, v.string) else null) else null,
         .position_ticks = null, // TODO: parse if needed
     };
 }
 
-fn parseScriptCoverage(allocator: std.mem.Allocator, obj: std.json.Value) !ScriptCoverage {
-    const functions_arr = try json_util.getArray(obj, "functions");
+fn parseScriptCoverage(allocator: std.mem.Allocator, obj: json.Value) !ScriptCoverage {
+    const functions_arr = try obj.getArray("functions");
     var functions: std.ArrayList(FunctionCoverage) = .empty;
     errdefer functions.deinit(allocator);
 
@@ -342,28 +345,28 @@ fn parseScriptCoverage(allocator: std.mem.Allocator, obj: std.json.Value) !Scrip
     }
 
     return .{
-        .script_id = try allocator.dupe(u8, try json_util.getString(obj, "scriptId")),
-        .url = try allocator.dupe(u8, try json_util.getString(obj, "url")),
+        .script_id = try allocator.dupe(u8, try obj.getString("scriptId")),
+        .url = try allocator.dupe(u8, try obj.getString("url")),
         .functions = try functions.toOwnedSlice(allocator),
     };
 }
 
-fn parseFunctionCoverage(allocator: std.mem.Allocator, obj: std.json.Value) !FunctionCoverage {
-    const ranges_arr = try json_util.getArray(obj, "ranges");
+fn parseFunctionCoverage(allocator: std.mem.Allocator, obj: json.Value) !FunctionCoverage {
+    const ranges_arr = try obj.getArray("ranges");
     var ranges: std.ArrayList(CoverageRange) = .empty;
     errdefer ranges.deinit(allocator);
 
     for (ranges_arr) |r| {
         try ranges.append(allocator, .{
-            .start_offset = @intCast(try json_util.getInt(r, "startOffset")),
-            .end_offset = @intCast(try json_util.getInt(r, "endOffset")),
-            .count = try json_util.getInt(r, "count"),
+            .start_offset = @intCast(try r.getInt("startOffset")),
+            .end_offset = @intCast(try r.getInt("endOffset")),
+            .count = try r.getInt("count"),
         });
     }
 
     return .{
-        .function_name = try allocator.dupe(u8, try json_util.getString(obj, "functionName")),
+        .function_name = try allocator.dupe(u8, try obj.getString("functionName")),
         .ranges = try ranges.toOwnedSlice(allocator),
-        .is_block_coverage = try json_util.getBool(obj, "isBlockCoverage"),
+        .is_block_coverage = try obj.getBool("isBlockCoverage"),
     };
 }

@@ -1,7 +1,7 @@
 const std = @import("std");
+const json = @import("json");
 const Session = @import("../core/session.zig").Session;
 const Event = @import("../core/protocol.zig").Event;
-const json_util = @import("../util/json.zig");
 
 /// Frame identifier
 pub const FrameId = []const u8;
@@ -116,12 +116,12 @@ pub const Page = struct {
         });
 
         return .{
-            .frame_id = try allocator.dupe(u8, try json_util.getString(result, "frameId")),
-            .loader_id = if (result.object.get("loaderId")) |v|
+            .frame_id = try allocator.dupe(u8, try result.getString("frameId")),
+            .loader_id = if (result.get("loaderId")) |v|
                 try allocator.dupe(u8, v.string)
             else
                 null,
-            .error_text = if (result.object.get("errorText")) |v|
+            .error_text = if (result.get("errorText")) |v|
                 try allocator.dupe(u8, v.string)
             else
                 null,
@@ -138,7 +138,7 @@ pub const Page = struct {
     /// Navigate back in history. Returns true if navigation occurred.
     pub fn goBack(self: *Self) !bool {
         const result = try self.session.sendCommand("Page.getNavigationHistory", .{});
-        const current_index_val = result.object.get("currentIndex") orelse return error.MissingField;
+        const current_index_val = result.get("currentIndex") orelse return error.MissingField;
         const current_index = switch (current_index_val) {
             .integer => |i| i,
             .float => |f| @as(i64, @intFromFloat(f)),
@@ -147,10 +147,10 @@ pub const Page = struct {
         if (current_index <= 0) return false;
         _ = try self.session.sendCommand("Page.navigateToHistoryEntry", .{
             .entryId = blk: {
-                const entries = result.object.get("entries") orelse return error.MissingField;
-                const arr = entries.array.items;
+                const entries = result.get("entries") orelse return error.MissingField;
+                const arr = entries.asArray() orelse return error.MissingField;
                 const target_entry = arr[@intCast(current_index - 1)];
-                const id_val = target_entry.object.get("id") orelse return error.MissingField;
+                const id_val = target_entry.get("id") orelse return error.MissingField;
                 break :blk switch (id_val) {
                     .integer => |i| i,
                     .float => |f| @as(i64, @intFromFloat(f)),
@@ -164,19 +164,19 @@ pub const Page = struct {
     /// Navigate forward in history. Returns true if navigation occurred.
     pub fn goForward(self: *Self) !bool {
         const result = try self.session.sendCommand("Page.getNavigationHistory", .{});
-        const current_index_val = result.object.get("currentIndex") orelse return error.MissingField;
+        const current_index_val = result.get("currentIndex") orelse return error.MissingField;
         const current_index = switch (current_index_val) {
             .integer => |i| i,
             .float => |f| @as(i64, @intFromFloat(f)),
             else => return error.TypeMismatch,
         };
-        const entries = result.object.get("entries") orelse return error.MissingField;
-        const arr = entries.array.items;
+        const entries = result.get("entries") orelse return error.MissingField;
+        const arr = entries.asArray() orelse return error.MissingField;
         if (current_index >= @as(i64, @intCast(arr.len)) - 1) return false;
         _ = try self.session.sendCommand("Page.navigateToHistoryEntry", .{
             .entryId = blk: {
                 const target_entry = arr[@intCast(current_index + 1)];
-                const id_val = target_entry.object.get("id") orelse return error.MissingField;
+                const id_val = target_entry.get("id") orelse return error.MissingField;
                 break :blk switch (id_val) {
                     .integer => |i| i,
                     .float => |f| @as(i64, @intFromFloat(f)),
@@ -195,19 +195,19 @@ pub const Page = struct {
     /// Capture a screenshot
     pub fn captureScreenshot(self: *Self, allocator: std.mem.Allocator, params: CaptureScreenshotParams) ![]const u8 {
         const result = try self.session.sendCommand("Page.captureScreenshot", params);
-        const data = try json_util.getString(result, "data");
+        const data = try result.getString("data");
         return allocator.dupe(u8, data);
     }
 
     /// Print to PDF
     pub fn printToPDF(self: *Self, allocator: std.mem.Allocator, params: PrintToPDFParams) ![]const u8 {
         const result = try self.session.sendCommand("Page.printToPDF", params);
-        const data = try json_util.getString(result, "data");
+        const data = try result.getString("data");
         return allocator.dupe(u8, data);
     }
 
     /// Get the frame tree
-    pub fn getFrameTree(self: *Self) !std.json.Value {
+    pub fn getFrameTree(self: *Self) !json.Value {
         return try self.session.sendCommand("Page.getFrameTree", .{});
     }
 
@@ -215,26 +215,26 @@ pub const Page = struct {
     pub fn getMainFrame(self: *Self, allocator: std.mem.Allocator) !Frame {
         const result = try self.session.sendCommand("Page.getFrameTree", .{});
 
-        const frame_tree = result.object.get("frameTree") orelse return error.MissingField;
-        const frame = frame_tree.object.get("frame") orelse return error.MissingField;
+        const frame_tree = result.get("frameTree") orelse return error.MissingField;
+        const frame = frame_tree.get("frame") orelse return error.MissingField;
 
         return .{
-            .id = try allocator.dupe(u8, try json_util.getString(frame, "id")),
-            .parent_id = if (frame.object.get("parentId")) |v|
+            .id = try allocator.dupe(u8, try frame.getString("id")),
+            .parent_id = if (frame.get("parentId")) |v|
                 try allocator.dupe(u8, v.string)
             else
                 null,
-            .loader_id = try allocator.dupe(u8, try json_util.getString(frame, "loaderId")),
-            .name = if (frame.object.get("name")) |v|
+            .loader_id = try allocator.dupe(u8, try frame.getString("loaderId")),
+            .name = if (frame.get("name")) |v|
                 try allocator.dupe(u8, v.string)
             else
                 null,
-            .url = try allocator.dupe(u8, try json_util.getString(frame, "url")),
-            .security_origin = if (frame.object.get("securityOrigin")) |v|
+            .url = try allocator.dupe(u8, try frame.getString("url")),
+            .security_origin = if (frame.get("securityOrigin")) |v|
                 try allocator.dupe(u8, v.string)
             else
                 null,
-            .mime_type = if (frame.object.get("mimeType")) |v|
+            .mime_type = if (frame.get("mimeType")) |v|
                 try allocator.dupe(u8, v.string)
             else
                 null,
@@ -253,7 +253,7 @@ pub const Page = struct {
         const result = try self.session.sendCommand("Page.addScriptToEvaluateOnNewDocument", .{
             .source = source,
         });
-        return try json_util.getString(result, "identifier");
+        return try result.getString("identifier");
     }
 
     /// Remove script to evaluate on new document

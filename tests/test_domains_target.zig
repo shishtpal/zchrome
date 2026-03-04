@@ -1,6 +1,5 @@
 const std = @import("std");
-const cdp = @import("cdp");
-const json = cdp.json;
+const json = @import("json");
 
 // Target information
 pub const TargetInfo = struct {
@@ -22,15 +21,15 @@ pub const TargetInfo = struct {
     }
 };
 
-fn parseTargetInfo(allocator: std.mem.Allocator, obj: std.json.Value) !TargetInfo {
+fn parseTargetInfo(allocator: std.mem.Allocator, obj: json.Value) !TargetInfo {
     return .{
-        .target_id = try allocator.dupe(u8, try json.getString(obj, "targetId")),
-        .type = try allocator.dupe(u8, try json.getString(obj, "type")),
-        .title = try allocator.dupe(u8, try json.getString(obj, "title")),
-        .url = try allocator.dupe(u8, try json.getString(obj, "url")),
-        .attached = try json.getBool(obj, "attached"),
-        .opener_id = if (obj.object.get("openerId")) |v| try allocator.dupe(u8, v.string) else null,
-        .browser_context_id = if (obj.object.get("browserContextId")) |v| try allocator.dupe(u8, v.string) else null,
+        .target_id = try allocator.dupe(u8, try obj.getString("targetId")),
+        .type = try allocator.dupe(u8, try obj.getString("type")),
+        .title = try allocator.dupe(u8, try obj.getString("title")),
+        .url = try allocator.dupe(u8, try obj.getString("url")),
+        .attached = try obj.getBool("attached"),
+        .opener_id = if (obj.get("openerId")) |v| try allocator.dupe(u8, v.asString().?) else null,
+        .browser_context_id = if (obj.get("browserContextId")) |v| try allocator.dupe(u8, v.asString().?) else null,
     };
 }
 
@@ -47,10 +46,10 @@ test "TargetInfo - parse from JSON with all fields" {
         \\  "browserContextId": "CTX_001"
         \\}
     ;
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    var info = try parseTargetInfo(std.testing.allocator, parsed.value);
+    var info = try parseTargetInfo(std.testing.allocator, parsed);
     defer info.deinit(std.testing.allocator);
 
     try std.testing.expectEqualStrings("TARGET_001", info.target_id);
@@ -74,10 +73,10 @@ test "TargetInfo - parse with minimal fields" {
         \\  "attached": false
         \\}
     ;
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    var info = try parseTargetInfo(std.testing.allocator, parsed.value);
+    var info = try parseTargetInfo(std.testing.allocator, parsed);
     defer info.deinit(std.testing.allocator);
 
     try std.testing.expectEqualStrings("TARGET_001", info.target_id);
@@ -103,29 +102,29 @@ test "TargetInfo - deinit frees all memory" {
 // attachToTarget Response Tests
 test "attachToTarget - parse session ID from response" {
     const json_str = "{\"sessionId\":\"SESSION_001\"}";
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    const session_id = try json.getString(parsed.value, "sessionId");
+    const session_id = try parsed.getString("sessionId");
     try std.testing.expectEqualStrings("SESSION_001", session_id);
 }
 
 // createTarget Response Tests
 test "createTarget - parse target ID from response" {
     const json_str = "{\"targetId\":\"TARGET_NEW_001\"}";
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    const target_id = try json.getString(parsed.value, "targetId");
+    const target_id = try parsed.getString("targetId");
     try std.testing.expectEqualStrings("TARGET_NEW_001", target_id);
 }
 
 // closeTarget Response Tests
 test "closeTarget - parse success from response" {
     const json_str = "{\"success\":true}";
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    const success = try json.getBool(parsed.value, "success");
+    const success = try parsed.getBool("success");
     try std.testing.expect(success);
 }

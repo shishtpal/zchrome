@@ -1,5 +1,5 @@
 const std = @import("std");
-const cdp = @import("cdp");
+const json = @import("json");
 
 /// Element reference for snapshot
 pub const ElementRef = struct {
@@ -508,8 +508,8 @@ pub fn loadSnapshot(allocator: std.mem.Allocator, io: std.Io, path: []const u8) 
     var file_buf: [256 * 1024]u8 = undefined;
     const content = try dir.readFile(io, path, &file_buf);
 
-    const parsed = try std.json.parseFromSlice(std.json.Value, allocator, content, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(allocator, content, .{});
+    defer parsed.deinit(allocator);
 
     var data = SnapshotData{
         .timestamp = 0,
@@ -517,15 +517,15 @@ pub fn loadSnapshot(allocator: std.mem.Allocator, io: std.Io, path: []const u8) 
         .refs = std.StringHashMap(ElementRef).init(allocator),
     };
 
-    if (parsed.value.object.get("timestamp")) |v| {
+    if (parsed.get("timestamp")) |v| {
         if (v == .integer) data.timestamp = v.integer;
     }
 
-    if (parsed.value.object.get("tree")) |v| {
+    if (parsed.get("tree")) |v| {
         if (v == .string) data.tree = try allocator.dupe(u8, v.string);
     }
 
-    if (parsed.value.object.get("refs")) |refs_obj| {
+    if (parsed.get("refs")) |refs_obj| {
         if (refs_obj == .object) {
             var refs_iter = refs_obj.object.iterator();
             while (refs_iter.next()) |entry| {
@@ -541,16 +541,16 @@ pub fn loadSnapshot(allocator: std.mem.Allocator, io: std.Io, path: []const u8) 
                         .nth = null,
                     };
 
-                    if (ref_val.object.get("selector")) |v| {
+                    if (ref_val.get("selector")) |v| {
                         if (v == .string) ref.selector = try allocator.dupe(u8, v.string);
                     }
-                    if (ref_val.object.get("role")) |v| {
+                    if (ref_val.get("role")) |v| {
                         if (v == .string) ref.role = try allocator.dupe(u8, v.string);
                     }
-                    if (ref_val.object.get("name")) |v| {
+                    if (ref_val.get("name")) |v| {
                         if (v == .string) ref.name = try allocator.dupe(u8, v.string);
                     }
-                    if (ref_val.object.get("nth")) |v| {
+                    if (ref_val.get("nth")) |v| {
                         if (v == .integer) ref.nth = @intCast(v.integer);
                     }
 

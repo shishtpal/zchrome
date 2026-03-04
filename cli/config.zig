@@ -1,4 +1,5 @@
 const std = @import("std");
+const json = @import("json");
 
 /// Configuration stored in zchrome.json alongside the executable
 pub const Config = struct {
@@ -67,69 +68,69 @@ pub fn loadConfig(allocator: std.mem.Allocator, io: std.Io) ?Config {
     const content = dir.readFile(io, config_filename, &file_buf) catch return null;
 
     // Parse JSON
-    const parsed = std.json.parseFromSlice(std.json.Value, allocator, content, .{}) catch return null;
-    defer parsed.deinit();
+    var parsed = json.parse(allocator, content, .{}) catch return null;
+    defer parsed.deinit(allocator);
 
     // Extract fields
     var config = Config{};
 
-    if (parsed.value.object.get("chrome_path")) |v| {
+    if (parsed.get("chrome_path")) |v| {
         if (v == .string) config.chrome_path = allocator.dupe(u8, v.string) catch null;
     }
-    if (parsed.value.object.get("data_dir")) |v| {
+    if (parsed.get("data_dir")) |v| {
         if (v == .string) config.data_dir = allocator.dupe(u8, v.string) catch null;
     }
-    if (parsed.value.object.get("port")) |v| {
+    if (parsed.get("port")) |v| {
         if (v == .integer) config.port = @intCast(v.integer);
     }
-    if (parsed.value.object.get("ws_url")) |v| {
+    if (parsed.get("ws_url")) |v| {
         if (v == .string) config.ws_url = allocator.dupe(u8, v.string) catch null;
     }
-    if (parsed.value.object.get("last_target")) |v| {
+    if (parsed.get("last_target")) |v| {
         if (v == .string) config.last_target = allocator.dupe(u8, v.string) catch null;
     }
-    if (parsed.value.object.get("last_mouse_x")) |v| {
+    if (parsed.get("last_mouse_x")) |v| {
         if (v == .float) config.last_mouse_x = v.float;
         if (v == .integer) config.last_mouse_x = @floatFromInt(v.integer);
     }
-    if (parsed.value.object.get("last_mouse_y")) |v| {
+    if (parsed.get("last_mouse_y")) |v| {
         if (v == .float) config.last_mouse_y = v.float;
         if (v == .integer) config.last_mouse_y = @floatFromInt(v.integer);
     }
 
-    if (parsed.value.object.get("viewport_width")) |v| {
+    if (parsed.get("viewport_width")) |v| {
         if (v == .integer) config.viewport_width = @intCast(v.integer);
     }
-    if (parsed.value.object.get("viewport_height")) |v| {
+    if (parsed.get("viewport_height")) |v| {
         if (v == .integer) config.viewport_height = @intCast(v.integer);
     }
-    if (parsed.value.object.get("device_name")) |v| {
+    if (parsed.get("device_name")) |v| {
         if (v == .string) config.device_name = allocator.dupe(u8, v.string) catch null;
     }
-    if (parsed.value.object.get("geo_lat")) |v| {
+    if (parsed.get("geo_lat")) |v| {
         if (v == .float) config.geo_lat = v.float;
         if (v == .integer) config.geo_lat = @floatFromInt(v.integer);
     }
-    if (parsed.value.object.get("geo_lng")) |v| {
+    if (parsed.get("geo_lng")) |v| {
         if (v == .float) config.geo_lng = v.float;
         if (v == .integer) config.geo_lng = @floatFromInt(v.integer);
     }
-    if (parsed.value.object.get("offline")) |v| {
+    if (parsed.get("offline")) |v| {
         if (v == .bool) config.offline = v.bool;
     }
-    if (parsed.value.object.get("headers")) |v| {
+    if (parsed.get("headers")) |v| {
         if (v == .string) config.headers = allocator.dupe(u8, v.string) catch null;
     }
-    if (parsed.value.object.get("auth_user")) |v| {
+    if (parsed.get("auth_user")) |v| {
         if (v == .string) config.auth_user = allocator.dupe(u8, v.string) catch null;
     }
-    if (parsed.value.object.get("auth_pass")) |v| {
+    if (parsed.get("auth_pass")) |v| {
         if (v == .string) config.auth_pass = allocator.dupe(u8, v.string) catch null;
     }
-    if (parsed.value.object.get("media_feature")) |v| {
+    if (parsed.get("media_feature")) |v| {
         if (v == .string) config.media_feature = allocator.dupe(u8, v.string) catch null;
     }
-    if (parsed.value.object.get("user_agent")) |v| {
+    if (parsed.get("user_agent")) |v| {
         if (v == .string) config.user_agent = allocator.dupe(u8, v.string) catch null;
     }
 

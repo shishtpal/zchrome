@@ -1,6 +1,5 @@
 const std = @import("std");
-const cdp = @import("cdp");
-const json = cdp.json;
+const json = @import("json");
 
 // Node in the DOM tree
 pub const Node = struct {
@@ -28,19 +27,19 @@ pub const Node = struct {
     }
 };
 
-fn parseNode(allocator: std.mem.Allocator, obj: std.json.Value) !Node {
+fn parseNode(allocator: std.mem.Allocator, obj: json.Value) !Node {
     var node = Node{
-        .node_id = @intCast(try json.getInt(obj, "nodeId")),
-        .node_type = @intCast(try json.getInt(obj, "nodeType")),
-        .node_name = try allocator.dupe(u8, try json.getString(obj, "nodeName")),
-        .node_value = try allocator.dupe(u8, try json.getString(obj, "nodeValue")),
-        .child_node_count = if (obj.object.get("childNodeCount")) |v| @intCast(v.integer) else null,
+        .node_id = @intCast(try obj.getInt("nodeId")),
+        .node_type = @intCast(try obj.getInt("nodeType")),
+        .node_name = try allocator.dupe(u8, try obj.getString("nodeName")),
+        .node_value = try allocator.dupe(u8, try obj.getString("nodeValue")),
+        .child_node_count = if (obj.get("childNodeCount")) |v| @intCast(v.asInteger().?) else null,
         .children = null,
         .attributes = null,
     };
 
     // Parse children if present
-    if (obj.object.get("children")) |children_val| {
+    if (obj.get("children")) |children_val| {
         if (children_val == .array) {
             var children = std.ArrayList(Node).initCapacity(allocator, children_val.array.items.len) catch return node;
             for (children_val.array.items) |child| {
@@ -51,11 +50,11 @@ fn parseNode(allocator: std.mem.Allocator, obj: std.json.Value) !Node {
     }
 
     // Parse attributes if present
-    if (obj.object.get("attributes")) |attrs_val| {
+    if (obj.get("attributes")) |attrs_val| {
         if (attrs_val == .array) {
             var attrs = std.ArrayList([]const u8).initCapacity(allocator, attrs_val.array.items.len) catch return node;
             for (attrs_val.array.items) |attr| {
-                attrs.appendAssumeCapacity(try allocator.dupe(u8, attr.string));
+                attrs.appendAssumeCapacity(try allocator.dupe(u8, attr.asString().?));
             }
             node.attributes = attrs.toOwnedSlice(allocator) catch null;
         }
@@ -75,10 +74,10 @@ test "Node - parse basic node" {
         \\  "childNodeCount": 2
         \\}
     ;
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    var node = try parseNode(std.testing.allocator, parsed.value);
+    var node = try parseNode(std.testing.allocator, parsed);
     defer node.deinit(std.testing.allocator);
 
     try std.testing.expectEqual(@as(i32, 1), node.node_id);
@@ -99,10 +98,10 @@ test "Node - parse element node" {
         \\  "childNodeCount": 3
         \\}
     ;
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    var node = try parseNode(std.testing.allocator, parsed.value);
+    var node = try parseNode(std.testing.allocator, parsed);
     defer node.deinit(std.testing.allocator);
 
     try std.testing.expectEqual(@as(i32, 1), node.node_type);
@@ -118,10 +117,10 @@ test "Node - parse text node" {
         \\  "nodeValue": "Hello, World!"
         \\}
     ;
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    var node = try parseNode(std.testing.allocator, parsed.value);
+    var node = try parseNode(std.testing.allocator, parsed);
     defer node.deinit(std.testing.allocator);
 
     try std.testing.expectEqual(@as(i32, 3), node.node_type);
@@ -139,10 +138,10 @@ test "Node - parse with attributes" {
         \\  "attributes": ["type", "text", "id", "email", "name", "email"]
         \\}
     ;
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    var node = try parseNode(std.testing.allocator, parsed.value);
+    var node = try parseNode(std.testing.allocator, parsed);
     defer node.deinit(std.testing.allocator);
 
     try std.testing.expect(node.attributes != null);
@@ -154,19 +153,19 @@ test "Node - parse with attributes" {
 // querySelector Response Tests
 test "querySelector - parse node ID from response" {
     const json_str = "{\"nodeId\":42}";
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    const node_id = try json.getInt(parsed.value, "nodeId");
+    const node_id = try parsed.getInt("nodeId");
     try std.testing.expectEqual(@as(i64, 42), node_id);
 }
 
 // getOuterHTML Response Tests
 test "getOuterHTML - parse HTML from response" {
     const json_str = "{\"outerHTML\":\"<div class=\\\"container\\\"><h1>Hello</h1></div>\"}";
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    const html = try json.getString(parsed.value, "outerHTML");
+    const html = try parsed.getString("outerHTML");
     try std.testing.expectEqualStrings("<div class=\"container\"><h1>Hello</h1></div>", html);
 }

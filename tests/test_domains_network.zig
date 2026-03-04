@@ -1,11 +1,11 @@
 const std = @import("std");
-const json = @import("cdp").json;
+const json = @import("json");
 
 /// HTTP request (mirrors src/domains/network.zig)
 pub const Request = struct {
     url: []const u8,
     method: []const u8,
-    headers: std.json.Value,
+    headers: json.Value,
     initial_priority: ?[]const u8 = null,
     referrer_policy: ?[]const u8 = null,
     url_fragment: ?[]const u8 = null,
@@ -30,7 +30,7 @@ pub const Response = struct {
     url: []const u8,
     status: i32,
     status_text: []const u8,
-    headers: std.json.Value,
+    headers: json.Value,
     mime_type: []const u8,
     connection_reused: ?bool = null,
     connection_id: ?i64 = null,
@@ -81,62 +81,61 @@ pub const Cookie = struct {
 };
 
 /// Parse Request from JSON
-fn parseRequest(allocator: std.mem.Allocator, obj: std.json.Value) !Request {
+fn parseRequest(allocator: std.mem.Allocator, obj: json.Value) !Request {
     return .{
-        .url = try allocator.dupe(u8, try json.getString(obj, "url")),
-        .method = try allocator.dupe(u8, try json.getString(obj, "method")),
-        .headers = obj.object.get("headers") orelse .{ .object = std.json.ObjectMap.init(allocator) },
-        .initial_priority = if (obj.object.get("initialPriority")) |v| try allocator.dupe(u8, v.string) else null,
-        .referrer_policy = if (obj.object.get("referrerPolicy")) |v| try allocator.dupe(u8, v.string) else null,
-        .url_fragment = if (obj.object.get("urlFragment")) |v| try allocator.dupe(u8, v.string) else null,
-        .post_data = if (obj.object.get("postData")) |v| try allocator.dupe(u8, v.string) else null,
-        .has_post_data = if (obj.object.get("hasPostData")) |v| v.bool else null,
-        .mixed_content_type = if (obj.object.get("mixedContentType")) |v| try allocator.dupe(u8, v.string) else null,
-        .is_link_preload = if (obj.object.get("isLinkPreload")) |v| v.bool else null,
+        .url = try allocator.dupe(u8, try obj.getString("url")),
+        .method = try allocator.dupe(u8, try obj.getString("method")),
+        .headers = obj.get("headers") orelse .{ .object = .{} },
+        .initial_priority = if (obj.get("initialPriority")) |v| try allocator.dupe(u8, v.asString().?) else null,
+        .referrer_policy = if (obj.get("referrerPolicy")) |v| try allocator.dupe(u8, v.asString().?) else null,
+        .url_fragment = if (obj.get("urlFragment")) |v| try allocator.dupe(u8, v.asString().?) else null,
+        .post_data = if (obj.get("postData")) |v| try allocator.dupe(u8, v.asString().?) else null,
+        .has_post_data = if (obj.get("hasPostData")) |v| v.asBool().? else null,
+        .mixed_content_type = if (obj.get("mixedContentType")) |v| try allocator.dupe(u8, v.asString().?) else null,
+        .is_link_preload = if (obj.get("isLinkPreload")) |v| v.asBool().? else null,
     };
 }
 
 /// Parse Response from JSON
-fn parseResponse(allocator: std.mem.Allocator, obj: std.json.Value) !Response {
+fn parseResponse(allocator: std.mem.Allocator, obj: json.Value) !Response {
     return .{
-        .url = try allocator.dupe(u8, try json.getString(obj, "url")),
-        .status = @intCast(try json.getInt(obj, "status")),
-        .status_text = try allocator.dupe(u8, try json.getString(obj, "statusText")),
-        .headers = obj.object.get("headers") orelse .{ .object = std.json.ObjectMap.init(allocator) },
-        .mime_type = try allocator.dupe(u8, try json.getString(obj, "mimeType")),
-        .connection_reused = if (obj.object.get("connectionReused")) |v| v.bool else null,
-        .connection_id = if (obj.object.get("connectionId")) |v| v.integer else null,
-        .remote_ip_address = if (obj.object.get("remoteIPAddress")) |v| try allocator.dupe(u8, v.string) else null,
-        .remote_port = if (obj.object.get("remotePort")) |v| @intCast(v.integer) else null,
-        .from_disk_cache = if (obj.object.get("fromDiskCache")) |v| v.bool else null,
-        .from_service_worker = if (obj.object.get("fromServiceWorker")) |v| v.bool else null,
-        .from_prefetch_cache = if (obj.object.get("fromPrefetchCache")) |v| v.bool else null,
-        .protocol = if (obj.object.get("protocol")) |v| try allocator.dupe(u8, v.string) else null,
-        .security_state = if (obj.object.get("securityState")) |v| try allocator.dupe(u8, v.string) else null,
+        .url = try allocator.dupe(u8, try obj.getString("url")),
+        .status = @intCast(try obj.getInt("status")),
+        .status_text = try allocator.dupe(u8, try obj.getString("statusText")),
+        .headers = obj.get("headers") orelse .{ .object = .{} },
+        .mime_type = try allocator.dupe(u8, try obj.getString("mimeType")),
+        .connection_reused = if (obj.get("connectionReused")) |v| v.asBool().? else null,
+        .connection_id = if (obj.get("connectionId")) |v| v.asInteger().? else null,
+        .remote_ip_address = if (obj.get("remoteIPAddress")) |v| try allocator.dupe(u8, v.asString().?) else null,
+        .remote_port = if (obj.get("remotePort")) |v| @intCast(v.asInteger().?) else null,
+        .from_disk_cache = if (obj.get("fromDiskCache")) |v| v.asBool().? else null,
+        .from_service_worker = if (obj.get("fromServiceWorker")) |v| v.asBool().? else null,
+        .from_prefetch_cache = if (obj.get("fromPrefetchCache")) |v| v.asBool().? else null,
+        .protocol = if (obj.get("protocol")) |v| try allocator.dupe(u8, v.asString().?) else null,
+        .security_state = if (obj.get("securityState")) |v| try allocator.dupe(u8, v.asString().?) else null,
     };
 }
 
 /// Parse Cookie from JSON
-fn parseCookie(allocator: std.mem.Allocator, obj: std.json.Value) !Cookie {
+fn parseCookie(allocator: std.mem.Allocator, obj: json.Value) !Cookie {
     return .{
-        .name = try allocator.dupe(u8, try json.getString(obj, "name")),
-        .value = try allocator.dupe(u8, try json.getString(obj, "value")),
-        .domain = try allocator.dupe(u8, try json.getString(obj, "domain")),
-        .path = try allocator.dupe(u8, try json.getString(obj, "path")),
-        .size = @intCast(try json.getInt(obj, "size")),
-        .http_only = try json.getBool(obj, "httpOnly"),
-        .secure = try json.getBool(obj, "secure"),
-        .same_site = if (obj.object.get("sameSite")) |v| try allocator.dupe(u8, v.string) else null,
-        .expires = if (obj.object.get("expires")) |v| switch (v) {
-            .float => |f| f,
-            .integer => |i| @floatFromInt(i),
-            else => null,
-        } else null,
-        .session = if (obj.object.get("session")) |v| v.bool else null,
-        .priority = if (obj.object.get("priority")) |v| try allocator.dupe(u8, v.string) else null,
-        .same_party = if (obj.object.get("sameParty")) |v| v.bool else null,
-        .source_scheme = if (obj.object.get("sourceScheme")) |v| try allocator.dupe(u8, v.string) else null,
-        .source_port = if (obj.object.get("sourcePort")) |v| @intCast(v.integer) else null,
+        .name = try allocator.dupe(u8, try obj.getString("name")),
+        .value = try allocator.dupe(u8, try obj.getString("value")),
+        .domain = try allocator.dupe(u8, try obj.getString("domain")),
+        .path = try allocator.dupe(u8, try obj.getString("path")),
+        .size = @intCast(try obj.getInt("size")),
+        .http_only = try obj.getBool("httpOnly"),
+        .secure = try obj.getBool("secure"),
+        .same_site = if (obj.get("sameSite")) |v| try allocator.dupe(u8, v.asString().?) else null,
+        .expires = if (obj.get("expires")) |v|
+            (v.asFloat() orelse if (v.asInteger()) |i| @as(f64, @floatFromInt(i)) else null)
+        else
+            null,
+        .session = if (obj.get("session")) |v| v.asBool().? else null,
+        .priority = if (obj.get("priority")) |v| try allocator.dupe(u8, v.asString().?) else null,
+        .same_party = if (obj.get("sameParty")) |v| v.asBool().? else null,
+        .source_scheme = if (obj.get("sourceScheme")) |v| try allocator.dupe(u8, v.asString().?) else null,
+        .source_port = if (obj.get("sourcePort")) |v| @intCast(v.asInteger().?) else null,
     };
 }
 
@@ -152,10 +151,10 @@ test "Request - parse from JSON" {
         \\  "referrerPolicy": "strict-origin-when-cross-origin"
         \\}
     ;
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    var req = try parseRequest(std.testing.allocator, parsed.value);
+    var req = try parseRequest(std.testing.allocator, parsed);
     defer req.deinit(std.testing.allocator);
 
     try std.testing.expectEqualStrings("https://example.com/api/data", req.url);
@@ -172,10 +171,10 @@ test "Request - parse GET request" {
         \\  "headers": {}
         \\}
     ;
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    var req = try parseRequest(std.testing.allocator, parsed.value);
+    var req = try parseRequest(std.testing.allocator, parsed);
     defer req.deinit(std.testing.allocator);
 
     try std.testing.expectEqualStrings("GET", req.method);
@@ -191,10 +190,10 @@ test "Request - parse with post data" {
         \\  "hasPostData": true
         \\}
     ;
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    var req = try parseRequest(std.testing.allocator, parsed.value);
+    var req = try parseRequest(std.testing.allocator, parsed);
     defer req.deinit(std.testing.allocator);
 
     try std.testing.expect(req.post_data != null);
@@ -206,7 +205,7 @@ test "Request - deinit frees memory" {
     var req = Request{
         .url = try std.testing.allocator.dupe(u8, "https://example.com"),
         .method = try std.testing.allocator.dupe(u8, "GET"),
-        .headers = .{ .object = std.json.ObjectMap.init(std.testing.allocator) },
+        .headers = .{ .object = .{} },
         .initial_priority = try std.testing.allocator.dupe(u8, "High"),
         .referrer_policy = try std.testing.allocator.dupe(u8, "strict-origin"),
     };
@@ -225,10 +224,10 @@ test "Response - parse from JSON" {
         \\  "mimeType": "text/html"
         \\}
     ;
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    var resp = try parseResponse(std.testing.allocator, parsed.value);
+    var resp = try parseResponse(std.testing.allocator, parsed);
     defer resp.deinit(std.testing.allocator);
 
     try std.testing.expectEqualStrings("https://example.com/page", resp.url);
@@ -247,10 +246,10 @@ test "Response - parse 404 response" {
         \\  "mimeType": "text/html"
         \\}
     ;
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    var resp = try parseResponse(std.testing.allocator, parsed.value);
+    var resp = try parseResponse(std.testing.allocator, parsed);
     defer resp.deinit(std.testing.allocator);
 
     try std.testing.expectEqual(@as(i32, 404), resp.status);
@@ -269,10 +268,10 @@ test "Response - parse with cache info" {
         \\  "fromServiceWorker": false
         \\}
     ;
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    var resp = try parseResponse(std.testing.allocator, parsed.value);
+    var resp = try parseResponse(std.testing.allocator, parsed);
     defer resp.deinit(std.testing.allocator);
 
     try std.testing.expect(resp.from_disk_cache == true);
@@ -292,10 +291,10 @@ test "Response - parse with remote info" {
         \\  "protocol": "h2"
         \\}
     ;
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    var resp = try parseResponse(std.testing.allocator, parsed.value);
+    var resp = try parseResponse(std.testing.allocator, parsed);
     defer resp.deinit(std.testing.allocator);
 
     try std.testing.expect(resp.remote_ip_address != null);
@@ -309,7 +308,7 @@ test "Response - deinit frees memory" {
         .url = try std.testing.allocator.dupe(u8, "https://example.com"),
         .status = 200,
         .status_text = try std.testing.allocator.dupe(u8, "OK"),
-        .headers = .{ .object = std.json.ObjectMap.init(std.testing.allocator) },
+        .headers = .{ .object = .{} },
         .mime_type = try std.testing.allocator.dupe(u8, "text/html"),
         .remote_ip_address = try std.testing.allocator.dupe(u8, "127.0.0.1"),
         .protocol = try std.testing.allocator.dupe(u8, "http/1.1"),
@@ -332,10 +331,10 @@ test "Cookie - parse from JSON" {
         \\  "sameSite": "Lax"
         \\}
     ;
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    var cookie = try parseCookie(std.testing.allocator, parsed.value);
+    var cookie = try parseCookie(std.testing.allocator, parsed);
     defer cookie.deinit(std.testing.allocator);
 
     try std.testing.expectEqualStrings("session_id", cookie.name);
@@ -361,10 +360,10 @@ test "Cookie - parse without same_site" {
         \\  "secure": false
         \\}
     ;
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    var cookie = try parseCookie(std.testing.allocator, parsed.value);
+    var cookie = try parseCookie(std.testing.allocator, parsed);
     defer cookie.deinit(std.testing.allocator);
 
     try std.testing.expect(cookie.same_site == null);
@@ -384,10 +383,10 @@ test "Cookie - parse with expiration" {
         \\  "session": false
         \\}
     ;
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    var cookie = try parseCookie(std.testing.allocator, parsed.value);
+    var cookie = try parseCookie(std.testing.allocator, parsed);
     defer cookie.deinit(std.testing.allocator);
 
     try std.testing.expect(cookie.expires != null);
@@ -425,13 +424,13 @@ test "RequestWillBeSent - parse event params" {
         \\  "type": "Stylesheet"
         \\}
     ;
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    const request_id = try json.getString(parsed.value, "requestId");
+    const request_id = try parsed.getString("requestId");
     try std.testing.expectEqualStrings("REQ_001", request_id);
 
-    const req_obj = parsed.value.object.get("request") orelse return error.MissingField;
+    const req_obj = parsed.get("request") orelse return error.MissingField;
     var req = try parseRequest(std.testing.allocator, req_obj);
     defer req.deinit(std.testing.allocator);
 
@@ -456,10 +455,10 @@ test "ResponseReceived - parse event params" {
         \\  "type": "Stylesheet"
         \\}
     ;
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    const resp_obj = parsed.value.object.get("response") orelse return error.MissingField;
+    const resp_obj = parsed.get("response") orelse return error.MissingField;
     var resp = try parseResponse(std.testing.allocator, resp_obj);
     defer resp.deinit(std.testing.allocator);
 
@@ -477,11 +476,11 @@ test "LoadingFinished - parse event params" {
         \\  "encodedDataLength": 1234
         \\}
     ;
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    const request_id = try json.getString(parsed.value, "requestId");
-    const data_length = try json.getInt(parsed.value, "encodedDataLength");
+    const request_id = try parsed.getString("requestId");
+    const data_length = try parsed.getInt("encodedDataLength");
 
     try std.testing.expectEqualStrings("REQ_001", request_id);
     try std.testing.expectEqual(@as(i64, 1234), data_length);
@@ -499,11 +498,11 @@ test "LoadingFailed - parse event params" {
         \\  "canceled": false
         \\}
     ;
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    const request_id = try json.getString(parsed.value, "requestId");
-    const error_text = try json.getString(parsed.value, "errorText");
+    const request_id = try parsed.getString("requestId");
+    const error_text = try parsed.getString("errorText");
 
     try std.testing.expectEqualStrings("REQ_001", request_id);
     try std.testing.expectEqualStrings("net::ERR_CONNECTION_REFUSED", error_text);

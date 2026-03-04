@@ -1,4 +1,5 @@
 const std = @import("std");
+const json = @import("json");
 
 /// Config structure (mirrors cli/config.zig)
 pub const Config = struct {
@@ -18,23 +19,23 @@ pub const Config = struct {
 };
 
 /// Parse config from JSON value
-fn parseConfigFromJson(allocator: std.mem.Allocator, value: std.json.Value) !Config {
+fn parseConfigFromJson(allocator: std.mem.Allocator, value: json.Value) !Config {
     var config = Config{};
 
-    if (value.object.get("chrome_path")) |v| {
-        if (v == .string) config.chrome_path = try allocator.dupe(u8, v.string);
+    if (value.get("chrome_path")) |v| {
+        if (v.asString()) |s| config.chrome_path = try allocator.dupe(u8, s);
     }
-    if (value.object.get("data_dir")) |v| {
-        if (v == .string) config.data_dir = try allocator.dupe(u8, v.string);
+    if (value.get("data_dir")) |v| {
+        if (v.asString()) |s| config.data_dir = try allocator.dupe(u8, s);
     }
-    if (value.object.get("port")) |v| {
-        if (v == .integer) config.port = @intCast(v.integer);
+    if (value.get("port")) |v| {
+        if (v.asInteger()) |i| config.port = @intCast(i);
     }
-    if (value.object.get("ws_url")) |v| {
-        if (v == .string) config.ws_url = try allocator.dupe(u8, v.string);
+    if (value.get("ws_url")) |v| {
+        if (v.asString()) |s| config.ws_url = try allocator.dupe(u8, s);
     }
-    if (value.object.get("last_target")) |v| {
-        if (v == .string) config.last_target = try allocator.dupe(u8, v.string);
+    if (value.get("last_target")) |v| {
+        if (v.asString()) |s| config.last_target = try allocator.dupe(u8, s);
     }
 
     return config;
@@ -110,10 +111,10 @@ fn serializeConfig(allocator: std.mem.Allocator, config: Config) ![]const u8 {
 
 test "parseConfigFromJson - empty object" {
     const json_str = "{}";
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    var config = try parseConfigFromJson(std.testing.allocator, parsed.value);
+    var config = try parseConfigFromJson(std.testing.allocator, parsed);
     defer config.deinit(std.testing.allocator);
 
     try std.testing.expect(config.chrome_path == null);
@@ -133,10 +134,10 @@ test "parseConfigFromJson - all fields" {
         \\  "last_target": "TARGET_001"
         \\}
     ;
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    var config = try parseConfigFromJson(std.testing.allocator, parsed.value);
+    var config = try parseConfigFromJson(std.testing.allocator, parsed);
     defer config.deinit(std.testing.allocator);
 
     try std.testing.expect(config.chrome_path != null);
@@ -157,10 +158,10 @@ test "parseConfigFromJson - partial fields" {
         \\  "ws_url": "ws://localhost:8080/devtools/browser/xyz"
         \\}
     ;
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    var config = try parseConfigFromJson(std.testing.allocator, parsed.value);
+    var config = try parseConfigFromJson(std.testing.allocator, parsed);
     defer config.deinit(std.testing.allocator);
 
     try std.testing.expect(config.chrome_path == null);
@@ -177,10 +178,10 @@ test "parseConfigFromJson - ignores unknown fields" {
         \\  "unknown_field": "should be ignored"
         \\}
     ;
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    var config = try parseConfigFromJson(std.testing.allocator, parsed.value);
+    var config = try parseConfigFromJson(std.testing.allocator, parsed);
     defer config.deinit(std.testing.allocator);
 
     try std.testing.expectEqual(@as(u16, 9222), config.port);
@@ -301,10 +302,10 @@ test "config roundtrip - all fields" {
     defer std.testing.allocator.free(json_str);
 
     // Parse back
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    var config = try parseConfigFromJson(std.testing.allocator, parsed.value);
+    var config = try parseConfigFromJson(std.testing.allocator, parsed);
     defer config.deinit(std.testing.allocator);
 
     // Verify
@@ -326,10 +327,10 @@ test "config roundtrip - partial fields" {
     defer std.testing.allocator.free(json_str);
 
     // Parse back
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    var config = try parseConfigFromJson(std.testing.allocator, parsed.value);
+    var config = try parseConfigFromJson(std.testing.allocator, parsed);
     defer config.deinit(std.testing.allocator);
 
     // Verify

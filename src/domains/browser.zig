@@ -1,6 +1,6 @@
 const std = @import("std");
+const json = @import("json");
 const Connection = @import("../core/connection.zig").Connection;
-const json_util = @import("../util/json.zig");
 
 /// Browser domain client
 pub const BrowserDomain = struct {
@@ -17,11 +17,11 @@ pub const BrowserDomain = struct {
         const result = try self.connection.sendCommand("Browser.getVersion", .{});
 
         return .{
-            .protocol_version = try allocator.dupe(u8, try json_util.getString(result, "protocolVersion")),
-            .product = try allocator.dupe(u8, try json_util.getString(result, "product")),
-            .revision = try allocator.dupe(u8, try json_util.getString(result, "revision")),
-            .user_agent = try allocator.dupe(u8, try json_util.getString(result, "userAgent")),
-            .js_version = try allocator.dupe(u8, try json_util.getString(result, "jsVersion")),
+            .protocol_version = try allocator.dupe(u8, try result.getString("protocolVersion")),
+            .product = try allocator.dupe(u8, try result.getString("product")),
+            .revision = try allocator.dupe(u8, try result.getString("revision")),
+            .user_agent = try allocator.dupe(u8, try result.getString("userAgent")),
+            .js_version = try allocator.dupe(u8, try result.getString("jsVersion")),
         };
     }
 
@@ -37,8 +37,8 @@ pub const BrowserDomain = struct {
         });
 
         return .{
-            .window_id = try json_util.getInt(result, "windowId"),
-            .bounds = try parseBounds(allocator, result.object.get("bounds") orelse return error.MissingField),
+            .window_id = try result.getInt("windowId"),
+            .bounds = try parseBounds(allocator, result.get("bounds") orelse return error.MissingField),
         };
     }
 
@@ -56,7 +56,7 @@ pub const BrowserDomain = struct {
             .window_id = window_id,
         });
 
-        return try parseBounds(allocator, result.object.get("bounds") orelse return error.MissingField);
+        return try parseBounds(allocator, result.get("bounds") orelse return error.MissingField);
     }
 };
 
@@ -93,26 +93,26 @@ pub const Bounds = struct {
 };
 
 /// Parse bounds from JSON
-fn parseBounds(allocator: std.mem.Allocator, obj: std.json.Value) !Bounds {
+fn parseBounds(allocator: std.mem.Allocator, obj: json.Value) !Bounds {
     _ = allocator;
     return .{
-        .left = if (obj.object.get("left")) |v| switch (v) {
+        .left = if (obj.get("left")) |v| switch (v) {
             .integer => |i| @intCast(i),
             else => null,
         } else null,
-        .top = if (obj.object.get("top")) |v| switch (v) {
+        .top = if (obj.get("top")) |v| switch (v) {
             .integer => |i| @intCast(i),
             else => null,
         } else null,
-        .width = if (obj.object.get("width")) |v| switch (v) {
+        .width = if (obj.get("width")) |v| switch (v) {
             .integer => |i| @intCast(i),
             else => null,
         } else null,
-        .height = if (obj.object.get("height")) |v| switch (v) {
+        .height = if (obj.get("height")) |v| switch (v) {
             .integer => |i| @intCast(i),
             else => null,
         } else null,
-        .window_state = if (obj.object.get("windowState")) |v| switch (v) {
+        .window_state = if (obj.get("windowState")) |v| switch (v) {
             .string => |s| s,
             else => null,
         } else null,

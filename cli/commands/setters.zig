@@ -1,6 +1,7 @@
 //! Set commands: viewport, device, useragent, geo, offline, headers, credentials, media.
 
 const std = @import("std");
+const json = @import("json");
 const cdp = @import("cdp");
 const types = @import("types.zig");
 const config_mod = @import("../config.zig");
@@ -119,13 +120,13 @@ pub fn set(session: *cdp.Session, ctx: CommandCtx) !void {
         const json_str = ctx.positional[1];
 
         // Validate JSON
-        const parsed = std.json.parseFromSlice(std.json.Value, ctx.allocator, json_str, .{}) catch {
+        var parsed = json.parse(ctx.allocator, json_str, .{}) catch {
             std.debug.print("Error: Invalid JSON\n", .{});
             return;
         };
-        defer parsed.deinit();
+        defer parsed.deinit(ctx.allocator);
 
-        if (parsed.value != .object) {
+        if (parsed != .object) {
             std.debug.print("Error: Headers must be a JSON object\n", .{});
             return;
         }

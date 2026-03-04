@@ -1,7 +1,6 @@
 const std = @import("std");
 const Session = @import("../core/session.zig").Session;
 const Connection = @import("../core/connection.zig").Connection;
-const json_util = @import("../util/json.zig");
 
 /// Target domain client
 pub const Target = struct {
@@ -17,17 +16,17 @@ pub const Target = struct {
     pub fn getTargets(self: *Self, allocator: std.mem.Allocator) ![]TargetInfo {
         const result = try self.connection.sendCommand("Target.getTargets", .{}, null);
 
-        const target_infos = try json_util.getArray(result, "targetInfos");
+        const target_infos = try result.getArray("targetInfos");
         var targets: std.ArrayList(TargetInfo) = .empty;
         errdefer targets.deinit(allocator);
 
         for (target_infos) |info| {
             try targets.append(allocator, .{
-                .target_id = try allocator.dupe(u8, try json_util.getString(info, "targetId")),
-                .type = try allocator.dupe(u8, try json_util.getString(info, "type")),
-                .title = try allocator.dupe(u8, try json_util.getString(info, "title")),
-                .url = try allocator.dupe(u8, try json_util.getString(info, "url")),
-                .attached = try json_util.getBool(info, "attached"),
+                .target_id = try allocator.dupe(u8, try info.getString("targetId")),
+                .type = try allocator.dupe(u8, try info.getString("type")),
+                .title = try allocator.dupe(u8, try info.getString("title")),
+                .url = try allocator.dupe(u8, try info.getString("url")),
+                .attached = try info.getBool("attached"),
                 .opener_id = if (info.object.get("openerId")) |v|
                     try allocator.dupe(u8, v.string)
                 else
@@ -48,7 +47,7 @@ pub const Target = struct {
             .url = url,
         }, null);
 
-        return try json_util.getString(result, "targetId");
+        return try result.getString("targetId");
     }
 
     /// Close a target
@@ -57,7 +56,7 @@ pub const Target = struct {
             .target_id = target_id,
         }, null);
 
-        return try json_util.getBool(result, "success");
+        return try result.getBool("success");
     }
 
     /// Attach to a target
@@ -68,7 +67,7 @@ pub const Target = struct {
             .flatten = flatten,
         }, null);
 
-        const session_id = try json_util.getString(result, "sessionId");
+        const session_id = try result.getString("sessionId");
         return try allocator.dupe(u8, session_id);
     }
 
@@ -96,7 +95,7 @@ pub const Target = struct {
     /// Create a browser context
     pub fn createBrowserContext(self: *Self) ![]const u8 {
         const result = try self.connection.sendCommand("Target.createBrowserContext", .{}, null);
-        return try json_util.getString(result, "browserContextId");
+        return try result.getString("browserContextId");
     }
 
     /// Dispose a browser context

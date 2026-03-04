@@ -1,4 +1,5 @@
 const std = @import("std");
+const json = @import("json");
 
 /// Mock CDP WebSocket server for unit testing
 pub const MockCDPServer = struct {
@@ -30,7 +31,7 @@ pub const MockCDPServer = struct {
 
     const ReceivedCommand = struct {
         method: []const u8,
-        params: ?std.json.Value,
+        params: ?json.Value,
         id: u64,
     };
 
@@ -183,15 +184,15 @@ pub const MockCDPServer = struct {
             const payload = buf[payload_start .. payload_start + payload_len];
 
             // Parse command
-            const parsed = std.json.parseFromSlice(std.json.Value, self.allocator, payload, .{}) catch continue;
-            defer parsed.deinit();
+            var parsed = json.parse(self.allocator, payload, .{}) catch continue;
+            defer parsed.deinit(self.allocator);
 
-            const id = switch (parsed.value.object.get("id") orelse continue) {
+            const id = switch (parsed.get("id") orelse continue) {
                 .integer => |i| @as(u64, @intCast(i)),
                 else => continue,
             };
 
-            const method = switch (parsed.value.object.get("method") orelse continue) {
+            const method = switch (parsed.get("method") orelse continue) {
                 .string => |s| s,
                 else => continue,
             };
@@ -200,7 +201,7 @@ pub const MockCDPServer = struct {
             self.received_mutex.lock();
             self.received_commands.append(.{
                 .method = self.allocator.dupe(u8, method) catch unreachable,
-                .params = parsed.value.object.get("params"),
+                .params = parsed.get("params"),
                 .id = id,
             }) catch {};
             self.received_mutex.unlock();

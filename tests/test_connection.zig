@@ -1,5 +1,6 @@
 const std = @import("std");
 const cdp = @import("cdp");
+const json = @import("json");
 
 // IdAllocator tests (from protocol module)
 test "IdAllocator - initial value is 1" {
@@ -119,29 +120,24 @@ test "parseMessage - invalid JSON" {
 }
 
 // JSON Value Cloning Tests
-fn cloneJsonValue(allocator: std.mem.Allocator, value: std.json.Value) !std.json.Value {
+fn cloneJsonValue(allocator: std.mem.Allocator, value: json.Value) !json.Value {
     return switch (value) {
         .null => .null,
         .bool => |b| .{ .bool = b },
         .integer => |i| .{ .integer = i },
         .float => |f| .{ .float = f },
-        .number_string => |s| .{ .number_string = try allocator.dupe(u8, s) },
         .string => |s| .{ .string = try allocator.dupe(u8, s) },
         .array => |arr| blk: {
-            var new_arr = std.json.Array.init(allocator);
+            var new_arr: json.Value.Array = .{};
             for (arr.items) |item| {
-                try new_arr.append(try cloneJsonValue(allocator, item));
+                try new_arr.append(allocator, try cloneJsonValue(allocator, item));
             }
             break :blk .{ .array = new_arr };
         },
         .object => |obj| blk: {
-            var new_obj = std.json.ObjectMap.init(allocator);
-            var iter = obj.iterator();
-            while (iter.next()) |entry| {
-                try new_obj.put(
-                    try allocator.dupe(u8, entry.key_ptr.*),
-                    try cloneJsonValue(allocator, entry.value_ptr.*),
-                );
+            var new_obj: json.Value.Object = .{};
+            for (obj.keys(), obj.values()) |key, val| {
+                try new_obj.put(allocator, try allocator.dupe(u8, key), try cloneJsonValue(allocator, val));
             }
             break :blk .{ .object = new_obj };
         },
@@ -172,7 +168,7 @@ test "cloneJsonValue - float" {
 }
 
 test "cloneJsonValue - string" {
-    const original: std.json.Value = .{ .string = "hello" };
+    const original: json.Value = .{ .string = "hello" };
     const cloned = try cloneJsonValue(std.testing.allocator, original);
     defer if (cloned == .string) std.testing.allocator.free(cloned.string);
 
@@ -181,13 +177,13 @@ test "cloneJsonValue - string" {
 }
 
 test "cloneJsonValue - array" {
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, "[1,2,3]", .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, "[1,2,3]", .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    const cloned = try cloneJsonValue(std.testing.allocator, parsed.value);
+    const cloned = try cloneJsonValue(std.testing.allocator, parsed);
     defer if (cloned == .array) {
         var arr = cloned.array;
-        arr.deinit();
+        arr.deinit(std.testing.allocator);
     };
 
     try std.testing.expect(cloned == .array);

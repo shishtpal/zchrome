@@ -1,10 +1,9 @@
 const std = @import("std");
+const json = @import("json");
 const protocol = @import("protocol.zig");
 const WebSocket = @import("../transport/websocket.zig").WebSocket;
 const WebSocketError = @import("../transport/websocket.zig").WebSocketError;
 const Session = @import("session.zig").Session;
-
-const json_util = @import("../util/json.zig");
 
 /// CDP Connection - synchronous version for Zig 0.16
 /// Handles WebSocket communication with Chrome DevTools Protocol
@@ -82,12 +81,13 @@ pub const Connection = struct {
     }
 
     /// Send a CDP command and wait for response (synchronous)
+    /// Returns a parsed json.Value. Caller must call value.deinit(allocator) when done.
     pub fn sendCommand(
         self: *Self,
         method: []const u8,
         params: anytype,
         session_id: ?[]const u8,
-    ) !std.json.Value {
+    ) !json.Value {
         const id = self.id_allocator.next();
 
         // Serialize and send
@@ -125,38 +125,49 @@ pub const Connection = struct {
             }
 
             // Parse JSON
-            const parsed = std.json.parseFromSlice(
-                std.json.Value,
-                self.allocator,
-                msg.data,
-                .{},
-            ) catch continue;
-            defer parsed.deinit();
+            var parsed = json.parse(self.allocator, msg.data, .{}) catch continue;
+            errdefer parsed.deinit(self.allocator);
+
+            if (parsed != .object) continue;
 
             // Check if this is our response
-            if (parsed.value.object.get("id")) |id_val| {
-                if (id_val == .integer and id_val.integer == id) {
+            if (parsed.get("id")) |id_val| {
+                const resp_id: i64 = switch (id_val) {
+                    .integer => |i| i,
+                    .float => |f| @as(i64, @intFromFloat(f)),
+                    else => continue,
+                };
+                if (resp_id == id) {
                     // Check for error
-                    if (parsed.value.object.get("error")) |err_val| {
-                        if (err_val.object.get("code")) |code_val| {
-                            const code: i32 = @intCast(code_val.integer);
+                    if (parsed.get("error")) |err_val| {
+                        if (err_val.get("code")) |code_val| {
+                            const code: i32 = @intCast(switch (code_val) {
+                                .integer => |i| i,
+                                else => return error.ProtocolError,
+                            });
+                            parsed.deinit(self.allocator);
                             return mapCdpError(code);
                         }
+                        parsed.deinit(self.allocator);
                         return error.ProtocolError;
                     }
 
                     // Return the result
-                    if (parsed.value.object.get("result")) |result| {
-                        // Clone the result since parsed will be deallocated
-                        return try cloneJsonValue(self.allocator, result);
+                    if (parsed.get("result")) |_| {
+                        // We need to extract just the result part
+                        // For now, return the full parsed value and let caller extract result
+                        return parsed;
                     }
 
                     // Empty result is valid for some commands
-                    return emptyObjectValue(self.allocator);
+                    // Return empty object
+                    parsed.deinit(self.allocator);
+                    return json.emptyObject();
                 }
             }
 
             // Not our response, might be an event - continue reading
+            parsed.deinit(self.allocator);
         }
 
         return error.Timeout;
@@ -169,58 +180,31 @@ pub const Connection = struct {
 
     /// Create a session attached to a target
     pub fn createSession(self: *Self, target_id: []const u8) !*Session {
-        const result = try self.sendCommand("Target.attachToTarget", .{
+        var result = try self.sendCommand("Target.attachToTarget", .{
             .targetId = target_id,
             .flatten = true,
         }, null);
+        defer result.deinit(self.allocator);
 
-        const session_id = try json_util.getString(result, "sessionId");
-        // Dupe the session_id since result memory may be invalidated
+        // Extract sessionId from result
+        const session_id = if (result.get("result")) |res|
+            res.getString("sessionId") catch return error.InvalidResponse
+        else
+            result.getString("sessionId") catch return error.InvalidResponse;
+
+        // Dupe the session_id since result memory will be freed
         const owned_id = try self.allocator.dupe(u8, session_id);
         return Session.init(owned_id, self, self.allocator);
     }
 
     /// Destroy a session
     pub fn destroySession(self: *Self, session_id: []const u8) !void {
-        _ = try self.sendCommand("Target.detachFromTarget", .{
+        var result = try self.sendCommand("Target.detachFromTarget", .{
             .sessionId = session_id,
         }, null);
+        result.deinit(self.allocator);
     }
 };
-
-/// Clone a JSON value (deep copy)
-fn cloneJsonValue(allocator: std.mem.Allocator, value: std.json.Value) !std.json.Value {
-    switch (value) {
-        .null => return .null,
-        .bool => |b| return .{ .bool = b },
-        .integer => |i| return .{ .integer = i },
-        .float => |f| return .{ .float = f },
-        .number_string => |s| return .{ .number_string = try allocator.dupe(u8, s) },
-        .string => |s| return .{ .string = try allocator.dupe(u8, s) },
-        .array => |arr| {
-            var new_arr = std.json.Array.init(allocator);
-            for (arr.items) |item| {
-                try new_arr.append(try cloneJsonValue(allocator, item));
-            }
-            return .{ .array = new_arr };
-        },
-        .object => |obj| {
-            var new_obj = std.json.ObjectMap.init(allocator);
-            var iter = obj.iterator();
-            while (iter.next()) |entry| {
-                const key = try allocator.dupe(u8, entry.key_ptr.*);
-                const val = try cloneJsonValue(allocator, entry.value_ptr.*);
-                try new_obj.put(key, val);
-            }
-            return .{ .object = new_obj };
-        },
-    }
-}
-
-/// Create an empty JSON object
-fn emptyObjectValue(allocator: std.mem.Allocator) std.json.Value {
-    return .{ .object = std.json.ObjectMap.init(allocator) };
-}
 
 /// Map CDP error code to Zig error
 fn mapCdpError(code: i32) error{
@@ -242,5 +226,3 @@ fn mapCdpError(code: i32) error{
             error.ProtocolError,
     };
 }
-
-

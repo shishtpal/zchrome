@@ -3,6 +3,7 @@
 //! Also handles macro recording and playback.
 
 const std = @import("std");
+const json = @import("json");
 const cdp = @import("cdp");
 const types = @import("types.zig");
 const config_mod = @import("../config.zig");
@@ -119,7 +120,7 @@ fn cursorActive(session: *cdp.Session, allocator: std.mem.Allocator) !void {
 
     if (result.value) |val| {
         if (val == .object) {
-            printElementInfo("Active element", val.object);
+            printElementInfo("Active element", val);
             return;
         }
     }
@@ -159,7 +160,7 @@ fn cursorHover(session: *cdp.Session, allocator: std.mem.Allocator, io: std.Io) 
 
     if (result.value) |val| {
         if (val == .object) {
-            printElementInfo(null, val.object);
+            printElementInfo(null, val);
             return;
         }
     }
@@ -303,14 +304,13 @@ fn cursorReplay(session: *cdp.Session, allocator: std.mem.Allocator, io: std.Io,
     };
 
     // Parse to check version
-    const version_check = std.json.parseFromSlice(std.json.Value, allocator, content, .{}) catch |err| {
+    const version_check = json.parse(allocator, content, .{}) catch |err| {
         std.debug.print("Error parsing macro JSON: {}\n", .{err});
         return;
     };
-    defer version_check.deinit();
 
     var version: u32 = 1;
-    if (version_check.value.object.get("version")) |v| {
+    if (version_check.get("version")) |v| {
         if (v == .integer) version = @intCast(v.integer);
     }
 
@@ -592,8 +592,8 @@ fn replayCommands(session: *cdp.Session, allocator: std.mem.Allocator, io: std.I
     std.debug.print("Replay complete.\n", .{});
 }
 
-/// Print element info from JSON object
-fn printElementInfo(header: ?[]const u8, obj: std.json.ObjectMap) void {
+/// Print element info from JSON value
+fn printElementInfo(header: ?[]const u8, obj: json.Value) void {
     if (header) |h| {
         std.debug.print("{s}:\n", .{h});
     }

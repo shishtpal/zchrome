@@ -1,6 +1,6 @@
 const std = @import("std");
+const json = @import("json");
 const Session = @import("../core/session.zig").Session;
-const json_util = @import("../util/json.zig");
 const RemoteObject = @import("runtime.zig").RemoteObject;
 
 /// DOM domain client
@@ -29,7 +29,7 @@ pub const DOM = struct {
             .depth = depth,
         });
 
-        const root = result.object.get("root") orelse return error.MissingField;
+        const root = result.get("root") orelse return error.MissingField;
         return try parseNode(allocator, root);
     }
 
@@ -40,7 +40,7 @@ pub const DOM = struct {
             .selector = selector,
         });
 
-        return try json_util.getInt(result, "nodeId");
+        return try result.getInt("nodeId");
     }
 
     /// Query selector all
@@ -50,7 +50,7 @@ pub const DOM = struct {
             .selector = selector,
         });
 
-        const node_ids = try json_util.getArray(result, "nodeIds");
+        const node_ids = try result.getArray("nodeIds");
         var ids = std.ArrayList(i64).init(allocator);
         errdefer ids.deinit();
 
@@ -70,7 +70,7 @@ pub const DOM = struct {
             .node_id = node_id,
         });
 
-        return try allocator.dupe(u8, try json_util.getString(result, "outerHTML"));
+        return try allocator.dupe(u8, try result.getString("outerHTML"));
     }
 
     /// Set outer HTML
@@ -87,7 +87,7 @@ pub const DOM = struct {
             .node_id = node_id,
         });
 
-        const attrs = try json_util.getArray(result, "attributes");
+        const attrs = try result.getArray("attributes");
         // Flatten into a single string for simplicity
         var buf = std.ArrayList(u8).init(allocator);
         errdefer buf.deinit();
@@ -157,7 +157,7 @@ pub const DOM = struct {
             .node_id = node_id,
         });
 
-        const obj = result.object.get("object") orelse return error.MissingField;
+        const obj = result.get("object") orelse return error.MissingField;
         return parseRemoteObject(allocator, obj);
     }
 };
@@ -199,13 +199,10 @@ pub const BoxModel = struct {
 };
 
 /// Parse node from JSON
-fn parseNode(allocator: std.mem.Allocator, obj: std.json.Value) !Node {
+fn parseNode(allocator: std.mem.Allocator, obj: json.Value) !Node {
     var children: ?[]Node = null;
-    if (obj.object.get("children")) |children_arr| {
-        const items = switch (children_arr) {
-            .array => |a| a.items,
-            else => return error.TypeMismatch,
-        };
+    if (obj.get("children")) |children_arr| {
+        const items = children_arr.asArray() orelse return error.TypeMismatch;
         var nodes = try allocator.alloc(Node, items.len);
         for (items, 0..) |child, i| {
             nodes[i] = try parseNode(allocator, child);
@@ -214,10 +211,10 @@ fn parseNode(allocator: std.mem.Allocator, obj: std.json.Value) !Node {
     }
 
     return .{
-        .node_id = try json_util.getInt(obj, "nodeId"),
-        .node_type = try json_util.getInt(obj, "nodeType"),
-        .node_name = try allocator.dupe(u8, try json_util.getString(obj, "nodeName")),
-        .node_value = try allocator.dupe(u8, try json_util.getString(obj, "nodeValue")),
+        .node_id = try obj.getInt("nodeId"),
+        .node_type = try obj.getInt("nodeType"),
+        .node_name = try allocator.dupe(u8, try obj.getString("nodeName")),
+        .node_value = try allocator.dupe(u8, try obj.getString("nodeValue")),
         .children = children,
         .attributes = null,
         .document_url = null,
@@ -226,16 +223,13 @@ fn parseNode(allocator: std.mem.Allocator, obj: std.json.Value) !Node {
 }
 
 /// Parse box model from JSON
-fn parseBoxModel(allocator: std.mem.Allocator, obj: std.json.Value) !BoxModel {
+fn parseBoxModel(allocator: std.mem.Allocator, obj: json.Value) !BoxModel {
     _ = allocator;
 
     var model: BoxModel = undefined;
 
-    if (obj.object.get("content")) |content| {
-        const arr = switch (content) {
-            .array => |a| a.items,
-            else => return error.TypeMismatch,
-        };
+    if (obj.get("content")) |content| {
+        const arr = content.asArray() orelse return error.TypeMismatch;
         for (arr, 0..) |v, idx| {
             model.content[idx] = switch (v) {
                 .float => |f| f,
@@ -245,11 +239,8 @@ fn parseBoxModel(allocator: std.mem.Allocator, obj: std.json.Value) !BoxModel {
         }
     }
 
-    if (obj.object.get("padding")) |padding| {
-        const arr = switch (padding) {
-            .array => |a| a.items,
-            else => return error.TypeMismatch,
-        };
+    if (obj.get("padding")) |padding| {
+        const arr = padding.asArray() orelse return error.TypeMismatch;
         for (arr, 0..) |v, idx| {
             model.padding[idx] = switch (v) {
                 .float => |f| f,
@@ -259,11 +250,8 @@ fn parseBoxModel(allocator: std.mem.Allocator, obj: std.json.Value) !BoxModel {
         }
     }
 
-    if (obj.object.get("border")) |border| {
-        const arr = switch (border) {
-            .array => |a| a.items,
-            else => return error.TypeMismatch,
-        };
+    if (obj.get("border")) |border| {
+        const arr = border.asArray() orelse return error.TypeMismatch;
         for (arr, 0..) |v, idx| {
             model.border[idx] = switch (v) {
                 .float => |f| f,
@@ -273,11 +261,8 @@ fn parseBoxModel(allocator: std.mem.Allocator, obj: std.json.Value) !BoxModel {
         }
     }
 
-    if (obj.object.get("margin")) |margin| {
-        const arr = switch (margin) {
-            .array => |a| a.items,
-            else => return error.TypeMismatch,
-        };
+    if (obj.get("margin")) |margin| {
+        const arr = margin.asArray() orelse return error.TypeMismatch;
         for (arr, 0..) |v, idx| {
             model.margin[idx] = switch (v) {
                 .float => |f| f,
@@ -287,13 +272,13 @@ fn parseBoxModel(allocator: std.mem.Allocator, obj: std.json.Value) !BoxModel {
         }
     }
 
-    model.width = if (obj.object.get("width")) |v| switch (v) {
+    model.width = if (obj.get("width")) |v| switch (v) {
         .integer => |i| i,
         .float => |f| @intFromFloat(f),
         else => 0,
     } else 0;
 
-    model.height = if (obj.object.get("height")) |v| switch (v) {
+    model.height = if (obj.get("height")) |v| switch (v) {
         .integer => |i| i,
         .float => |f| @intFromFloat(f),
         else => 0,
@@ -303,7 +288,7 @@ fn parseBoxModel(allocator: std.mem.Allocator, obj: std.json.Value) !BoxModel {
 }
 
 /// Parse remote object (stub - full implementation in runtime.zig)
-fn parseRemoteObject(allocator: std.mem.Allocator, obj: std.json.Value) !RemoteObject {
+fn parseRemoteObject(allocator: std.mem.Allocator, obj: json.Value) !RemoteObject {
     _ = obj;
     _ = allocator;
     return RemoteObject{

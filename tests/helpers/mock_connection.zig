@@ -1,5 +1,6 @@
 /// Mock connection for testing CDP clients without a real browser
 const std = @import("std");
+const json = @import("json");
 const protocol = @import("cdp").protocol;
 
 /// Queued response for mock
@@ -52,7 +53,7 @@ pub const MockConnection = struct {
         method: []const u8,
         params: anytype,
         session_id: ?[]const u8,
-    ) !std.json.Value {
+    ) !json.Value {
         _ = params;
         _ = session_id;
 
@@ -70,21 +71,16 @@ pub const MockConnection = struct {
                 }
 
                 // Parse the response JSON
-                const parsed = try std.json.parseFromSlice(
-                    std.json.Value,
-                    self.allocator,
-                    queued.response_json,
-                    .{},
-                );
-                defer parsed.deinit();
+                var parsed = try json.parse(self.allocator, queued.response_json, .{});
+                defer parsed.deinit(self.allocator);
 
                 // Return a copy of the value
-                return try cloneJsonValue(self.allocator, parsed.value);
+                return try cloneJsonValue(self.allocator, parsed);
             }
         }
 
         // No queued response - return empty result
-        return .{ .object = std.json.ObjectMap.init(self.allocator) };
+        return .{ .object = .{} };
     }
 
     /// Get the next command ID
@@ -110,29 +106,24 @@ pub const MockConnection = struct {
 };
 
 /// Clone a JSON value (deep copy)
-fn cloneJsonValue(allocator: std.mem.Allocator, value: std.json.Value) !std.json.Value {
+fn cloneJsonValue(allocator: std.mem.Allocator, value: json.Value) !json.Value {
     return switch (value) {
         .null => .null,
         .bool => |b| .{ .bool = b },
         .integer => |i| .{ .integer = i },
         .float => |f| .{ .float = f },
-        .number_string => |s| .{ .number_string = try allocator.dupe(u8, s) },
         .string => |s| .{ .string = try allocator.dupe(u8, s) },
         .array => |arr| blk: {
-            var new_arr = std.json.Array.init(allocator);
+            var new_arr: json.Value.Array = .{};
             for (arr.items) |item| {
-                try new_arr.append(try cloneJsonValue(allocator, item));
+                try new_arr.append(allocator, try cloneJsonValue(allocator, item));
             }
             break :blk .{ .array = new_arr };
         },
         .object => |obj| blk: {
-            var new_obj = std.json.ObjectMap.init(allocator);
-            var iter = obj.iterator();
-            while (iter.next()) |entry| {
-                try new_obj.put(
-                    try allocator.dupe(u8, entry.key_ptr.*),
-                    try cloneJsonValue(allocator, entry.value_ptr.*),
-                );
+            var new_obj: json.Value.Object = .{};
+            for (obj.keys(), obj.values()) |key, val| {
+                try new_obj.put(allocator, try allocator.dupe(u8, key), try cloneJsonValue(allocator, val));
             }
             break :blk .{ .object = new_obj };
         },
@@ -154,7 +145,7 @@ test "MockConnection - queueResponse and sendCommand" {
 
     const result = try mock.sendCommand("Page.navigate", .{}, null);
 
-    try std.testing.expect(result.object.get("frameId") != null);
+    try std.testing.expect(result.get("frameId") != null);
 }
 
 test "MockConnection - tracks sent commands" {
@@ -225,7 +216,7 @@ test "MockConnection - complex response" {
 
     const result = try mock.sendCommand("Target.getTargets", .{}, null);
 
-    const target_infos = result.object.get("targetInfos");
+    const target_infos = result.get("targetInfos");
     try std.testing.expect(target_infos != null);
     try std.testing.expectEqual(@as(usize, 1), target_infos.?.array.items.len);
 }
@@ -240,6 +231,6 @@ test "MockConnection - multiple responses for same method" {
     const result1 = try mock.sendCommand("Page.navigate", .{}, null);
     const result2 = try mock.sendCommand("Page.navigate", .{}, null);
 
-    try std.testing.expectEqualStrings("F1", result1.object.get("frameId").?.string);
-    try std.testing.expectEqualStrings("F2", result2.object.get("frameId").?.string);
+    try std.testing.expectEqualStrings("F1", result1.get("frameId").?.string);
+    try std.testing.expectEqualStrings("F2", result2.get("frameId").?.string);
 }

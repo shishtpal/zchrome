@@ -11,6 +11,7 @@
 //!   state     - Manage auth state (save/load/list/etc.)
 
 const std = @import("std");
+const json = @import("json");
 const cdp = @import("cdp");
 const types = @import("types.zig");
 const helpers = @import("helpers.zig");
@@ -270,13 +271,12 @@ fn console(session: *cdp.Session, ctx: CommandCtx) !void {
     const json_str = result.asString() orelse "[]";
 
     // Parse and display messages
-    const parsed = std.json.parseFromSlice(std.json.Value, ctx.allocator, json_str, .{}) catch {
+    var parsed = json.parse(ctx.allocator, json_str, .{}) catch {
         std.debug.print("No console messages captured\n", .{});
         return;
     };
-    defer parsed.deinit();
 
-    if (parsed.value != .array or parsed.value.array.items.len == 0) {
+    if (parsed != .array or parsed.array.items.len == 0) {
         std.debug.print("No console messages captured\n", .{});
         return;
     }
@@ -284,10 +284,10 @@ fn console(session: *cdp.Session, ctx: CommandCtx) !void {
     std.debug.print("Console Messages:\n", .{});
     std.debug.print("{s:-<60}\n", .{""});
 
-    for (parsed.value.array.items) |item| {
+    for (parsed.array.items) |item| {
         if (item != .object) continue;
-        const msg_type = if (item.object.get("type")) |v| (if (v == .string) v.string else "log") else "log";
-        const message = if (item.object.get("message")) |v| (if (v == .string) v.string else "") else "";
+        const msg_type = if (item.get("type")) |v| (if (v == .string) v.string else "log") else "log";
+        const message = if (item.get("message")) |v| (if (v == .string) v.string else "") else "";
 
         const type_color: []const u8 = if (std.mem.eql(u8, msg_type, "error"))
             "[ERR]"
@@ -348,13 +348,12 @@ fn errors(session: *cdp.Session, ctx: CommandCtx) !void {
 
     const json_str = result.asString() orelse "[]";
 
-    const parsed = std.json.parseFromSlice(std.json.Value, ctx.allocator, json_str, .{}) catch {
+    var parsed = json.parse(ctx.allocator, json_str, .{}) catch {
         std.debug.print("No errors captured\n", .{});
         return;
     };
-    defer parsed.deinit();
 
-    if (parsed.value != .array or parsed.value.array.items.len == 0) {
+    if (parsed != .array or parsed.array.items.len == 0) {
         std.debug.print("No errors captured\n", .{});
         return;
     }
@@ -362,11 +361,11 @@ fn errors(session: *cdp.Session, ctx: CommandCtx) !void {
     std.debug.print("Page Errors:\n", .{});
     std.debug.print("{s:-<60}\n", .{""});
 
-    for (parsed.value.array.items, 0..) |item, i| {
+    for (parsed.array.items, 0..) |item, i| {
         if (item != .object) continue;
-        const message = if (item.object.get("message")) |v| (if (v == .string) v.string else "Unknown error") else "Unknown error";
-        const url = if (item.object.get("url")) |v| (if (v == .string) v.string else "") else "";
-        const line = if (item.object.get("line")) |v| (if (v == .integer) v.integer else 0) else 0;
+        const message = if (item.get("message")) |v| (if (v == .string) v.string else "Unknown error") else "Unknown error";
+        const url = if (item.get("url")) |v| (if (v == .string) v.string else "") else "";
+        const line = if (item.get("line")) |v| (if (v == .integer) v.integer else 0) else 0;
 
         std.debug.print("\n[{}] {s}\n", .{ i + 1, message });
         if (url.len > 0) {
@@ -616,19 +615,18 @@ fn stateLoad(session: *cdp.Session, ctx: CommandCtx, path: []const u8) !void {
     };
     defer ctx.allocator.free(content);
 
-    const parsed = std.json.parseFromSlice(std.json.Value, ctx.allocator, content, .{}) catch |err| {
+    var parsed = json.parse(ctx.allocator, content, .{}) catch |err| {
         std.debug.print("Error parsing state file: {}\n", .{err});
         return;
     };
-    defer parsed.deinit();
 
-    if (parsed.value != .object) {
+    if (parsed != .object) {
         std.debug.print("Error: state file must contain a JSON object\n", .{});
         return;
     }
 
     // Load cookies
-    if (parsed.value.object.get("cookies")) |cookies_val| {
+    if (parsed.get("cookies")) |cookies_val| {
         if (cookies_val == .array) {
             var storage = cdp.Storage.init(session);
 
@@ -638,13 +636,13 @@ fn stateLoad(session: *cdp.Session, ctx: CommandCtx, path: []const u8) !void {
 
             for (cookies_val.array.items) |c| {
                 if (c != .object) continue;
-                const name = if (c.object.get("name")) |v| (if (v == .string) v.string else continue) else continue;
-                const value = if (c.object.get("value")) |v| (if (v == .string) v.string else "") else "";
-                const domain = if (c.object.get("domain")) |v| (if (v == .string) v.string else null) else null;
-                const cookie_path = if (c.object.get("path")) |v| (if (v == .string) v.string else null) else null;
-                const http_only = if (c.object.get("httpOnly")) |v| (if (v == .bool) v.bool else null) else null;
-                const secure = if (c.object.get("secure")) |v| (if (v == .bool) v.bool else null) else null;
-                const expires = if (c.object.get("expires")) |v| (if (v == .float) v.float else if (v == .integer) @as(f64, @floatFromInt(v.integer)) else null) else null;
+                const name = if (c.get("name")) |v| (if (v == .string) v.string else continue) else continue;
+                const value = if (c.get("value")) |v| (if (v == .string) v.string else "") else "";
+                const domain = if (c.get("domain")) |v| (if (v == .string) v.string else null) else null;
+                const cookie_path = if (c.get("path")) |v| (if (v == .string) v.string else null) else null;
+                const http_only = if (c.get("httpOnly")) |v| (if (v == .bool) v.bool else null) else null;
+                const secure = if (c.get("secure")) |v| (if (v == .bool) v.bool else null) else null;
+                const expires = if (c.get("expires")) |v| (if (v == .float) v.float else if (v == .integer) @as(f64, @floatFromInt(v.integer)) else null) else null;
 
                 try cookie_params.append(ctx.allocator, .{
                     .name = name,
@@ -668,7 +666,7 @@ fn stateLoad(session: *cdp.Session, ctx: CommandCtx, path: []const u8) !void {
     var runtime = cdp.Runtime.init(session);
     try runtime.enable();
 
-    if (parsed.value.object.get("localStorage")) |local_val| {
+    if (parsed.get("localStorage")) |local_val| {
         if (local_val == .object) {
             var count: usize = 0;
             var it = local_val.object.iterator();
@@ -691,7 +689,7 @@ fn stateLoad(session: *cdp.Session, ctx: CommandCtx, path: []const u8) !void {
     }
 
     // Load sessionStorage
-    if (parsed.value.object.get("sessionStorage")) |session_val| {
+    if (parsed.get("sessionStorage")) |session_val| {
         if (session_val == .object) {
             var count: usize = 0;
             var it = session_val.object.iterator();
@@ -767,28 +765,27 @@ fn stateShow(ctx: CommandCtx, path: []const u8) !void {
     };
     defer ctx.allocator.free(content);
 
-    const parsed = std.json.parseFromSlice(std.json.Value, ctx.allocator, content, .{}) catch |err| {
+    var parsed = json.parse(ctx.allocator, content, .{}) catch |err| {
         std.debug.print("Error parsing state file: {}\n", .{err});
         return;
     };
-    defer parsed.deinit();
 
     std.debug.print("State file: {s}\n", .{path});
     std.debug.print("{s:-<50}\n", .{""});
 
-    if (parsed.value.object.get("origin")) |v| {
+    if (parsed.get("origin")) |v| {
         if (v == .string) std.debug.print("Origin: {s}\n", .{v.string});
     }
 
-    if (parsed.value.object.get("cookies")) |v| {
+    if (parsed.get("cookies")) |v| {
         if (v == .array) std.debug.print("Cookies: {}\n", .{v.array.items.len});
     }
 
-    if (parsed.value.object.get("localStorage")) |v| {
+    if (parsed.get("localStorage")) |v| {
         if (v == .object) std.debug.print("localStorage entries: {}\n", .{v.object.count()});
     }
 
-    if (parsed.value.object.get("sessionStorage")) |v| {
+    if (parsed.get("sessionStorage")) |v| {
         if (v == .object) std.debug.print("sessionStorage entries: {}\n", .{v.object.count()});
     }
 }

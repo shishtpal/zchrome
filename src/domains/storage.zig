@@ -1,6 +1,6 @@
 const std = @import("std");
+const json = @import("json");
 const Session = @import("../core/session.zig").Session;
-const json_util = @import("../util/json.zig");
 
 /// Storage domain client
 pub const Storage = struct {
@@ -18,7 +18,7 @@ pub const Storage = struct {
             .urls = urls,
         });
 
-        const cookies_arr = try json_util.getArray(result, "cookies");
+        const cookies_arr = try result.getArray("cookies");
         var cookies: std.ArrayList(Cookie) = .empty;
         errdefer cookies.deinit(allocator);
 
@@ -87,18 +87,18 @@ pub const CookieParam = struct {
 };
 
 /// Parse cookie from JSON
-fn parseCookie(allocator: std.mem.Allocator, obj: std.json.Value) !Cookie {
+fn parseCookie(allocator: std.mem.Allocator, obj: json.Value) !Cookie {
     return .{
-        .name = try allocator.dupe(u8, try json_util.getString(obj, "name")),
-        .value = try allocator.dupe(u8, try json_util.getString(obj, "value")),
-        .domain = try allocator.dupe(u8, try json_util.getString(obj, "domain")),
-        .path = try allocator.dupe(u8, try json_util.getString(obj, "path")),
-        .expires = try json_util.getFloat(obj, "expires"),
-        .size = try json_util.getInt(obj, "size"),
-        .http_only = try json_util.getBool(obj, "httpOnly"),
-        .secure = try json_util.getBool(obj, "secure"),
-        .session = try json_util.getBool(obj, "session"),
-        .same_site = if (obj.object.get("sameSite")) |v|
+        .name = try allocator.dupe(u8, try obj.getString("name")),
+        .value = try allocator.dupe(u8, try obj.getString("value")),
+        .domain = try allocator.dupe(u8, try obj.getString("domain")),
+        .path = try allocator.dupe(u8, try obj.getString("path")),
+        .expires = try obj.getFloat("expires"),
+        .size = try obj.getInt("size"),
+        .http_only = try obj.getBool("httpOnly"),
+        .secure = try obj.getBool("secure"),
+        .session = try obj.getBool("session"),
+        .same_site = if (obj.get("sameSite")) |v|
             try allocator.dupe(u8, v.string)
         else
             null,

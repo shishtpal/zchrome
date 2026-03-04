@@ -1,5 +1,5 @@
 const std = @import("std");
-const json = @import("cdp").json;
+const json = @import("json");
 
 test "snakeToCamel - basic" {
     const result = try json.snakeToCamel(std.testing.allocator, "frame_id");
@@ -31,30 +31,30 @@ test "comptimeSnakeToCamel" {
 }
 
 test "getString - exists" {
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, "{\"key\":\"value\"}", .{});
-    defer parsed.deinit();
-    const result = try json.getString(parsed.value, "key");
+    var parsed = try json.parse(std.testing.allocator, "{\"key\":\"value\"}", .{});
+    defer parsed.deinit(std.testing.allocator);
+    const result = try parsed.getString("key");
     try std.testing.expectEqualStrings("value", result);
 }
 
 test "getString - missing key" {
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, "{}", .{});
-    defer parsed.deinit();
-    const result = json.getString(parsed.value, "key");
+    var parsed = try json.parse(std.testing.allocator, "{}", .{});
+    defer parsed.deinit(std.testing.allocator);
+    const result = parsed.getString("key");
     try std.testing.expectError(error.MissingField, result);
 }
 
 test "getInt - valid" {
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, "{\"num\":42}", .{});
-    defer parsed.deinit();
-    const result = try json.getInt(parsed.value, "num");
+    var parsed = try json.parse(std.testing.allocator, "{\"num\":42}", .{});
+    defer parsed.deinit(std.testing.allocator);
+    const result = try parsed.getInt("num");
     try std.testing.expectEqual(@as(i64, 42), result);
 }
 
 test "getBool - valid" {
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, "{\"flag\":true}", .{});
-    defer parsed.deinit();
-    const result = try json.getBool(parsed.value, "flag");
+    var parsed = try json.parse(std.testing.allocator, "{\"flag\":true}", .{});
+    defer parsed.deinit(std.testing.allocator);
+    const result = try parsed.getBool("flag");
     try std.testing.expect(result);
 }
 
@@ -65,15 +65,10 @@ test "decode struct from json value" {
         error_text: ?[]const u8 = null,
     };
 
-    const parsed = try std.json.parseFromSlice(
-        std.json.Value,
-        std.testing.allocator,
-        "{\"frameId\":\"F1\",\"loaderId\":\"L1\"}",
-        .{},
-    );
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, "{\"frameId\":\"F1\",\"loaderId\":\"L1\"}", .{});
+    defer parsed.deinit(std.testing.allocator);
 
-    var result = try json.decode(TestStruct, parsed.value, std.testing.allocator);
+    var result = try json.decode(TestStruct, parsed, std.testing.allocator);
     defer std.testing.allocator.free(result.frame_id);
     defer if (result.loader_id) |l| std.testing.allocator.free(l);
 
@@ -83,7 +78,7 @@ test "decode struct from json value" {
 
 test "stringify struct to json" {
     const params = .{ .url = "https://example.com", .ignore_cache = true };
-    const result = try json.stringify(std.testing.allocator, params);
+    const result = try json.encode(std.testing.allocator, params, .{});
     defer std.testing.allocator.free(result);
 
     try std.testing.expect(std.mem.indexOf(u8, result, "\"url\"") != null);
@@ -92,7 +87,7 @@ test "stringify struct to json" {
 
 test "stringify skips null optionals" {
     const params = .{ .url = "https://example.com", .referrer = @as(?[]const u8, null) };
-    const result = try json.stringify(std.testing.allocator, params);
+    const result = try json.encode(std.testing.allocator, params, .{});
     defer std.testing.allocator.free(result);
     try std.testing.expect(std.mem.indexOf(u8, result, "referrer") == null);
 }

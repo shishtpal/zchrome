@@ -1,4 +1,5 @@
 const std = @import("std");
+const json = @import("json");
 const Connection = @import("connection.zig").Connection;
 const protocol = @import("protocol.zig");
 
@@ -26,21 +27,23 @@ pub const Session = struct {
         return self;
     }
 
-    /// Send a command through this session
+    /// Send a command through this session.
+    /// Returns a json.Value. Caller must call value.deinit(allocator) when done.
     pub fn sendCommand(
         self: *Self,
         method: []const u8,
         params: anytype,
-    ) !std.json.Value {
+    ) !json.Value {
         const sid = if (self.id.len > 0) self.id else null;
         return self.connection.sendCommand(method, params, sid);
     }
 
     /// Detach from the target
     pub fn detach(self: *Self) !void {
-        _ = try self.connection.sendCommand("Target.detachFromTarget", .{
+        var result = try self.connection.sendCommand("Target.detachFromTarget", .{
             .sessionId = self.id,
         }, null);
+        result.deinit(self.allocator);
     }
 
     /// Clean up resources

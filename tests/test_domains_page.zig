@@ -1,6 +1,6 @@
 const std = @import("std");
 const cdp = @import("cdp");
-const json = cdp.json;
+const json = @import("json");
 
 // Frame information
 pub const Frame = struct {
@@ -46,13 +46,13 @@ pub const ScreenshotFormat = enum {
 // NavigateResult Tests
 test "NavigateResult - parse from JSON" {
     const json_str = "{\"frameId\":\"F1\",\"loaderId\":\"L1\"}";
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
     var result = NavigateResult{
-        .frame_id = try std.testing.allocator.dupe(u8, try json.getString(parsed.value, "frameId")),
-        .loader_id = if (parsed.value.object.get("loaderId")) |v|
-            try std.testing.allocator.dupe(u8, v.string)
+        .frame_id = try std.testing.allocator.dupe(u8, try parsed.getString("frameId")),
+        .loader_id = if (parsed.get("loaderId")) |v|
+            try std.testing.allocator.dupe(u8, v.asString().?)
         else
             null,
         .error_text = null,
@@ -66,17 +66,17 @@ test "NavigateResult - parse from JSON" {
 
 test "NavigateResult - parse with error_text" {
     const json_str = "{\"frameId\":\"F1\",\"loaderId\":\"L1\",\"errorText\":\"net::ERR_NAME_NOT_RESOLVED\"}";
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
     var result = NavigateResult{
-        .frame_id = try std.testing.allocator.dupe(u8, try json.getString(parsed.value, "frameId")),
-        .loader_id = if (parsed.value.object.get("loaderId")) |v|
-            try std.testing.allocator.dupe(u8, v.string)
+        .frame_id = try std.testing.allocator.dupe(u8, try parsed.getString("frameId")),
+        .loader_id = if (parsed.get("loaderId")) |v|
+            try std.testing.allocator.dupe(u8, v.asString().?)
         else
             null,
-        .error_text = if (parsed.value.object.get("errorText")) |v|
-            try std.testing.allocator.dupe(u8, v.string)
+        .error_text = if (parsed.get("errorText")) |v|
+            try std.testing.allocator.dupe(u8, v.asString().?)
         else
             null,
     };
@@ -108,27 +108,27 @@ test "Frame - parse from JSON with all fields" {
         \\  "mimeType": "text/html"
         \\}
     ;
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
     var frame = Frame{
-        .id = try std.testing.allocator.dupe(u8, try json.getString(parsed.value, "id")),
-        .parent_id = if (parsed.value.object.get("parentId")) |v|
-            try std.testing.allocator.dupe(u8, v.string)
+        .id = try std.testing.allocator.dupe(u8, try parsed.getString("id")),
+        .parent_id = if (parsed.get("parentId")) |v|
+            try std.testing.allocator.dupe(u8, v.asString().?)
         else
             null,
-        .loader_id = try std.testing.allocator.dupe(u8, try json.getString(parsed.value, "loaderId")),
-        .name = if (parsed.value.object.get("name")) |v|
-            try std.testing.allocator.dupe(u8, v.string)
+        .loader_id = try std.testing.allocator.dupe(u8, try parsed.getString("loaderId")),
+        .name = if (parsed.get("name")) |v|
+            try std.testing.allocator.dupe(u8, v.asString().?)
         else
             null,
-        .url = try std.testing.allocator.dupe(u8, try json.getString(parsed.value, "url")),
-        .security_origin = if (parsed.value.object.get("securityOrigin")) |v|
-            try std.testing.allocator.dupe(u8, v.string)
+        .url = try std.testing.allocator.dupe(u8, try parsed.getString("url")),
+        .security_origin = if (parsed.get("securityOrigin")) |v|
+            try std.testing.allocator.dupe(u8, v.asString().?)
         else
             null,
-        .mime_type = if (parsed.value.object.get("mimeType")) |v|
-            try std.testing.allocator.dupe(u8, v.string)
+        .mime_type = if (parsed.get("mimeType")) |v|
+            try std.testing.allocator.dupe(u8, v.asString().?)
         else
             null,
     };
@@ -151,13 +151,13 @@ test "Frame - parse with minimal fields" {
         \\  "url": "https://example.com"
         \\}
     ;
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(std.testing.allocator, json_str, .{});
+    defer parsed.deinit(std.testing.allocator);
 
     var frame = Frame{
-        .id = try std.testing.allocator.dupe(u8, try json.getString(parsed.value, "id")),
-        .loader_id = try std.testing.allocator.dupe(u8, try json.getString(parsed.value, "loaderId")),
-        .url = try std.testing.allocator.dupe(u8, try json.getString(parsed.value, "url")),
+        .id = try std.testing.allocator.dupe(u8, try parsed.getString("id")),
+        .loader_id = try std.testing.allocator.dupe(u8, try parsed.getString("loaderId")),
+        .url = try std.testing.allocator.dupe(u8, try parsed.getString("url")),
     };
     defer frame.deinit(std.testing.allocator);
 

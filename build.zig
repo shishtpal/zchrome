@@ -4,12 +4,20 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    // ─── JSON Module (from zlib-json) ────────────────────────
+    const json_dep = b.dependency("zlib_json", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const json_mod = json_dep.module("json");
+
     // ─── Library Module ──────────────────────────────────────
     const cdp_mod = b.createModule(.{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
     });
+    cdp_mod.addImport("json", json_mod);
 
     // ─── CLI Executable ──────────────────────────────────────
     const cli_mod = b.createModule(.{
@@ -18,6 +26,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     cli_mod.addImport("cdp", cdp_mod);
+    cli_mod.addImport("json", json_mod);
 
     const cli = b.addExecutable(.{
         .name = "zchrome",
@@ -60,6 +69,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         });
         test_mod.addImport("cdp", cdp_mod);
+        test_mod.addImport("json", json_mod);
 
         const t = b.addTest(.{
             .root_module = test_mod,
@@ -75,6 +85,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     integration_mod.addImport("cdp", cdp_mod);
+    integration_mod.addImport("json", json_mod);
 
     const integration_test = b.addTest(.{
         .root_module = integration_mod,

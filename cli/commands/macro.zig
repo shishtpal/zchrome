@@ -8,8 +8,9 @@
 //! - Version 2: Semantic commands (click, fill, press, etc.) - high-level, selector-based
 
 const std = @import("std");
-const cdp = @import("cdp");
-const json_util = cdp.json;
+const json = @import("json");
+
+const escapeString = json.escapeString;
 
 // ============================================================================
 // Version 2: Semantic Commands (high-level, human-readable)
@@ -121,7 +122,7 @@ pub fn saveCommandMacro(allocator: std.mem.Allocator, io: std.Io, path: []const 
 
         // Selector
         if (cmd.selector) |sel| {
-            const escaped = try json_util.escapeString(allocator, sel);
+            const escaped = try escapeString(allocator, sel);
             defer allocator.free(escaped);
             try json_buf.appendSlice(allocator, ", \"selector\": \"");
             try json_buf.appendSlice(allocator, escaped);
@@ -130,7 +131,7 @@ pub fn saveCommandMacro(allocator: std.mem.Allocator, io: std.Io, path: []const 
 
         // Value
         if (cmd.value) |val| {
-            const escaped = try json_util.escapeString(allocator, val);
+            const escaped = try escapeString(allocator, val);
             defer allocator.free(escaped);
             try json_buf.appendSlice(allocator, ", \"value\": \"");
             try json_buf.appendSlice(allocator, escaped);
@@ -139,7 +140,7 @@ pub fn saveCommandMacro(allocator: std.mem.Allocator, io: std.Io, path: []const 
 
         // Key
         if (cmd.key) |key| {
-            const escaped = try json_util.escapeString(allocator, key);
+            const escaped = try escapeString(allocator, key);
             defer allocator.free(escaped);
             try json_buf.appendSlice(allocator, ", \"key\": \"");
             try json_buf.appendSlice(allocator, escaped);
@@ -183,18 +184,18 @@ pub fn loadCommandMacro(allocator: std.mem.Allocator, io: std.Io, path: []const 
         return err;
     };
 
-    const parsed = std.json.parseFromSlice(std.json.Value, allocator, content, .{}) catch |err| {
+    var parsed = json.parse(allocator, content, .{}) catch |err| {
         std.debug.print("Error parsing macro JSON: {}\n", .{err});
         return err;
     };
-    defer parsed.deinit();
+    defer parsed.deinit(allocator);
 
     var macro = CommandMacro{
         .version = 2,
         .commands = &[_]MacroCommand{},
     };
 
-    if (parsed.value.object.get("commands")) |cmds_val| {
+    if (parsed.get("commands")) |cmds_val| {
         if (cmds_val == .array) {
             var cmds_list: std.ArrayList(MacroCommand) = .empty;
             errdefer {
@@ -334,11 +335,11 @@ pub fn loadMacro(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !Ma
     };
 
     // Parse JSON
-    const parsed = std.json.parseFromSlice(std.json.Value, allocator, content, .{}) catch |err| {
+    var parsed = json.parse(allocator, content, .{}) catch |err| {
         std.debug.print("Error parsing macro JSON: {}\n", .{err});
         return err;
     };
-    defer parsed.deinit();
+    defer parsed.deinit(allocator);
 
     // Extract version
     var macro = Macro{
@@ -347,16 +348,16 @@ pub fn loadMacro(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !Ma
         .events = &[_]MacroEvent{},
     };
 
-    if (parsed.value.object.get("version")) |v| {
+    if (parsed.get("version")) |v| {
         if (v == .integer) macro.version = @intCast(v.integer);
     }
 
-    if (parsed.value.object.get("recorded_at")) |v| {
+    if (parsed.get("recorded_at")) |v| {
         if (v == .string) macro.recorded_at = try allocator.dupe(u8, v.string);
     }
 
     // Parse events array
-    if (parsed.value.object.get("events")) |events_val| {
+    if (parsed.get("events")) |events_val| {
         if (events_val == .array) {
             var events_list: std.ArrayList(MacroEvent) = .empty;
             errdefer {
@@ -470,7 +471,7 @@ pub fn saveMacro(allocator: std.mem.Allocator, io: std.Io, path: []const u8, mac
     try json_buf.appendSlice(allocator, ver_str);
 
     if (macro.recorded_at) |ra| {
-        const escaped_ra = try json_util.escapeString(allocator, ra);
+        const escaped_ra = try escapeString(allocator, ra);
         defer allocator.free(escaped_ra);
         try json_buf.appendSlice(allocator, ",\n  \"recorded_at\": \"");
         try json_buf.appendSlice(allocator, escaped_ra);
@@ -540,14 +541,14 @@ pub fn saveMacro(allocator: std.mem.Allocator, io: std.Io, path: []const u8, mac
 
         // Key properties
         if (event.key) |k| {
-            const escaped_k = try json_util.escapeString(allocator, k);
+            const escaped_k = try escapeString(allocator, k);
             defer allocator.free(escaped_k);
             try json_buf.appendSlice(allocator, ",\n      \"key\": \"");
             try json_buf.appendSlice(allocator, escaped_k);
             try json_buf.appendSlice(allocator, "\"");
         }
         if (event.code) |c| {
-            const escaped_c = try json_util.escapeString(allocator, c);
+            const escaped_c = try escapeString(allocator, c);
             defer allocator.free(escaped_c);
             try json_buf.appendSlice(allocator, ",\n      \"code\": \"");
             try json_buf.appendSlice(allocator, escaped_c);

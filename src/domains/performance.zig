@@ -1,6 +1,5 @@
 const std = @import("std");
 const Session = @import("../core/session.zig").Session;
-const json_util = @import("../util/json.zig");
 
 /// Performance domain client
 pub const Performance = struct {
@@ -26,14 +25,14 @@ pub const Performance = struct {
     pub fn getMetrics(self: *Self, allocator: std.mem.Allocator) ![]Metric {
         const result = try self.session.sendCommand("Performance.getMetrics", .{});
 
-        const metrics_arr = try json_util.getArray(result, "metrics");
+        const metrics_arr = try result.getArray("metrics");
         var metrics = std.ArrayList(Metric).init(allocator);
         errdefer metrics.deinit();
 
         for (metrics_arr) |m| {
             try metrics.append(.{
-                .name = try allocator.dupe(u8, try json_util.getString(m, "name")),
-                .value = try json_util.getFloat(m, "value"),
+                .name = try allocator.dupe(u8, try m.getString("name")),
+                .value = try m.getFloat("value"),
             });
         }
 

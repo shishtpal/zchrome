@@ -11,4 +11,9 @@
         "build.zig",
         "build.zig.zon",
     },
+    .dependencies = .{
+        .zlib_json = .{
+            .path = "../zlib-json",
+        },
+    },
 }

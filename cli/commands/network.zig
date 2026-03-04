@@ -4,6 +4,7 @@
 //! Subcommands: route, unroute, requests.
 
 const std = @import("std");
+const json = @import("json");
 const cdp = @import("cdp");
 const types = @import("types.zig");
 
@@ -142,32 +143,31 @@ fn interceptLoop(session: *cdp.Session, action: InterceptAction, mock_body: ?[]c
         defer msg.deinit(session.connection.allocator);
 
         // Parse JSON
-        const parsed = std.json.parseFromSlice(
-            std.json.Value,
+        var parsed = json.parse(
             session.connection.allocator,
             msg.data,
             .{},
         ) catch continue;
-        defer parsed.deinit();
+        defer parsed.deinit(session.connection.allocator);
 
         // Check if this is a Fetch.requestPaused event
-        const method_val = parsed.value.object.get("method") orelse continue;
+        const method_val = parsed.get("method") orelse continue;
         if (method_val != .string) continue;
         if (!std.mem.eql(u8, method_val.string, "Fetch.requestPaused")) continue;
 
-        const params_val = parsed.value.object.get("params") orelse continue;
+        const params_val = parsed.get("params") orelse continue;
         if (params_val != .object) continue;
 
         const request_id = blk: {
-            const rid = params_val.object.get("requestId") orelse continue;
+            const rid = params_val.get("requestId") orelse continue;
             if (rid != .string) continue;
             break :blk rid.string;
         };
 
         // Extract request URL for logging
-        const request_url = if (params_val.object.get("request")) |req| blk: {
+        const request_url = if (params_val.get("request")) |req| blk: {
             if (req == .object) {
-                if (req.object.get("url")) |u| {
+                if (req.get("url")) |u| {
                     if (u == .string) break :blk u.string;
                 }
             }
@@ -324,24 +324,24 @@ fn requestsCmd(session: *cdp.Session, ctx: CommandCtx) !void {
         return;
     };
 
-    const parsed = std.json.parseFromSlice(std.json.Value, ctx.allocator, json_str, .{}) catch {
+    var parsed = json.parse(ctx.allocator, json_str, .{}) catch {
         std.debug.print("No request data available\n", .{});
         return;
     };
-    defer parsed.deinit();
+    defer parsed.deinit(ctx.allocator);
 
-    if (parsed.value != .array) {
+    if (parsed != .array) {
         std.debug.print("No requests tracked\n", .{});
         return;
     }
 
     var count: usize = 0;
-    for (parsed.value.array.items) |item| {
+    for (parsed.array.items) |item| {
         if (item != .object) continue;
-        const name = if (item.object.get("name")) |v| (if (v == .string) v.string else "") else "";
-        const rtype = if (item.object.get("type")) |v| (if (v == .string) v.string else "") else "";
-        const duration = if (item.object.get("duration")) |v| (if (v == .integer) v.integer else 0) else 0;
-        const size = if (item.object.get("size")) |v| (if (v == .integer) v.integer else 0) else 0;
+        const name = if (item.get("name")) |v| (if (v == .string) v.string else "") else "";
+        const rtype = if (item.get("type")) |v| (if (v == .string) v.string else "") else "";
+        const duration = if (item.get("duration")) |v| (if (v == .integer) v.integer else 0) else 0;
+        const size = if (item.get("size")) |v| (if (v == .integer) v.integer else 0) else 0;
 
         // Apply filter if specified
         if (filter_pattern) |pat| {

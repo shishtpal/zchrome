@@ -1,6 +1,6 @@
 const std = @import("std");
+const json = @import("json");
 const Session = @import("../core/session.zig").Session;
-const json_util = @import("../util/json.zig");
 
 /// Tracing domain client for recording Chrome traces
 pub const Tracing = struct {
@@ -35,7 +35,7 @@ pub const Tracing = struct {
     pub fn getCategories(self: *Self, allocator: std.mem.Allocator) ![][]const u8 {
         const result = try self.session.sendCommand("Tracing.getCategories", .{});
 
-        const categories_arr = try json_util.getArray(result, "categories");
+        const categories_arr = try result.getArray("categories");
         var categories: std.ArrayList([]const u8) = .empty;
         errdefer categories.deinit(allocator);
 
@@ -56,8 +56,8 @@ pub const Tracing = struct {
         });
 
         return .{
-            .dump_guid = try json_util.getString(result, "dumpGuid"),
-            .success = try json_util.getBool(result, "success"),
+            .dump_guid = try result.getString("dumpGuid"),
+            .success = try result.getBool("success"),
         };
     }
 
@@ -121,7 +121,7 @@ pub const BufferUsage = struct {
 
 /// Contains a bucket of trace events
 pub const DataCollected = struct {
-    value: []std.json.Value,
+    value: []json.Value,
 };
 
 /// Signals tracing is complete

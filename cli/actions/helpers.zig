@@ -1,4 +1,5 @@
 const std = @import("std");
+const json = @import("json");
 const types = @import("types.zig");
 
 // JavaScript helpers loaded from external files at compile time
@@ -40,7 +41,7 @@ pub fn escapeJsString(allocator: std.mem.Allocator, s: []const u8) ![]const u8 {
     return result.toOwnedSlice(allocator);
 }
 
-pub fn getFloatFromJson(val: ?std.json.Value) ?f64 {
+pub fn getFloatFromJson(val: ?json.Value) ?f64 {
     if (val) |v| {
         return switch (v) {
             .float => |f| f,

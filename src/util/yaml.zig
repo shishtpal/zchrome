@@ -6,6 +6,7 @@
 //! and other special characters.
 
 const std = @import("std");
+const json = @import("json");
 
 /// Check if a file path has a YAML extension
 pub fn isYamlPath(path: []const u8) bool {
@@ -66,15 +67,14 @@ fn unquoteYaml(allocator: std.mem.Allocator, s: []const u8) ![]u8 {
 /// Keys and values are always double-quoted to safely handle colons, newlines,
 /// and other special characters.
 pub fn jsonToYaml(allocator: std.mem.Allocator, json_str: []const u8) ![]u8 {
-    const parsed = try std.json.parseFromSlice(std.json.Value, allocator, json_str, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(allocator, json_str, .{});
+    defer parsed.deinit(allocator);
     var buf: std.ArrayList(u8) = .empty;
     errdefer buf.deinit(allocator);
-    if (parsed.value == .object) {
-        var it = parsed.value.object.iterator();
-        while (it.next()) |entry| {
-            const val = if (entry.value_ptr.* == .string) entry.value_ptr.*.string else "";
-            try writeQuotedYaml(&buf, allocator, entry.key_ptr.*);
+    if (parsed == .object) {
+        for (parsed.object.keys(), parsed.object.values()) |key, v| {
+            const val = if (v == .string) v.string else "";
+            try writeQuotedYaml(&buf, allocator, key);
             try buf.appendSlice(allocator, ": ");
             try writeQuotedYaml(&buf, allocator, val);
             try buf.append(allocator, '\n');
@@ -170,8 +170,8 @@ pub fn yamlToJson(allocator: std.mem.Allocator, yaml: []const u8) ![]const u8 {
 
 test "jsonToYaml and yamlToJson round-trip" {
     const allocator = std.testing.allocator;
-    const json = "{\"name\":\"value\",\"key2\":\"value2\"}";
-    const yaml = try jsonToYaml(allocator, json);
+    const json_str = "{\"name\":\"value\",\"key2\":\"value2\"}";
+    const yaml = try jsonToYaml(allocator, json_str);
     defer allocator.free(yaml);
     // Should contain the key-value pairs (quoted)
     try std.testing.expect(std.mem.indexOf(u8, yaml, "\"name\": \"value\"") != null);
@@ -180,49 +180,48 @@ test "jsonToYaml and yamlToJson round-trip" {
     const json2 = try yamlToJson(allocator, yaml);
     defer allocator.free(json2);
     // Parse both to compare structure
-    const parsed1 = try std.json.parseFromSlice(std.json.Value, allocator, json, .{});
-    defer parsed1.deinit();
-    const parsed2 = try std.json.parseFromSlice(std.json.Value, allocator, json2, .{});
-    defer parsed2.deinit();
+    var parsed1 = try json.parse(allocator, json_str, .{});
+    defer parsed1.deinit(allocator);
+    var parsed2 = try json.parse(allocator, json2, .{});
+    defer parsed2.deinit(allocator);
     // Both should be objects with same keys and values
-    try std.testing.expect(parsed1.value.object.count() == parsed2.value.object.count());
-    var it = parsed1.value.object.iterator();
-    while (it.next()) |entry| {
-        const v2 = parsed2.value.object.get(entry.key_ptr.*) orelse
+    try std.testing.expect(parsed1.object.count() == parsed2.object.count());
+    for (parsed1.object.keys(), parsed1.object.values()) |key, v| {
+        const v2 = parsed2.object.get(key) orelse
             return error.MissingKey;
-        try std.testing.expectEqualStrings(entry.value_ptr.*.string, v2.string);
+        try std.testing.expectEqualStrings(v.string, v2.string);
     }
 }
 
 test "jsonToYaml handles special characters in values" {
     const allocator = std.testing.allocator;
     // Value containing ": " (URL with port) — the classic truncation bug
-    const json = "{\"url\":\"https://example.com: 8080\",\"css\":\"color: red\"}";
-    const yaml = try jsonToYaml(allocator, json);
+    const json_str = "{\"url\":\"https://example.com: 8080\",\"css\":\"color: red\"}";
+    const yaml = try jsonToYaml(allocator, json_str);
     defer allocator.free(yaml);
     const json2 = try yamlToJson(allocator, yaml);
     defer allocator.free(json2);
-    const parsed = try std.json.parseFromSlice(std.json.Value, allocator, json2, .{});
-    defer parsed.deinit();
+    var parsed = try json.parse(allocator, json2, .{});
+    defer parsed.deinit(allocator);
     try std.testing.expectEqualStrings(
         "https://example.com: 8080",
-        parsed.value.object.get("url").?.string,
+        parsed.object.get("url").?.string,
     );
     try std.testing.expectEqualStrings(
         "color: red",
-        parsed.value.object.get("css").?.string,
+        parsed.object.get("css").?.string,
     );
 }
 
 test "jsonToYaml handles newlines and quotes in values" {
     const allocator = std.testing.allocator;
-    const json = "{\"msg\":\"line1\\nline2\",\"q\":\"say \\\"hello\\\"\"}";
-    const yaml = try jsonToYaml(allocator, json);
+    const json_str = "{\"msg\":\"line1\\nline2\",\"q\":\"say \\\"hello\\\"\"}";
+    const yaml = try jsonToYaml(allocator, json_str);
     defer allocator.free(yaml);
     const json2 = try yamlToJson(allocator, yaml);
     defer allocator.free(json2);
-    const parsed = try std.json.parseFromSlice(std.json.Value, allocator, json2, .{});
-    defer parsed.deinit();
-    try std.testing.expectEqualStrings("line1\nline2", parsed.value.object.get("msg").?.string);
-    try std.testing.expectEqualStrings("say \"hello\"", parsed.value.object.get("q").?.string);
+    var parsed = try json.parse(allocator, json2, .{});
+    defer parsed.deinit(allocator);
+    try std.testing.expectEqualStrings("line1\nline2", parsed.object.get("msg").?.string);
+    try std.testing.expectEqualStrings("say \"hello\"", parsed.object.get("q").?.string);
 }

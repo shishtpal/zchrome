@@ -3,7 +3,6 @@ const Connection = @import("../core/connection.zig").Connection;
 const Session = @import("../core/session.zig").Session;
 const options_mod = @import("options.zig");
 const process_mod = @import("process.zig");
-const json_util = @import("../util/json.zig");
 
 /// Browser version information
 pub const BrowserVersion = struct {
@@ -141,7 +140,7 @@ pub const Browser = struct {
             .url = "about:blank",
         }, null);
 
-        const target_id = try json_util.getString(create_result, "targetId");
+        const target_id = try create_result.getString("targetId");
 
         // Attach to target
         return try self.connection.createSession(target_id);
@@ -151,20 +150,20 @@ pub const Browser = struct {
     pub fn pages(self: *Self) ![]TargetInfo {
         const result = try self.connection.sendCommand("Target.getTargets", .{}, null);
 
-        const target_infos = try json_util.getArray(result, "targetInfos");
+        const target_infos = try result.getArray("targetInfos");
         var targets: std.ArrayList(TargetInfo) = .empty;
         errdefer targets.deinit(self.allocator);
 
         for (target_infos) |info| {
-            const target_type = try json_util.getString(info, "type");
+            const target_type = try info.getString("type");
             if (!std.mem.eql(u8, target_type, "page")) continue;
 
             try targets.append(self.allocator, .{
-                .target_id = try self.allocator.dupe(u8, try json_util.getString(info, "targetId")),
+                .target_id = try self.allocator.dupe(u8, try info.getString("targetId")),
                 .type = try self.allocator.dupe(u8, target_type),
-                .title = try self.allocator.dupe(u8, try json_util.getString(info, "title")),
-                .url = try self.allocator.dupe(u8, try json_util.getString(info, "url")),
-                .attached = try json_util.getBool(info, "attached"),
+                .title = try self.allocator.dupe(u8, try info.getString("title")),
+                .url = try self.allocator.dupe(u8, try info.getString("url")),
+                .attached = try info.getBool("attached"),
                 .browser_context_id = if (info.object.get("browserContextId")) |v|
                     try self.allocator.dupe(u8, v.string)
                 else
@@ -187,11 +186,11 @@ pub const Browser = struct {
         const result = try self.connection.sendCommand("Browser.getVersion", .{}, null);
 
         return .{
-            .protocol_version = try self.allocator.dupe(u8, try json_util.getString(result, "protocolVersion")),
-            .product = try self.allocator.dupe(u8, try json_util.getString(result, "product")),
-            .revision = try self.allocator.dupe(u8, try json_util.getString(result, "revision")),
-            .user_agent = try self.allocator.dupe(u8, try json_util.getString(result, "userAgent")),
-            .js_version = try self.allocator.dupe(u8, try json_util.getString(result, "jsVersion")),
+            .protocol_version = try self.allocator.dupe(u8, try result.getString("protocolVersion")),
+            .product = try self.allocator.dupe(u8, try result.getString("product")),
+            .revision = try self.allocator.dupe(u8, try result.getString("revision")),
+            .user_agent = try self.allocator.dupe(u8, try result.getString("userAgent")),
+            .js_version = try self.allocator.dupe(u8, try result.getString("jsVersion")),
         };
     }
 

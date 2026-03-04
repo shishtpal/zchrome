@@ -1,6 +1,5 @@
 const std = @import("std");
-const cdp = @import("cdp");
-const json = cdp.json;
+const json = @import("json");
 
 // ─── escapeJsString Tests ────────────────────────────────────────────────────
 
@@ -24,7 +23,7 @@ fn escapeJsString(allocator: std.mem.Allocator, s: []const u8) ![]const u8 {
     return result.toOwnedSlice(allocator);
 }
 
-fn getFloatFromJson(val: ?std.json.Value) ?f64 {
+fn getFloatFromJson(val: ?json.Value) ?f64 {
     if (val) |v| {
         return switch (v) {
             .float => |f| f,
@@ -72,18 +71,18 @@ test "escapeJsString - empty string" {
 }
 
 test "getFloatFromJson - with float value" {
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, "{\"num\":3.14}", .{});
-    defer parsed.deinit();
-    const val = parsed.value.object.get("num");
+    var parsed = try json.parse(std.testing.allocator, "{\"num\":3.14}", .{});
+    defer parsed.deinit(std.testing.allocator);
+    const val = parsed.get("num");
     const result = getFloatFromJson(val);
     try std.testing.expect(result != null);
     try std.testing.expectApproxEqAbs(@as(f64, 3.14), result.?, 0.001);
 }
 
 test "getFloatFromJson - with integer value" {
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, "{\"num\":42}", .{});
-    defer parsed.deinit();
-    const val = parsed.value.object.get("num");
+    var parsed = try json.parse(std.testing.allocator, "{\"num\":42}", .{});
+    defer parsed.deinit(std.testing.allocator);
+    const val = parsed.get("num");
     const result = getFloatFromJson(val);
     try std.testing.expect(result != null);
     try std.testing.expectApproxEqAbs(@as(f64, 42.0), result.?, 0.001);
@@ -95,17 +94,17 @@ test "getFloatFromJson - with null value" {
 }
 
 test "getFloatFromJson - with string value" {
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, "{\"str\":\"not a number\"}", .{});
-    defer parsed.deinit();
-    const val = parsed.value.object.get("str");
+    var parsed = try json.parse(std.testing.allocator, "{\"str\":\"not a number\"}", .{});
+    defer parsed.deinit(std.testing.allocator);
+    const val = parsed.get("str");
     const result = getFloatFromJson(val);
     try std.testing.expect(result == null);
 }
 
 test "getFloatFromJson - with negative integer" {
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, "{\"num\":-42}", .{});
-    defer parsed.deinit();
-    const val = parsed.value.object.get("num");
+    var parsed = try json.parse(std.testing.allocator, "{\"num\":-42}", .{});
+    defer parsed.deinit(std.testing.allocator);
+    const val = parsed.get("num");
     const result = getFloatFromJson(val);
     try std.testing.expect(result != null);
     try std.testing.expectApproxEqAbs(@as(f64, -42.0), result.?, 0.001);

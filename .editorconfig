@@ -14,10 +14,15 @@ insert_final_newline = false
 # Zig
 [*.zig]
 indent_style = space
-indent_size = 2
+indent_size = 4
 
 # Markdown
 [*.md]
 indent_style = space
-indent_size = 2
+indent_size = 4
 trim_trailing_whitespace = true
+
+# JSON
+[*.json]
+indent_style = space
+indent_size = 2

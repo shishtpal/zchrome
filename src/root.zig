@@ -44,8 +44,19 @@ pub const Fetch = @import("domains/fetch.zig").Fetch;
 pub const Performance = @import("domains/performance.zig").Performance;
 pub const BrowserDomain = @import("domains/browser.zig").BrowserDomain;
 pub const Storage = @import("domains/storage.zig").Storage;
+pub const Tracing = @import("domains/tracing.zig").Tracing;
+pub const Profiler = @import("domains/profiler.zig").Profiler;
+pub const Overlay = @import("domains/overlay.zig").Overlay;
 pub const Cookie = @import("domains/storage.zig").Cookie;
 pub const CookieParam = @import("domains/storage.zig").CookieParam;
+
+// Profiler types
+pub const Profile = @import("domains/profiler.zig").Profile;
+pub const ProfileNode = @import("domains/profiler.zig").ProfileNode;
+
+// Overlay types
+pub const HighlightConfig = @import("domains/overlay.zig").HighlightConfig;
+pub const RGBA = @import("domains/overlay.zig").RGBA;
 
 // Utilities
 pub const json = @import("util/json.zig");

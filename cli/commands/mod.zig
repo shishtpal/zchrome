@@ -29,6 +29,7 @@ const network_mod = @import("network.zig");
 const dialog_mod = @import("dialog.zig");
 const dispatch_mod = @import("dispatch.zig");
 const help_mod = @import("help.zig");
+const dev_mod = @import("dev.zig");
 
 // ─── Type Re-exports ─────────────────────────────────────────────────────────
 
@@ -159,3 +160,8 @@ pub const printNetworkHelp = network_mod.printNetworkHelp;
 // ─── Helper Re-exports ───────────────────────────────────────────────────────
 
 pub const writeFile = helpers_mod.writeFile;
+
+// ─── Dev Re-exports ──────────────────────────────────────────────────────────
+
+pub const dev = dev_mod.dev;
+pub const printDevHelp = dev_mod.printDevHelp;

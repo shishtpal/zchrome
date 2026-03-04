@@ -444,3 +444,8 @@ pub fn cmdDialog(state: *InteractiveState, args: []const []const u8) !void {
     const session = try requireSession(state);
     try impl.dialog(session, buildCtx(state, args));
 }
+
+pub fn cmdDev(state: *InteractiveState, args: []const []const u8) !void {
+    const session = try requireSession(state);
+    try impl.dev(session, buildCtx(state, args));
+}

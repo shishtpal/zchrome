@@ -115,6 +115,27 @@ NETWORK:
   network requests --clear           Clear request log
   network requests --filter <pat>    Filter by URL substring
 
+DEVELOPER TOOLS (dev):
+  dev trace start [path]             Start recording trace
+  dev trace stop [path]              Stop and save trace to file
+  dev trace categories               List available trace categories
+  dev profiler <secs> [path]         Profile for N seconds (0=until Enter)
+  dev profiler start                 Start profiling (REPL mode only)
+  dev profiler stop [path]           Stop and save profile (.cpuprofile)
+  dev console                        View console messages (log, error, warn, info)
+  dev console --clear                Clear console messages
+  dev errors                         View page errors (uncaught exceptions)
+  dev errors --clear                 Clear error history
+  dev highlight <selector>           Highlight element on page (3 second overlay)
+  dev state save <path>              Save auth state (cookies + storage) to file
+  dev state load <path>              Load auth state from file
+  dev state list                     List saved state files
+  dev state show <file>              Show state file summary
+  dev state rename <old> <new>       Rename state file
+  dev state clear [name]             Clear specific state file
+  dev state clear --all              Clear all saved state files
+  dev state clean --older-than <days>  Delete states older than N days
+
 SNAPSHOT OPTIONS:
   -i, --interactive-only   Only include interactive elements
   -c, --compact            Compact output (skip empty structural elements)
@@ -195,3 +216,12 @@ EXAMPLES:
   zchrome wait --match "**/dashboard"   # Wait for URL pattern
   zchrome wait --load networkidle       # Wait for network idle
   zchrome wait --fn "window.ready"      # Wait for JS condition
+
+  # Developer tools
+  zchrome dev console                   # View console messages
+  zchrome dev errors                    # View page errors
+  zchrome dev highlight "#login-btn"    # Highlight element
+  zchrome dev state save login.json     # Save auth state
+  zchrome dev state load login.json     # Restore auth state
+  zchrome dev profiler 10 profile.cpuprofile  # Profile for 10 seconds
+  zchrome dev profiler 0 profile.cpuprofile   # Profile until Enter pressed

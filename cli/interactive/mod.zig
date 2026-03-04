@@ -270,6 +270,8 @@ fn executeCommand(state: *InteractiveState, line: []const u8) !void {
         try commands.cmdDialog(state, args);
     } else if (eql(cmd, "network") or eql(cmd, "net")) {
         try commands.cmdNetwork(state, args);
+    } else if (eql(cmd, "dev")) {
+        try commands.cmdDev(state, args);
     } else {
         std.debug.print("Unknown command: {s}\nType 'help' for available commands.\n", .{cmd});
     }

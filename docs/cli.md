@@ -1622,6 +1622,234 @@ Dialog accepted with text: hello world
 Dialog dismissed
 ```
 
+## Developer Tools (dev)
+
+Developer and debugging commands for tracing, profiling, console viewing, and auth state management.
+
+### dev trace
+
+Record Chrome traces for performance analysis.
+
+```bash
+zchrome dev trace start              # Start recording trace
+zchrome dev trace stop [path]        # Stop and save trace to file
+zchrome dev trace categories         # List available trace categories
+```
+
+**Example:**
+
+```bash
+# Start trace recording
+zchrome dev trace start
+
+# Interact with the page...
+
+# Stop and save trace
+zchrome dev trace stop trace.json
+
+# View available categories
+zchrome dev trace categories
+```
+
+### dev profiler
+
+Record CPU profiles for Chrome DevTools.
+
+```bash
+# CLI usage (recommended) - profiles for a duration then saves
+zchrome dev profiler <seconds> [path]    # Profile for N seconds
+zchrome dev profiler 0 [path]            # Profile until Enter is pressed
+
+# REPL/Interactive mode only - start/stop workflow
+zchrome dev profiler start               # Start profiling
+zchrome dev profiler stop [path]         # Stop and save profile (.cpuprofile)
+```
+
+**CLI Example:**
+
+```bash
+# Profile for 10 seconds and save
+zchrome dev profiler 10 profile.cpuprofile
+# Output:
+# CPU profiler started. Recording for 10 seconds...
+# CPU profile saved to profile.cpuprofile
+#   Nodes: 245
+#   Duration: 10234.56ms
+#
+# Open in Chrome DevTools: Performance tab > Load profile
+
+# Profile until you press Enter
+zchrome dev profiler 0 profile.cpuprofile
+# Output:
+# CPU profiler started. Press Enter to stop and save...
+# (press Enter when done)
+# CPU profile saved to profile.cpuprofile
+```
+
+**Interactive Mode Example:**
+
+```bash
+zchrome interactive
+zchrome> dev profiler start
+# CPU profiler started (REPL mode)
+
+# ... interact with the page ...
+
+zchrome> dev profiler stop profile.cpuprofile
+# CPU profile saved to profile.cpuprofile
+```
+
+**Note:** The `start`/`stop` workflow only works in interactive mode. For CLI usage, use the duration-based syntax which keeps the session alive during profiling.
+
+The saved `.cpuprofile` file can be loaded in Chrome DevTools > Performance tab.
+
+### dev console
+
+View or clear console messages captured from the page.
+
+```bash
+zchrome dev console                  # View captured console messages
+zchrome dev console --clear          # Clear console history
+```
+
+**Example:**
+
+```bash
+zchrome dev console
+# Output:
+# Console Messages:
+# ------------------------------------------------------------
+# [LOG] Application started
+# [WRN] Deprecated API usage
+# [ERR] Failed to load resource
+# [INF] User logged in
+
+zchrome dev console --clear
+# Console cleared
+```
+
+**Message types:** `[LOG]`, `[WRN]`, `[ERR]`, `[INF]`, `[DBG]`
+
+**Note:** Console messages are captured via an injected JavaScript interceptor. The interceptor is injected on first use and captures subsequent console calls.
+
+### dev errors
+
+View or clear JavaScript errors (uncaught exceptions).
+
+```bash
+zchrome dev errors                   # View page errors
+zchrome dev errors --clear           # Clear error history
+```
+
+**Example:**
+
+```bash
+zchrome dev errors
+# Page Errors:
+# ------------------------------------------------------------
+#
+# [1] Uncaught TypeError: Cannot read property 'foo' of undefined
+#     at https://example.com/app.js:123
+#
+# [2] Unhandled Promise rejection: Network error
+```
+
+### dev highlight
+
+Highlight a DOM element on the page with a visual overlay.
+
+```bash
+zchrome dev highlight <selector>
+```
+
+The overlay appears for 3 seconds with a blue semi-transparent background and border.
+
+**Example:**
+
+```bash
+zchrome dev highlight "#login-btn"
+# Highlighted: button#login-btn.submit
+
+zchrome dev highlight ".header"
+# Highlighted: header.main-header
+
+zchrome dev highlight @e5
+# Highlighted: input#email
+```
+
+### dev state
+
+Manage authentication state (cookies + localStorage + sessionStorage). Useful for saving logged-in sessions and restoring them later.
+
+```bash
+zchrome dev state save <path>              # Save auth state to file
+zchrome dev state load <path>              # Load auth state from file
+zchrome dev state list                     # List saved state files
+zchrome dev state show <file>              # Show state file summary
+zchrome dev state rename <old> <new>       # Rename state file
+zchrome dev state clear [name]             # Clear specific state file
+zchrome dev state clear --all              # Clear all saved state files
+zchrome dev state clean --older-than <days>  # Delete states older than N days
+```
+
+**Save/Load Example:**
+
+```bash
+# Log into a site normally, then save state
+zchrome dev state save github-login.json
+# State saved to github-login.json
+#   Origin: https://github.com/
+#   Cookies: 12
+
+# Later, restore the logged-in state
+zchrome dev state load github-login.json
+# Loaded 12 cookies
+# Loaded 3 localStorage entries
+# State loaded from github-login.json
+```
+
+**State File Format:**
+
+```json
+{
+  "version": 1,
+  "origin": "https://github.com/",
+  "cookies": [
+    {"name": "session", "value": "...", "domain": ".github.com", "path": "/", "expires": 0, "httpOnly": true, "secure": true}
+  ],
+  "localStorage": {"theme": "dark"},
+  "sessionStorage": {"token": "abc123"}
+}
+```
+
+**List and Manage States:**
+
+```bash
+# List saved states
+zchrome dev state list
+# Saved states in D:\Tools\zchrome\zchrome-states:
+# --------------------------------------------------
+#   github-login.json
+#   twitter-account.json
+#
+# Total: 2 state file(s)
+
+# Show state summary
+zchrome dev state show github-login.json
+# State file: github-login.json
+# --------------------------------------------------
+# Origin: https://github.com/
+# Cookies: 12
+# localStorage entries: 3
+# sessionStorage entries: 1
+
+# Clear all states
+zchrome dev state clear --all
+# Cleared 2 state file(s)
+```
+
+**Note:** State files are stored alongside the executable in a `zchrome-states/` directory for portability.
+
 ## Navigation Commands
 
 ### back

@@ -108,6 +108,24 @@ pub fn print() void {
         \\  network requests --clear      Clear request log
         \\  network requests --filter <p> Filter by URL substring
         \\
+        \\Developer Tools:
+        \\  dev trace start               Start trace recording
+        \\  dev trace stop [path]         Stop and save trace
+        \\  dev trace categories          List trace categories
+        \\  dev profiler <secs> [path]    Profile for N seconds (0=until Enter)
+        \\  dev profiler start            Start CPU profiling (REPL mode)
+        \\  dev profiler stop [path]      Stop and save profile (.cpuprofile)
+        \\  dev console                   View console messages
+        \\  dev console --clear           Clear console
+        \\  dev errors                    View page errors
+        \\  dev errors --clear            Clear errors
+        \\  dev highlight <selector>      Highlight element (3s overlay)
+        \\  dev state save <path>         Save auth state (cookies + storage)
+        \\  dev state load <path>         Load auth state
+        \\  dev state list                List saved states
+        \\  dev state show <file>         Show state summary
+        \\  dev state clear [name|--all]  Clear state(s)
+        \\
         \\Selectors can be CSS selectors or @refs from snapshot (e.g., @e3)
         \\
     , .{});

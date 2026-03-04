@@ -62,6 +62,9 @@ export default defineConfig({
             { text: 'Target', link: '/api/domains/target' },
             { text: 'Fetch', link: '/api/domains/fetch' },
             { text: 'Performance', link: '/api/domains/performance' },
+            { text: 'Tracing', link: '/api/domains/tracing' },
+            { text: 'Profiler', link: '/api/domains/profiler' },
+            { text: 'Overlay', link: '/api/domains/overlay' },
           ]
         },
         {

@@ -21,6 +21,7 @@ const wait_cmd = @import("wait.zig");
 const getters = @import("getters.zig");
 const setters = @import("setters.zig");
 const dialog_cmd = @import("dialog.zig");
+const dev_cmd = @import("dev.zig");
 
 pub const CommandCtx = types.CommandCtx;
 
@@ -60,6 +61,7 @@ pub fn dispatchSessionCommand(session: *cdp.Session, command: anytype, ctx: Comm
         .cursor => try cursor_cmd.cursor(session, ctx),
         .set => try setters.set(session, ctx),
         .dialog => try dialog_cmd.dialog(session, ctx),
+        .dev => try dev_cmd.dev(session, ctx),
         else => {
             std.debug.print("Warning: unhandled command in dispatchSessionCommand\n", .{});
             return false;

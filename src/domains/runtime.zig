@@ -94,6 +94,23 @@ pub const Runtime = struct {
         });
     }
 
+    /// Discard collected console entries
+    pub fn discardConsoleEntries(self: *Self) !void {
+        _ = try self.session.sendCommand("Runtime.discardConsoleEntries", .{});
+    }
+
+    /// Run garbage collection
+    pub fn runIfWaitingForDebugger(self: *Self) !void {
+        _ = try self.session.sendCommand("Runtime.runIfWaitingForDebugger", .{});
+    }
+
+    /// Set custom object formatter enabled
+    pub fn setCustomObjectFormatterEnabled(self: *Self, enabled: bool) !void {
+        _ = try self.session.sendCommand("Runtime.setCustomObjectFormatterEnabled", .{
+            .enabled = enabled,
+        });
+    }
+
     /// Await a promise
     pub fn awaitPromise(self: *Self, allocator: std.mem.Allocator, promise_object_id: []const u8) !RemoteObject {
         const result = try self.session.sendCommand("Runtime.awaitPromise", .{

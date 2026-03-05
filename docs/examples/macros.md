@@ -71,33 +71,76 @@ Macros are stored as JSON with semantic commands:
 }
 ```
 
+### Fallback Selectors
+
+For dynamic pages where elements may have different selectors, use the `selectors` array to specify fallbacks:
+
+```json
+{
+  "version": 2,
+  "commands": [
+    {
+      "action": "click",
+      "selector": "#submit-btn",
+      "selectors": ["[data-testid='submit']", ".btn-primary", "button[type='submit']"]
+    },
+    {
+      "action": "fill",
+      "selector": "#email",
+      "selectors": ["[name='email']", "[type='email']", ".email-input"],
+      "value": "user@example.com"
+    }
+  ]
+}
+```
+
+During replay, zchrome tries selectors in order:
+1. `selector` (primary) - tried first
+2. `selectors[0]`, `selectors[1]`, ... - fallbacks tried in order
+
+This makes macros more robust across different page states or minor UI changes.
+
 ### Supported Actions
 
 | Action | Fields | Description |
 |--------|--------|-------------|
-| `click` | `selector` | Click an element |
-| `dblclick` | `selector` | Double-click an element |
-| `fill` | `selector`, `value` | Clear and fill input with text |
-| `check` | `selector` | Check a checkbox |
-| `uncheck` | `selector` | Uncheck a checkbox |
-| `select` | `selector`, `value` | Select dropdown option by value |
+| `click` | `selector`, `selectors`? | Click an element |
+| `dblclick` | `selector`, `selectors`? | Double-click an element |
+| `fill` | `selector`, `selectors`?, `value` | Clear and fill input with text |
+| `check` | `selector`, `selectors`? | Check a checkbox |
+| `uncheck` | `selector`, `selectors`? | Uncheck a checkbox |
+| `select` | `selector`, `selectors`?, `value` | Select dropdown option by value |
 | `press` | `key` | Press a key (e.g., "Enter", "Tab", "Control+a") |
-| `scroll` | `scrollY` | Scroll the page (positive=down, negative=up) |
-| `hover` | `selector` | Hover over an element |
+| `scroll` | `scrollX`?, `scrollY` | Scroll the page (positive=down, negative=up) |
+| `hover` | `selector`, `selectors`? | Hover over an element |
 | `navigate` | `value` | Navigate to URL |
 | `wait` | `selector` or `value` | Wait for element, time (ms), or text |
 
+**Note:** `selectors` is an optional array of fallback CSS selectors tried if `selector` fails.
+
 ### Selector Generation
 
-The recorder generates CSS selectors in this priority order:
+The recorder generates multiple CSS selectors for robustness. It stores the best selector as `selector` and additional options in `selectors`:
 
-1. `#id` - Element ID
-2. `[name="..."]` - Name attribute (for form inputs)
-3. `[aria-label="..."]` - Accessibility label
-4. `[placeholder="..."]` - Placeholder text
-5. `.unique-class` - Unique CSS class
-6. `[data-testid="..."]` - Test ID
-7. `parent > tag:nth-of-type(n)` - Fallback
+**Primary selector** (most specific, tried first):
+1. `#id` - Element ID (most reliable)
+2. `[data-testid="..."]` - Test ID attribute
+
+**Fallback selectors** (tried if primary fails):
+3. `[name="..."]` - Name attribute (for form inputs)
+4. `[aria-label="..."]` - Accessibility label
+5. `[placeholder="..."]` - Placeholder text
+6. `.unique-class` - Unique CSS class
+7. `parent > tag:nth-of-type(n)` - Structural fallback
+
+**Example recorded command:**
+```json
+{
+  "action": "click",
+  "selector": "#submit-btn",
+  "selectors": ["[data-testid='submit']", "[name='submit']", ".btn-submit"]
+}
+```
 
 ## Replaying Macros
 
@@ -201,6 +244,13 @@ Update selectors if page structure changed:
 
 // After (use class instead)
 {"action": "click", "selector": ".submit-button"}
+
+// Or add fallbacks for robustness
+{
+  "action": "click",
+  "selector": ".submit-button",
+  "selectors": ["[type='submit']", "form button:last-child"]
+}
 ```
 
 ## Use Cases
@@ -275,6 +325,8 @@ zchrome cursor replay macro.json --interval=2000
 - Prefer `#id` or `[data-testid="..."]` for stability
 - Avoid nth-of-type selectors when possible (brittle)
 - Test selectors in browser DevTools first
+- Use fallback `selectors` array for dynamic pages where elements may change
+- The recorder automatically generates fallbacks - review and edit if needed
 
 ## Legacy Format (Version 1)
 

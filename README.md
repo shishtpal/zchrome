@@ -47,39 +47,28 @@ Add to your `build.zig.zon`:
 
 ## Quick Start
 
-### 1. Start Chrome with Remote Debugging
+### 1. Build
 
 ```bash
-# Windows
-chrome.exe --remote-debugging-port=9222 --user-data-dir="C:\tmp\chrome-dev-profile"
-
-# Linux
-google-chrome --remote-debugging-port=9222 --user-data-dir=/tmp/chrome-dev-profile
-
-# macOS
-/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --remote-debugging-port=9222 --user-data-dir=/tmp/chrome-dev-profile
+zig build -Doptimize=ReleaseFast
 ```
 
-### 2. Get WebSocket URL
+### 2. Launch Chrome
 
 ```bash
-curl http://127.0.0.1:9222/json/version
+# Let zchrome launch Chrome automatically
+zchrome open
+
+# Or specify Chrome path via environment variable
+export ZCHROME_BROWSER="/usr/bin/google-chrome"  # Linux/macOS
+$env:ZCHROME_BROWSER = "C:\Program Files\Google\Chrome\Application\chrome.exe"  # Windows
+zchrome open
+zchrome connect
 ```
 
 ### 3. Use the CLI
 
-> Cli state is being saved into `zchrome.json` file
-
 ```bash
-# Build
-zig build -Doptimize=ReleaseFast
-
-# Connect to Browser
-zchrome connect
-
-# Get browser version
-zchrome version
-
 # Navigate to a page
 zchrome navigate https://example.com
 
@@ -88,25 +77,33 @@ zchrome screenshot output.png
 
 # Evaluate JavaScript
 zchrome evaluate "document.title"
+
+# Get browser version
+zchrome version
 ```
+
+> CLI state is saved per-session in `sessions/<name>/zchrome.json`
 
 ## CLI Commands
 
 | Command | Description |
 |---------|-------------|
-| `version` | Display browser version info |
+| `open` | Launch Chrome with remote debugging |
+| `connect` | Connect to running Chrome |
 | `navigate <url>` | Navigate to URL |
 | `screenshot <file>` | Take screenshot |
 | `pdf <file>` | Save page as PDF |
 | `evaluate <expr>` | Run JavaScript |
-| `dom <selector>` | Print DOM structure |
+| `snapshot` | Capture accessibility tree (for AI agents) |
+| `click <selector>` | Click an element |
+| `fill <selector> <text>` | Fill input field |
+| `version` | Display browser version info |
 | `network` | Monitor network requests |
-| `cookies` | List, get, set, delete, clear, export, import cookies |
+| `cookies` | Manage cookies |
 | `storage local\|session` | Get/set/clear web storage |
 | `tab` | List, open, switch, close tabs |
-| `window new` | Open new browser window |
-| `list-targets` | List all targets |
-| `pages` | List all pages with target IDs |
+| `session` | Manage named sessions |
+| `cursor record\|replay` | Record/replay macros |
 | `interactive` | Interactive REPL mode |
 
 ### Working with Existing Pages
@@ -171,24 +168,49 @@ pub fn main(init: std.process.Init) !void {
 }
 ```
 
-## CLI Commands
+## Environment Variables
 
-| Command | Description |
-|---------|-------------|
-| `version` | Display browser version info |
-| `navigate <url>` | Navigate to URL |
-| `screenshot <file>` | Take screenshot |
-| `pdf <file>` | Save page as PDF |
-| `evaluate <expr>` | Run JavaScript |
-| `dom` | Print DOM structure |
-| `network` | Monitor network requests |
-| `cookies` | List, get, set, delete, clear, export, import cookies |
-| `storage local` | Get/set/clear localStorage |
-| `storage session` | Get/set/clear sessionStorage |
-| `tab` | List, open, switch, close tabs |
-| `window new` | Open new browser window |
-| `list-targets` | List open targets |
-| `interactive` | Interactive REPL mode |
+| Variable | Description |
+|----------|-------------|
+| `ZCHROME_SESSION` | Default session name (default: "default") |
+| `ZCHROME_BROWSER` | Chrome/Chromium executable path |
+| `ZCHROME_PORT` | Debug port (default: 9222) |
+| `ZCHROME_DATA_DIR` | Chrome user data directory |
+| `ZCHROME_HEADLESS` | Headless mode: "new", "old", or "off" |
+| `ZCHROME_VERBOSE` | Enable verbose output ("1" or "true") |
+
+See [Environment Variables Guide](docs/guide/environment.md) for details.
+
+## Sessions
+
+zchrome supports named sessions for isolated Chrome configurations:
+
+```bash
+# Use different sessions for different projects
+zchrome --session work open --port 9222
+zchrome --session personal open --port 9223
+
+# Or use environment variable
+export ZCHROME_SESSION=work
+zchrome navigate https://example.com
+```
+
+Each session maintains its own config, Chrome profile, and cookies. See [CLI Sessions Guide](docs/guide/cli-sessions.md).
+
+## Macro Recording
+
+Record and replay browser interactions:
+
+```bash
+# Record interactions to a file
+zchrome cursor record login-flow.json
+# (interact with the browser, press Enter to stop)
+
+# Replay the recording
+zchrome cursor replay login-flow.json --interval=200-500
+```
+
+Macros use semantic commands (click, fill, press) with CSS selectors, making them human-readable and editable. See [Macro Guide](docs/examples/macros.md).
 
 ## CDP Domains
 
@@ -251,8 +273,6 @@ zchrome/
 
 - **TLS/SSL** - Not yet supported (wss:// URLs)
 - **DNS Resolution** - Requires numeric IP addresses (not hostnames)
-- **Process Spawning** - Chrome auto-launch is stubbed; use manual launch
-- **File I/O** - Screenshot/PDF saving requires manual implementation
 
 ## Compatibility
 

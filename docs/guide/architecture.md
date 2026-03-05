@@ -8,15 +8,15 @@ This page describes the internal architecture of zchrome and how its components 
 ┌─────────────────────────────────────────────────┐
 │ CLI (cli/main.zig)                              │  User interface
 ├─────────────────────────────────────────────────┤
-│ Browser Launcher (browser/)                      │  Process management
+│ Browser Launcher (browser/)                     │  Process management
 ├─────────────────────────────────────────────────┤
-│ Domain Clients (domains/*)                       │  11 CDP domains
+│ Domain Clients (domains/*)                      │  11 CDP domains
 ├─────────────────────────────────────────────────┤
-│ Core Protocol (core/)                            │  JSON-RPC, sessions
+│ Core Protocol (core/)                           │  JSON-RPC, sessions
 ├─────────────────────────────────────────────────┤
-│ Transport (transport/)                           │  WebSocket + Pipe
+│ Transport (transport/)                          │  WebSocket + Pipe
 ├─────────────────────────────────────────────────┤
-│ Utilities (util/)                                │  JSON, base64, URL
+│ Utilities (util/)                               │  JSON, base64, URL
 └─────────────────────────────────────────────────┘
 ```
 

@@ -161,6 +161,37 @@ pub fn main(init: std.process.Init) !void {
         return;
     }
 
+    // Apply environment variable defaults (lower priority than CLI args, higher than config)
+    if (args.chrome_path == null) {
+        if (init.environ_map.get("ZCHROME_BROWSER")) |v| {
+            if (v.len > 0) args.chrome_path = allocator.dupe(u8, v) catch null;
+        }
+    }
+    if (args.port == null) {
+        if (init.environ_map.get("ZCHROME_PORT")) |v| {
+            args.port = std.fmt.parseInt(u16, v, 10) catch null;
+        }
+    }
+    if (args.data_dir == null) {
+        if (init.environ_map.get("ZCHROME_DATA_DIR")) |v| {
+            if (v.len > 0) args.data_dir = allocator.dupe(u8, v) catch null;
+        }
+    }
+    if (!args.verbose) {
+        if (init.environ_map.get("ZCHROME_VERBOSE")) |v| {
+            args.verbose = std.mem.eql(u8, v, "1") or std.mem.eql(u8, v, "true");
+        }
+    }
+    if (args.headless == .off) {
+        if (init.environ_map.get("ZCHROME_HEADLESS")) |v| {
+            if (std.mem.eql(u8, v, "new")) {
+                args.headless = .new;
+            } else if (std.mem.eql(u8, v, "old")) {
+                args.headless = .old;
+            }
+        }
+    }
+
     // Migrate old config to sessions/default/ if needed (one-time)
     session_mod.migrateToSessions(allocator, init.io) catch {};
 

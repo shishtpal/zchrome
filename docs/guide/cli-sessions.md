@@ -108,6 +108,8 @@ Session name is resolved in this order:
 2. `ZCHROME_SESSION` environment variable
 3. `"default"` (fallback)
 
+> **Tip:** zchrome supports additional environment variables like `ZCHROME_BROWSER`, `ZCHROME_PORT`, and `ZCHROME_HEADLESS`. See [Environment Variables](/guide/environment) for the complete list.
+
 ## Session Commands
 
 ### View Current Session
@@ -274,11 +276,11 @@ DEVICES=("iPhone 14" "iPad" "Pixel 8" "Desktop")
 
 for device in "${DEVICES[@]}"; do
     session_name=$(echo "$device" | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
-    
+
     # Create and configure session
     zchrome --session "$session_name" session create "$session_name" 2>/dev/null
     zchrome --session "$session_name" set device "$device"
-    
+
     # Run test
     zchrome --session "$session_name" navigate https://example.com
     zchrome --session "$session_name" screenshot --output "${session_name}.png"

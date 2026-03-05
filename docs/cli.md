@@ -86,7 +86,7 @@ Session name is resolved in this order:
 2. `ZCHROME_SESSION` environment variable
 3. `"default"` (fallback)
 
-See the [session command](#session) for managing sessions, or the [Sessions Guide](/guide/cli-sessions) for detailed documentation.
+See the [session command](#session) for managing sessions, the [Sessions Guide](/guide/cli-sessions) for detailed documentation, or [Environment Variables](/guide/environment) for all supported environment variables.
 
 ## Config File (zchrome.json)
 
@@ -234,7 +234,7 @@ zchrome --session work navigate https://example.com
 **Notes:**
 - The `default` session cannot be deleted
 - Settings (viewport, user agent, etc.) are isolated per session
-- Environment variable `ZCHROME_SESSION` sets the default session name
+- Environment variable `ZCHROME_SESSION` sets the default session name (see [Environment Variables](/guide/environment) for all options)
 
 ### navigate
 

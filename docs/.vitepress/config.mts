@@ -28,6 +28,7 @@ export default defineConfig({
             { text: 'What is zchrome?', link: '/guide/' },
             { text: 'Getting Started', link: '/guide/getting-started' },
             { text: 'Architecture', link: '/guide/architecture' },
+            { text: 'Environment Variables', link: '/guide/environment' },
           ]
         },
         {

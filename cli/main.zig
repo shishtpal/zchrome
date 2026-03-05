@@ -165,7 +165,7 @@ pub fn main(init: std.process.Init) !void {
     session_mod.migrateToSessions(allocator, init.io) catch {};
 
     // Create session context - resolves session name from --session flag or ZCHROME_SESSION env
-    const session_name = session_mod.resolveSessionName(allocator, args.session_arg) catch {
+    const session_name = session_mod.resolveSessionName(allocator, init.environ_map, args.session_arg) catch {
         std.debug.print("Error resolving session name\n", .{});
         std.process.exit(1);
     };

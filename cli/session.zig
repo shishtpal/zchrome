@@ -32,13 +32,22 @@ pub const SessionContext = struct {
     }
 };
 
-/// Resolve session name from args
-/// If session_arg is null, returns "default"
-/// Caller should check ZCHROME_SESSION env var before calling this if needed
-pub fn resolveSessionName(allocator: std.mem.Allocator, session_arg: ?[]const u8) ![]const u8 {
+/// Resolve session name from args or environment
+/// Priority: 1. --session flag, 2. ZCHROME_SESSION env var, 3. "default"
+pub fn resolveSessionName(allocator: std.mem.Allocator, environ_map: *std.process.Environ.Map, session_arg: ?[]const u8) ![]const u8 {
+    // 1. Explicit --session flag takes highest priority
     if (session_arg) |name| {
         return allocator.dupe(u8, name);
     }
+
+    // 2. Check ZCHROME_SESSION environment variable
+    if (environ_map.get("ZCHROME_SESSION")) |env_val| {
+        if (env_val.len > 0) {
+            return allocator.dupe(u8, env_val);
+        }
+    }
+
+    // 3. Fall back to "default"
     return allocator.dupe(u8, "default");
 }
 

@@ -435,6 +435,103 @@ fn cursorReplay(session: *cdp.Session, allocator: std.mem.Allocator, io: std.Io,
     std.debug.print("Replay complete.\n", .{});
 }
 
+/// Try executing a simple selector-based command with fallback selectors
+fn tryWithFallbackSelectors(
+    session: *cdp.Session,
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    cmd: macro_mod.MacroCommand,
+    comptime action_fn: fn (*cdp.Session, types.CommandCtx) anyerror!void,
+) void {
+    // Build list of selectors to try
+    const selectors = cmd.selectors orelse if (cmd.selector) |sel| blk: {
+        var single: [1][]const u8 = .{sel};
+        break :blk &single;
+    } else return;
+
+    for (selectors, 0..) |sel, idx| {
+        var pos_args: [1][]const u8 = .{sel};
+        const ctx = types.CommandCtx{
+            .allocator = allocator,
+            .io = io,
+            .positional = &pos_args,
+        };
+        action_fn(session, ctx) catch |err| {
+            if (idx + 1 < selectors.len) {
+                std.debug.print("    (trying fallback selector...)\n", .{});
+                continue;
+            }
+            std.debug.print("    Error: {}\n", .{err});
+            return;
+        };
+        return; // Success
+    }
+}
+
+/// Try fill command with fallback selectors
+fn tryWithFallbackSelectorsFill(
+    session: *cdp.Session,
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    cmd: macro_mod.MacroCommand,
+) void {
+    const value = cmd.value orelse return;
+    const selectors = cmd.selectors orelse if (cmd.selector) |sel| blk: {
+        var single: [1][]const u8 = .{sel};
+        break :blk &single;
+    } else return;
+
+    for (selectors, 0..) |sel, idx| {
+        var pos_args: [2][]const u8 = .{ sel, value };
+        const ctx = types.CommandCtx{
+            .allocator = allocator,
+            .io = io,
+            .positional = &pos_args,
+        };
+        elements.fill(session, ctx) catch |err| {
+            if (idx + 1 < selectors.len) {
+                std.debug.print("    (trying fallback selector...)\n", .{});
+                continue;
+            }
+            std.debug.print("    Error: {}\n", .{err});
+            return;
+        };
+        return; // Success
+    }
+}
+
+/// Try select command with fallback selectors
+fn tryWithFallbackSelectorsSelect(
+    session: *cdp.Session,
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    cmd: macro_mod.MacroCommand,
+) void {
+    const value = cmd.value orelse return;
+    const selectors = cmd.selectors orelse if (cmd.selector) |sel| blk: {
+        var single: [1][]const u8 = .{sel};
+        break :blk &single;
+    } else return;
+
+    for (selectors, 0..) |sel, idx| {
+        var pos_args: [2][]const u8 = .{ sel, value };
+        const ctx = types.CommandCtx{
+            .allocator = allocator,
+            .io = io,
+            .positional = &pos_args,
+        };
+        elements.selectOption(session, ctx) catch |err| {
+            if (idx + 1 < selectors.len) {
+                std.debug.print("    (trying fallback selector...)\n", .{});
+                continue;
+            }
+            std.debug.print("    Error: {}\n", .{err});
+            return;
+        };
+        return; // Success
+    }
+}
+
 /// Replay semantic commands from a v2 macro file
 fn replayCommands(session: *cdp.Session, allocator: std.mem.Allocator, io: std.Io, filename: []const u8, interval: ReplayInterval) !void {
     var macro = macro_mod.loadCommandMacro(allocator, io, filename) catch |err| {
@@ -492,32 +589,18 @@ fn replayCommands(session: *cdp.Session, allocator: std.mem.Allocator, io: std.I
             .positional = pos_args[0..pos_len],
         };
 
-        // Execute command
+        // Execute command with fallback selector support
         switch (cmd.action) {
-            .click => elements.click(session, ctx) catch |err| {
-                std.debug.print("    Error: {}\n", .{err});
-            },
-            .dblclick => elements.dblclick(session, ctx) catch |err| {
-                std.debug.print("    Error: {}\n", .{err});
-            },
-            .fill => elements.fill(session, ctx) catch |err| {
-                std.debug.print("    Error: {}\n", .{err});
-            },
-            .check => elements.check(session, ctx) catch |err| {
-                std.debug.print("    Error: {}\n", .{err});
-            },
-            .uncheck => elements.uncheck(session, ctx) catch |err| {
-                std.debug.print("    Error: {}\n", .{err});
-            },
-            .select => elements.selectOption(session, ctx) catch |err| {
-                std.debug.print("    Error: {}\n", .{err});
-            },
+            .click => tryWithFallbackSelectors(session, allocator, io, cmd, elements.click),
+            .dblclick => tryWithFallbackSelectors(session, allocator, io, cmd, elements.dblclick),
+            .fill => tryWithFallbackSelectorsFill(session, allocator, io, cmd),
+            .check => tryWithFallbackSelectors(session, allocator, io, cmd, elements.check),
+            .uncheck => tryWithFallbackSelectors(session, allocator, io, cmd, elements.uncheck),
+            .select => tryWithFallbackSelectorsSelect(session, allocator, io, cmd),
             .press => keyboard.press(session, ctx) catch |err| {
                 std.debug.print("    Error: {}\n", .{err});
             },
-            .hover => elements.hover(session, ctx) catch |err| {
-                std.debug.print("    Error: {}\n", .{err});
-            },
+            .hover => tryWithFallbackSelectors(session, allocator, io, cmd, elements.hover),
             .scroll => {
                 // For scroll, we need to handle scrollX/scrollY
                 if (cmd.scroll_y) |sy| {
@@ -552,17 +635,30 @@ fn replayCommands(session: *cdp.Session, allocator: std.mem.Allocator, io: std.I
             },
             .wait => {
                 // Wait for selector, time, or text
-                if (cmd.selector) |sel| {
-                    // Wait for element
-                    var wait_args: [1][]const u8 = .{sel};
-                    const wait_ctx = types.CommandCtx{
-                        .allocator = allocator,
-                        .io = io,
-                        .positional = &wait_args,
-                    };
-                    wait_mod.wait(session, wait_ctx) catch |err| {
-                        std.debug.print("    Error: {}\n", .{err});
-                    };
+                if (cmd.selectors != null or cmd.selector != null) {
+                    // Wait for element with fallback selectors
+                    const selectors = cmd.selectors orelse if (cmd.selector) |sel| blk: {
+                        var single: [1][]const u8 = .{sel};
+                        break :blk &single;
+                    } else &.{};
+
+                    for (selectors, 0..) |sel, idx| {
+                        var wait_args: [1][]const u8 = .{sel};
+                        const wait_ctx = types.CommandCtx{
+                            .allocator = allocator,
+                            .io = io,
+                            .positional = &wait_args,
+                        };
+                        wait_mod.wait(session, wait_ctx) catch |err| {
+                            if (idx + 1 < selectors.len) {
+                                std.debug.print("    (trying fallback selector...)\n", .{});
+                                continue;
+                            }
+                            std.debug.print("    Error: {}\n", .{err});
+                            break;
+                        };
+                        break; // Success
+                    }
                 } else if (cmd.value) |val| {
                     // Check if it's a number (time) or text
                     if (std.fmt.parseInt(u32, val, 10)) |ms| {

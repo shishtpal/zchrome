@@ -65,7 +65,8 @@ pub const ActionType = enum {
 /// A semantic command (click, fill, press, etc.)
 pub const MacroCommand = struct {
     action: ActionType,
-    selector: ?[]const u8 = null, // CSS selector for element
+    selector: ?[]const u8 = null, // CSS selector for element (primary)
+    selectors: ?[][]const u8 = null, // Fallback selectors for dynamic pages
     value: ?[]const u8 = null, // Text value for fill/select, URL for navigate
     key: ?[]const u8 = null, // Key name for press
     scroll_x: ?i32 = null, // Scroll delta X
@@ -73,14 +74,27 @@ pub const MacroCommand = struct {
 
     pub fn deinit(self: *MacroCommand, allocator: std.mem.Allocator) void {
         if (self.selector) |s| allocator.free(s);
+        if (self.selectors) |sels| {
+            for (sels) |sel| allocator.free(sel);
+            allocator.free(sels);
+        }
         if (self.value) |v| allocator.free(v);
         if (self.key) |k| allocator.free(k);
     }
 
     pub fn clone(self: *const MacroCommand, allocator: std.mem.Allocator) !MacroCommand {
+        var cloned_selectors: ?[][]const u8 = null;
+        if (self.selectors) |sels| {
+            var new_sels = try allocator.alloc([]const u8, sels.len);
+            for (sels, 0..) |sel, i| {
+                new_sels[i] = try allocator.dupe(u8, sel);
+            }
+            cloned_selectors = new_sels;
+        }
         return .{
             .action = self.action,
             .selector = if (self.selector) |s| try allocator.dupe(u8, s) else null,
+            .selectors = cloned_selectors,
             .value = if (self.value) |v| try allocator.dupe(u8, v) else null,
             .key = if (self.key) |k| try allocator.dupe(u8, k) else null,
             .scroll_x = self.scroll_x,
@@ -120,13 +134,27 @@ pub fn saveCommandMacro(allocator: std.mem.Allocator, io: std.Io, path: []const 
         try json_buf.appendSlice(allocator, cmd.action.toString());
         try json_buf.appendSlice(allocator, "\"");
 
-        // Selector
+        // Selector (primary)
         if (cmd.selector) |sel| {
             const escaped = try escapeString(allocator, sel);
             defer allocator.free(escaped);
             try json_buf.appendSlice(allocator, ", \"selector\": \"");
             try json_buf.appendSlice(allocator, escaped);
             try json_buf.appendSlice(allocator, "\"");
+        }
+
+        // Selectors (fallback list)
+        if (cmd.selectors) |sels| {
+            try json_buf.appendSlice(allocator, ", \"selectors\": [");
+            for (sels, 0..) |sel, j| {
+                if (j > 0) try json_buf.appendSlice(allocator, ", ");
+                const escaped = try escapeString(allocator, sel);
+                defer allocator.free(escaped);
+                try json_buf.appendSlice(allocator, "\"");
+                try json_buf.appendSlice(allocator, escaped);
+                try json_buf.appendSlice(allocator, "\"");
+            }
+            try json_buf.appendSlice(allocator, "]");
         }
 
         // Value
@@ -219,6 +247,25 @@ pub fn loadCommandMacro(allocator: std.mem.Allocator, io: std.Io, path: []const 
 
                 if (obj.get("selector")) |s| {
                     if (s == .string) cmd.selector = try allocator.dupe(u8, s.string);
+                }
+                if (obj.get("selectors")) |sels_val| {
+                    if (sels_val == .array) {
+                        var sels_list: std.ArrayList([]const u8) = .empty;
+                        errdefer {
+                            for (sels_list.items) |sel| allocator.free(sel);
+                            sels_list.deinit(allocator);
+                        }
+                        for (sels_val.array.items) |sel_val| {
+                            if (sel_val == .string) {
+                                try sels_list.append(allocator, try allocator.dupe(u8, sel_val.string));
+                            }
+                        }
+                        if (sels_list.items.len > 0) {
+                            cmd.selectors = try sels_list.toOwnedSlice(allocator);
+                        } else {
+                            sels_list.deinit(allocator);
+                        }
+                    }
                 }
                 if (obj.get("value")) |v| {
                     if (v == .string) {

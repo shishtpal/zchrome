@@ -140,9 +140,30 @@ pub const RecordServer = struct {
             }
         } else return;
 
-        // Parse selector
+        // Parse selector (primary)
         if (obj.get("selector")) |s| {
             if (s == .string) cmd.selector = self.allocator.dupe(u8, s.string) catch null;
+        }
+
+        // Parse selectors (fallback list)
+        if (obj.get("selectors")) |sels_val| {
+            if (sels_val == .array) {
+                var sels_list: std.ArrayList([]const u8) = .empty;
+                for (sels_val.array.items) |sel_val| {
+                    if (sel_val == .string) {
+                        if (self.allocator.dupe(u8, sel_val.string)) |duped| {
+                            sels_list.append(self.allocator, duped) catch {
+                                self.allocator.free(duped);
+                            };
+                        } else |_| {}
+                    }
+                }
+                if (sels_list.items.len > 0) {
+                    cmd.selectors = sels_list.toOwnedSlice(self.allocator) catch null;
+                } else {
+                    sels_list.deinit(self.allocator);
+                }
+            }
         }
 
         // Parse value
@@ -203,6 +224,7 @@ pub fn getRecordingJs(allocator: std.mem.Allocator, port: u16) ![]const u8 {
         \\  var state = {{
         \\    focusEl: null,
         \\    focusSel: null,
+        \\    focusSels: [],
         \\    typedText: '',
         \\    lastValue: '',
         \\    scrollY: 0,
@@ -211,44 +233,54 @@ pub fn getRecordingJs(allocator: std.mem.Allocator, port: u16) ![]const u8 {
         \\  }};
         \\  window.__zchrome_rec = state;
         \\
-        \\  // Generate best CSS selector for element
-        \\  function getSelector(el) {{
-        \\    if (!el || el === document.body || el === document.documentElement) return null;
-        \\    // ID
-        \\    if (el.id) return '#' + CSS.escape(el.id);
+        \\  // Generate multiple CSS selectors for element (fallback support)
+        \\  function getSelectors(el) {{
+        \\    if (!el || el === document.body || el === document.documentElement) return [];
+        \\    var sels = [];
+        \\    // ID (highest priority)
+        \\    if (el.id) sels.push('#' + CSS.escape(el.id));
         \\    // name attribute (for form inputs)
-        \\    if (el.name) return el.tagName.toLowerCase() + '[name="' + el.name + '"]';
-        \\    // type for inputs
-        \\    if (el.tagName === 'INPUT' && el.type) {{
-        \\      var inputs = document.querySelectorAll('input[type="' + el.type + '"]');
-        \\      if (inputs.length === 1) return 'input[type="' + el.type + '"]';
-        \\    }}
+        \\    if (el.name) sels.push(el.tagName.toLowerCase() + '[name="' + el.name + '"]');
+        \\    // data-testid (common in React/testing)
+        \\    if (el.dataset.testid) sels.push('[data-testid="' + el.dataset.testid + '"]');
         \\    // aria-label
         \\    if (el.getAttribute('aria-label')) {{
-        \\      return el.tagName.toLowerCase() + '[aria-label="' + el.getAttribute('aria-label') + '"]';
+        \\      sels.push(el.tagName.toLowerCase() + '[aria-label="' + el.getAttribute('aria-label') + '"]');
         \\    }}
         \\    // placeholder
         \\    if (el.placeholder) {{
-        \\      return el.tagName.toLowerCase() + '[placeholder="' + el.placeholder + '"]';
+        \\      sels.push(el.tagName.toLowerCase() + '[placeholder="' + el.placeholder + '"]');
+        \\    }}
+        \\    // type for inputs (if unique)
+        \\    if (el.tagName === 'INPUT' && el.type) {{
+        \\      var inputs = document.querySelectorAll('input[type="' + el.type + '"]');
+        \\      if (inputs.length === 1) sels.push('input[type="' + el.type + '"]');
         \\    }}
         \\    // Unique class
         \\    if (el.classList.length > 0) {{
         \\      for (var i = 0; i < el.classList.length; i++) {{
         \\        var cls = '.' + CSS.escape(el.classList[i]);
-        \\        if (document.querySelectorAll(cls).length === 1) return cls;
+        \\        if (document.querySelectorAll(cls).length === 1) sels.push(cls);
         \\      }}
         \\    }}
-        \\    // data-testid
-        \\    if (el.dataset.testid) return '[data-testid="' + el.dataset.testid + '"]';
         \\    // Fallback: nth-of-type
         \\    var parent = el.parentElement;
         \\    if (parent) {{
         \\      var siblings = parent.querySelectorAll(':scope > ' + el.tagName.toLowerCase());
         \\      var idx = Array.prototype.indexOf.call(siblings, el) + 1;
-        \\      var parentSel = getSelector(parent);
-        \\      if (parentSel) return parentSel + ' > ' + el.tagName.toLowerCase() + ':nth-of-type(' + idx + ')';
+        \\      var parentSels = getSelectors(parent);
+        \\      if (parentSels.length > 0) {{
+        \\        sels.push(parentSels[0] + ' > ' + el.tagName.toLowerCase() + ':nth-of-type(' + idx + ')');
+        \\      }}
         \\    }}
-        \\    return el.tagName.toLowerCase();
+        \\    // Last resort: just tag name
+        \\    if (sels.length === 0) sels.push(el.tagName.toLowerCase());
+        \\    return sels;
+        \\  }}
+        \\  // Get best single selector (first from list)
+        \\  function getSelector(el) {{
+        \\    var sels = getSelectors(el);
+        \\    return sels.length > 0 ? sels[0] : null;
         \\  }}
         \\
         \\  function send(cmd) {{
@@ -262,7 +294,7 @@ pub fn getRecordingJs(allocator: std.mem.Allocator, port: u16) ![]const u8 {
         \\    if (state.focusEl && state.focusSel) {{
         \\      var val = state.focusEl.value || '';
         \\      if (val && val !== state.lastValue) {{
-        \\        send({{ action: 'fill', selector: state.focusSel, value: val }});
+        \\        send({{ action: 'fill', selector: state.focusSel, selectors: state.focusSels, value: val }});
         \\      }}
         \\    }}
         \\    state.typedText = '';
@@ -272,30 +304,31 @@ pub fn getRecordingJs(allocator: std.mem.Allocator, port: u16) ![]const u8 {
         \\  // Click handler
         \\  document.addEventListener('click', function(e) {{
         \\    var el = e.target;
-        \\    var sel = getSelector(el);
-        \\    if (!sel) return;
+        \\    var sels = getSelectors(el);
+        \\    if (sels.length === 0) return;
         \\
         \\    // Check if it's a checkbox
         \\    if (el.type === 'checkbox') {{
-        \\      send({{ action: el.checked ? 'check' : 'uncheck', selector: sel }});
+        \\      send({{ action: el.checked ? 'check' : 'uncheck', selector: sels[0], selectors: sels }});
         \\      return;
         \\    }}
         \\
         \\    // Regular click
-        \\    send({{ action: 'click', selector: sel }});
+        \\    send({{ action: 'click', selector: sels[0], selectors: sels }});
         \\  }}, true);
         \\
         \\  // Double click
         \\  document.addEventListener('dblclick', function(e) {{
-        \\    var sel = getSelector(e.target);
-        \\    if (sel) send({{ action: 'dblclick', selector: sel }});
+        \\    var sels = getSelectors(e.target);
+        \\    if (sels.length > 0) send({{ action: 'dblclick', selector: sels[0], selectors: sels }});
         \\  }}, true);
         \\
         \\  // Focus tracking
         \\  document.addEventListener('focus', function(e) {{
         \\    flushTyped();
         \\    state.focusEl = e.target;
-        \\    state.focusSel = getSelector(e.target);
+        \\    state.focusSels = getSelectors(e.target);
+        \\    state.focusSel = state.focusSels.length > 0 ? state.focusSels[0] : null;
         \\    state.lastValue = e.target.value || '';
         \\  }}, true);
         \\
@@ -304,15 +337,16 @@ pub fn getRecordingJs(allocator: std.mem.Allocator, port: u16) ![]const u8 {
         \\    flushTyped();
         \\    state.focusEl = null;
         \\    state.focusSel = null;
+        \\    state.focusSels = [];
         \\  }}, true);
         \\
         \\  // Select change
         \\  document.addEventListener('change', function(e) {{
         \\    var el = e.target;
-        \\    var sel = getSelector(el);
-        \\    if (!sel) return;
+        \\    var sels = getSelectors(el);
+        \\    if (sels.length === 0) return;
         \\    if (el.tagName === 'SELECT') {{
-        \\      send({{ action: 'select', selector: sel, value: el.value }});
+        \\      send({{ action: 'select', selector: sels[0], selectors: sels, value: el.value }});
         \\    }}
         \\  }}, true);
         \\

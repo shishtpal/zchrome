@@ -71,7 +71,12 @@ CURSOR:
   cursor active            Show the currently focused element
   cursor hover             Show the element under the mouse cursor
   cursor record <file>     Record mouse/keyboard events to JSON file
-  cursor replay <file>     Replay events from JSON file
+  cursor replay <file>     Replay events from JSON file (with assert support)
+    --retries <n>          Retries on assertion failure (default: 3)
+    --retry-delay <ms>     Wait before retry (default: 100)
+    --fallback <file>      Fallback JSON on permanent failure
+    --resume               Resume from last successful action
+    --from <n>             Start from command index n
 
 GETTERS:
   get text <sel>           Get text content
@@ -220,6 +225,8 @@ EXAMPLES:
   # Macro recording and playback
   zchrome cursor record macro.json      # Record events (Enter to stop)
   zchrome cursor replay macro.json      # Replay recorded events
+  zchrome cursor replay form.json --retries 5  # With custom retries
+  zchrome cursor replay form.json --fallback error.json  # With fallback
 
   # Wait for conditions
   zchrome wait "#login-form"            # Wait for element

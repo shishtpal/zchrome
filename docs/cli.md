@@ -1419,15 +1419,23 @@ The macro file contains semantic commands:
 
 ### cursor replay
 
-Replay commands from a macro file.
+Replay commands from a macro file with support for assertions and automatic retry on failure.
 
 ```bash
-zchrome cursor replay <filename.json> [--interval=<ms>|<min-max>]
+zchrome cursor replay <filename.json> [options]
 ```
 
 **Options:**
-- `--interval=N` - Fixed delay in ms between commands (default: 100)
-- `--interval=N-M` - Random delay between N and M ms (more human-like)
+
+| Option | Description |
+|--------|-------------|
+| `--interval=<ms>` | Fixed delay between commands (default: 100ms) |
+| `--interval=<min-max>` | Random delay range (e.g., 200-500ms) |
+| `--retries <n>` | Number of retries on assertion failure (default: 3) |
+| `--retry-delay <ms>` | Wait time before retrying (default: 1000ms) |
+| `--fallback <file.json>` | JSON file to execute on permanent failure |
+| `--resume` | Resume from last successful action |
+| `--from <n>` | Start replay from command index n |
 
 **Example:**
 
@@ -1440,20 +1448,30 @@ zchrome cursor replay macro.json --interval=500
 
 # Random 200-500ms between commands
 zchrome cursor replay macro.json --interval=200-500
+
+# With custom retry settings for assertions
+zchrome cursor replay form.json --retries 5 --retry-delay 2000
+
+# With fallback on permanent failure
+zchrome cursor replay form.json --fallback error-handler.json
+
+# Resume from last successful action
+zchrome cursor replay form.json --resume
 ```
 
 **Output:**
 
 ```
-Replaying 12 commands from macro.json (interval: 200-500ms)...
+Replaying 12 commands from macro.json (retries: 3, delay: 1000ms)...
   [1/12] click "#login-btn"
   [2/12] fill "#email" "user@example.com"
-  [3/12] press Enter
-  [4/12] wait ".dashboard"
-Replay complete.
+  [3/12] assert "#email" ✓
+  [4/12] press Enter
+  [5/12] wait ".dashboard"
+Replay complete. All assertions passed.
 ```
 
-See the [Macro Recording](/examples/macros) guide for full documentation on the macro format and supported actions.
+See the [Macro Recording](/examples/macros) guide for full documentation on the macro format, assertions, and supported actions.
 
 ## Wait Commands
 

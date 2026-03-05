@@ -197,9 +197,9 @@ zchrome navigate https://example.com
 
 Each session maintains its own config, Chrome profile, and cookies. See [CLI Sessions Guide](docs/guide/cli-sessions.md).
 
-## Macro Recording
+## Macro Recording & Testing
 
-Record and replay browser interactions:
+Record and replay browser interactions with built-in assertions:
 
 ```bash
 # Record interactions to a file
@@ -208,9 +208,15 @@ zchrome cursor record login-flow.json
 
 # Replay the recording
 zchrome cursor replay login-flow.json --interval=200-500
+
+# Replay with assertions and retry logic
+zchrome cursor replay form.json --retries 5 --retry-delay 2000
+
+# With fallback on failure
+zchrome cursor replay form.json --fallback error-handler.json
 ```
 
-Macros use semantic commands (click, fill, press) with CSS selectors, making them human-readable and editable. See [Macro Guide](docs/examples/macros.md).
+Macros use semantic commands (click, fill, press, **assert**) with CSS selectors, making them human-readable and editable. The `assert` action tests application state during replay with automatic retry on failure. See [Macro Guide](docs/examples/macros.md).
 
 ## CDP Domains
 

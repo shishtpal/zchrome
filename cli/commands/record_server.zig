@@ -359,7 +359,7 @@ pub fn getRecordingJs(allocator: std.mem.Allocator, port: u16) ![]const u8 {
         \\    if (sels.length === 0) return;
         \\    if (el.tagName === 'SELECT') {{
         \\      if (el.multiple) {{
-        \\        // Multiselect: capture all selected values as JSON array
+        \\        // Multiselect: capture all selected values as JSON string (playback expects JSON.parse)
         \\        var values = Array.from(el.selectedOptions).map(function(o) {{ return o.value; }});
         \\        send({{ action: 'multiselect', selector: sels[0], selectors: sels, value: JSON.stringify(values) }});
         \\      }} else {{

@@ -115,6 +115,7 @@ This makes macros more robust across different page states or minor UI changes.
 | `hover` | `selector`, `selectors`? | Hover over an element |
 | `navigate` | `value` | Navigate to URL |
 | `wait` | `selector` or `value` | Wait for element, time (ms), or text |
+| `assert` | See below | Test conditions with retry on failure |
 
 **Note:** `selectors` is an optional array of fallback CSS selectors tried if `selector` fails.
 
@@ -146,18 +147,23 @@ The recorder generates multiple CSS selectors for robustness. It stores the best
 
 ### cursor replay
 
-Replay commands from a macro file.
+Replay commands from a macro file with support for assertions and automatic retry on failure.
 
 ```bash
-zchrome cursor replay <filename.json> [--interval=<ms>|<min-max>]
+zchrome cursor replay <filename.json> [options]
 ```
 
 **Options:**
 
 | Option | Description |
 |--------|-------------|
-| `--interval=100` | Fixed 100ms delay between commands |
-| `--interval=100-300` | Random delay between 100-300ms (more human-like) |
+| `--interval=<ms>` | Fixed delay between commands (default: 100ms) |
+| `--interval=<min-max>` | Random delay range (e.g., 100-300ms) |
+| `--retries <n>` | Number of retries on assertion failure (default: 3) |
+| `--retry-delay <ms>` | Wait time before retrying (default: 100ms) |
+| `--fallback <file.json>` | JSON file to execute on permanent failure |
+| `--resume` | Resume from last successful action |
+| `--from <n>` | Start replay from command index n |
 
 **Examples:**
 
@@ -171,8 +177,14 @@ zchrome cursor replay login-flow.json --interval=500
 # Human-like random delay
 zchrome cursor replay login-flow.json --interval=200-500
 
-# Very slow for debugging
-zchrome cursor replay login-flow.json --interval=1000-2000
+# With custom retry settings
+zchrome cursor replay form.json --retries 5 --retry-delay 2000
+
+# With fallback on failure
+zchrome cursor replay form.json --fallback error-handler.json
+
+# Resume from last successful action
+zchrome cursor replay form.json --resume
 ```
 
 **Output:**
@@ -185,6 +197,140 @@ Replaying 5 commands from login-flow.json (interval: 200-500ms)...
   [4/5] press Enter
   [5/5] wait ".dashboard"
 Replay complete.
+```
+
+## Assertions (Testing)
+
+The `assert` action allows you to verify application state during replay. When an assertion fails, zchrome automatically retries from the last "action" command (click, fill, select, etc.) up to `--retries` times.
+
+### Assert Action Format
+
+```json
+{
+  "action": "assert",
+  "selector": "#element",      // Element must exist and be visible
+  "value": "expected",         // Optional: element text/value must match
+  "attribute": "class",        // Optional: attribute to check
+  "contains": "active",        // Optional: attribute must contain this
+  "url": "**/dashboard",       // Optional: URL must match pattern
+  "text": "Welcome",           // Optional: text must appear on page
+  "timeout": 5000,             // Optional: wait up to N ms (default: 5000)
+  "fallback": "error.json"     // Optional: run this macro if assertion fails
+}
+```
+
+### Assertion Types
+
+**Element exists:**
+```json
+{"action": "assert", "selector": "#success-message"}
+```
+
+**Element has value/text:**
+```json
+{"action": "assert", "selector": "#email", "value": "user@example.com"}
+```
+
+**Element has attribute:**
+```json
+{"action": "assert", "selector": "#btn", "attribute": "class", "contains": "active"}
+```
+
+**URL matches pattern:**
+```json
+{"action": "assert", "url": "**/dashboard"}
+```
+
+**Text visible on page:**
+```json
+{"action": "assert", "text": "Login successful"}
+```
+
+**With custom timeout:**
+```json
+{"action": "assert", "selector": ".slow-element", "timeout": 10000}
+```
+
+**With per-assertion fallback:**
+```json
+{"action": "assert", "text": "Email available", "fallback": "email-taken.json"}
+```
+
+### Retry Behavior
+
+When an assertion fails:
+
+1. zchrome waits `--retry-delay` ms (default: 1000)
+2. Finds the **last action command** (click, fill, select, check, etc.)
+3. Re-executes from that point (skipping press, wait, scroll)
+4. Repeats up to `--retries` times
+
+This ensures form interactions are re-done meaningfully, not just keypresses.
+
+### Fallback Priority
+
+When an assertion permanently fails:
+
+1. **Assert-level fallback**: Uses `fallback` field on the assert command
+2. **CLI fallback**: Uses `--fallback` argument
+3. **Default**: Stops replay and saves state for `--resume`
+
+### Example: Form with Assertions
+
+```json
+{
+  "version": 2,
+  "commands": [
+    {"action": "fill", "selector": "#email", "value": "test@example.com"},
+    {"action": "assert", "selector": "#email", "value": "test@example.com"},
+    {"action": "fill", "selector": "#password", "value": "secret123"},
+    {"action": "click", "selector": "#submit"},
+    {"action": "assert", "url": "**/dashboard", "timeout": 10000},
+    {"action": "assert", "text": "Welcome back"}
+  ]
+}
+```
+
+**Output with passing assertions:**
+```
+Replaying 6 commands from form.json (retries: 3, delay: 1000ms)...
+  [1/6] fill "#email" "test@example.com"
+  [2/6] assert "#email" ✓
+  [3/6] fill "#password" "***"
+  [4/6] click "#submit"
+  [5/6] assert URL "**/dashboard" ✓
+  [6/6] assert text "Welcome" ✓
+Replay complete. All assertions passed.
+```
+
+**Output with retry:**
+```
+  [4/6] click "#submit"
+  [5/6] assert URL "**/dashboard"
+    ✗ Assertion failed (timeout 5000ms)
+    Waiting 1000ms before retry...
+    Retry 1/3: Re-executing from last action [4] click "#submit"
+  [4/6] click "#submit"
+  [5/6] assert URL "**/dashboard" ✓
+Replay complete. 1 retry needed.
+```
+
+### Multi-Branch Flows
+
+Use per-assertion fallbacks for conditional flows:
+
+```json
+{
+  "version": 2,
+  "commands": [
+    {"action": "fill", "selector": "#email", "value": "test@example.com"},
+    {"action": "click", "selector": "#check-email"},
+    {"action": "assert", "text": "Email available", "fallback": "email-taken.json"},
+    {"action": "fill", "selector": "#password", "value": "secret123"},
+    {"action": "click", "selector": "#submit"},
+    {"action": "assert", "text": "Account created", "fallback": "captcha-required.json"}
+  ]
+}
 ```
 
 ## Editing Macros

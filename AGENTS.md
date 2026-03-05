@@ -266,9 +266,11 @@ cli/actions/               Low-level element/keyboard actions
   upload.zig              File upload via CDP
   helpers.zig             JS string escaping, JS snippets
   types.zig               ResolvedElement, ElementPosition
-cli/commands/              Macro recording
-  macro.zig               MacroEvent/Macro types, JSON serialization
+cli/commands/              Macro recording & replay
+  macro.zig               MacroCommand/ActionType types, JSON serialization
   record_server.zig       WebSocket-based event collection
+  replay_state.zig        ReplayState persistence for --resume
+  cursor.zig              Record/replay commands, assertion execution
 ```
 
 **`cli/commands/`** is the single source of truth for all session-level
@@ -344,8 +346,9 @@ The `cursor record` command uses a WebSocket-based architecture to capture event
 |------|---------|
 | `src/transport/ws_server.zig` | WebSocket server (accept, handshake, frame read/write) |
 | `cli/commands/record_server.zig` | Recording state, event parsing, JSON accumulation |
-| `cli/commands/macro.zig` | `MacroEvent`/`Macro` types, `saveMacro`/`loadMacro` |
-| `cli/commands/cursor.zig` | `cursorRecord`, `cursorReplay` commands |
+| `cli/commands/macro.zig` | `MacroEvent`/`MacroCommand` types, `saveMacro`/`loadMacro`, `ActionType` enum |
+| `cli/commands/cursor.zig` | `cursorRecord`, `cursorReplay`, `executeAssertion`, retry logic |
+| `cli/commands/replay_state.zig` | `ReplayState` struct, state persistence for `--resume` |
 
 ### Event Types
 
@@ -362,6 +365,20 @@ pub const EventType = enum {
 
 ### Macro JSON Format
 
+**Version 2 (Semantic Commands):**
+```json
+{
+  "version": 2,
+  "commands": [
+    {"action": "fill", "selector": "#email", "value": "test@example.com"},
+    {"action": "assert", "selector": "#email", "value": "test@example.com"},
+    {"action": "click", "selector": "#submit"},
+    {"action": "assert", "url": "**/dashboard", "timeout": 10000}
+  ]
+}
+```
+
+**Version 1 (Raw Events - Legacy):**
 ```json
 {
   "version": 1,
@@ -370,6 +387,46 @@ pub const EventType = enum {
     { "type": "mouseDown", "timestamp": 150, "x": 100.0, "y": 200.0, "button": "left" },
     { "type": "keyDown", "timestamp": 300, "key": "a", "code": "KeyA", "modifiers": 0 }
   ]
+}
+```
+
+### Assert Action
+
+The `assert` action tests application state during replay with automatic retry on failure:
+
+```json
+{
+  "action": "assert",
+  "selector": "#element",      // Element must exist and be visible
+  "value": "expected",         // Optional: element text/value must match
+  "attribute": "class",        // Optional: attribute to check
+  "contains": "active",        // Optional: attribute must contain this
+  "url": "**/dashboard",       // Optional: URL must match pattern
+  "text": "Welcome",           // Optional: text must appear on page
+  "timeout": 5000,             // Optional: wait up to N ms (default: 5000)
+  "fallback": "error.json"     // Optional: run this macro if assertion fails
+}
+```
+
+**Retry Behavior:**
+1. On assertion failure, wait `--retry-delay` ms
+2. Find the last "action" command (click/fill/select, not press/wait)
+3. Re-execute from that point
+4. Repeat up to `--retries` times
+5. On permanent failure: use assert-level `fallback` > CLI `--fallback` > stop
+
+### Replay State Persistence
+
+Replay progress is saved to `replay-state.json` in the session directory for `--resume`:
+
+```json
+{
+  "macro_file": "form.json",
+  "last_action_index": 4,
+  "last_attempted_index": 5,
+  "retry_count": 2,
+  "status": "failed",
+  "failure_reason": "Assertion failed after max retries"
 }
 ```
 

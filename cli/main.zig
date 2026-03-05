@@ -83,6 +83,12 @@ const Args = struct {
     wait_fn: ?[]const u8 = null,
     // Click options
     click_js: bool = false,
+    // Replay options
+    replay_retries: u32 = 3,
+    replay_retry_delay: u32 = 100,
+    replay_fallback: ?[]const u8 = null,
+    replay_resume: bool = false,
+    replay_from: ?usize = null,
 
     const Command = enum {
         open,
@@ -156,6 +162,7 @@ pub fn main(init: std.process.Init) !void {
         if (args.wait_load) |w| allocator.free(w);
         if (args.wait_fn) |w| allocator.free(w);
         if (args.session_arg) |s| allocator.free(s);
+        if (args.replay_fallback) |f| allocator.free(f);
     }
 
     if (args.command == .help) {
@@ -332,6 +339,11 @@ fn buildCtx(args: Args, allocator: std.mem.Allocator) impl.CommandCtx {
         .wait_load = args.wait_load,
         .wait_fn = args.wait_fn,
         .click_js = args.click_js,
+        .replay_retries = args.replay_retries,
+        .replay_retry_delay = args.replay_retry_delay,
+        .replay_fallback = args.replay_fallback,
+        .replay_resume = args.replay_resume,
+        .replay_from = args.replay_from,
     };
 }
 
@@ -1164,6 +1176,12 @@ fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
     var click_js: bool = false;
     // Session
     var session_arg: ?[]const u8 = null;
+    // Replay options
+    var replay_retries: u32 = 3;
+    var replay_retry_delay: u32 = 100;
+    var replay_fallback: ?[]const u8 = null;
+    var replay_resume: bool = false;
+    var replay_from: ?usize = null;
 
     _ = iter.skip(); // Skip program name
 
@@ -1252,6 +1270,20 @@ fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
                 wait_fn = try allocator.dupe(u8, val);
             } else if (std.mem.eql(u8, arg, "--js")) {
                 click_js = true;
+            } else if (std.mem.eql(u8, arg, "--retries")) {
+                const val = iter.next() orelse return error.MissingArgument;
+                replay_retries = try std.fmt.parseInt(u32, val, 10);
+            } else if (std.mem.eql(u8, arg, "--retry-delay")) {
+                const val = iter.next() orelse return error.MissingArgument;
+                replay_retry_delay = try std.fmt.parseInt(u32, val, 10);
+            } else if (std.mem.eql(u8, arg, "--fallback")) {
+                const val = iter.next() orelse return error.MissingArgument;
+                replay_fallback = try allocator.dupe(u8, val);
+            } else if (std.mem.eql(u8, arg, "--resume")) {
+                replay_resume = true;
+            } else if (std.mem.eql(u8, arg, "--from")) {
+                const val = iter.next() orelse return error.MissingArgument;
+                replay_from = try std.fmt.parseInt(usize, val, 10);
             } else {
                 // Unknown flag - pass to subcommand (e.g., --interval for cursor replay)
                 try positional.append(allocator, try allocator.dupe(u8, arg));
@@ -1297,6 +1329,11 @@ fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
         .wait_fn = wait_fn,
         .click_js = click_js,
         .session_arg = session_arg,
+        .replay_retries = replay_retries,
+        .replay_retry_delay = replay_retry_delay,
+        .replay_fallback = replay_fallback,
+        .replay_resume = replay_resume,
+        .replay_from = replay_from,
     };
 }
 

@@ -30,6 +30,7 @@ pub const ActionType = enum {
     hover,
     navigate,
     wait,
+    assert,
 
     pub fn toString(self: ActionType) []const u8 {
         return switch (self) {
@@ -45,6 +46,7 @@ pub const ActionType = enum {
             .hover => "hover",
             .navigate => "navigate",
             .wait => "wait",
+            .assert => "assert",
         };
     }
 
@@ -61,11 +63,21 @@ pub const ActionType = enum {
         if (std.mem.eql(u8, s, "hover")) return .hover;
         if (std.mem.eql(u8, s, "navigate")) return .navigate;
         if (std.mem.eql(u8, s, "wait")) return .wait;
+        if (std.mem.eql(u8, s, "assert")) return .assert;
         return null;
+    }
+
+    /// Returns true if this action is a "real" action command (not press/scroll/wait/assert)
+    /// Used to determine where to retry from on assertion failure
+    pub fn isActionCommand(self: ActionType) bool {
+        return switch (self) {
+            .click, .dblclick, .fill, .check, .uncheck, .select, .multiselect, .hover, .navigate => true,
+            .press, .scroll, .wait, .assert => false,
+        };
     }
 };
 
-/// A semantic command (click, fill, press, etc.)
+/// A semantic command (click, fill, press, assert, etc.)
 pub const MacroCommand = struct {
     action: ActionType,
     selector: ?[]const u8 = null, // CSS selector for element (primary)
@@ -74,6 +86,13 @@ pub const MacroCommand = struct {
     key: ?[]const u8 = null, // Key name for press
     scroll_x: ?i32 = null, // Scroll delta X
     scroll_y: ?i32 = null, // Scroll delta Y
+    // Assert-specific fields
+    attribute: ?[]const u8 = null, // Attribute name to check (for assert)
+    contains: ?[]const u8 = null, // Substring to find in attribute/text (for assert)
+    url: ?[]const u8 = null, // URL pattern to match (for assert)
+    text: ?[]const u8 = null, // Text to find on page (for assert)
+    timeout: ?u32 = null, // Assertion timeout in ms (default: 5000)
+    fallback: ?[]const u8 = null, // Fallback JSON file on assertion failure
 
     pub fn deinit(self: *MacroCommand, allocator: std.mem.Allocator) void {
         if (self.selector) |s| allocator.free(s);
@@ -83,6 +102,11 @@ pub const MacroCommand = struct {
         }
         if (self.value) |v| allocator.free(v);
         if (self.key) |k| allocator.free(k);
+        if (self.attribute) |a| allocator.free(a);
+        if (self.contains) |c| allocator.free(c);
+        if (self.url) |u| allocator.free(u);
+        if (self.text) |t| allocator.free(t);
+        if (self.fallback) |f| allocator.free(f);
     }
 
     pub fn clone(self: *const MacroCommand, allocator: std.mem.Allocator) !MacroCommand {
@@ -102,6 +126,12 @@ pub const MacroCommand = struct {
             .key = if (self.key) |k| try allocator.dupe(u8, k) else null,
             .scroll_x = self.scroll_x,
             .scroll_y = self.scroll_y,
+            .attribute = if (self.attribute) |a| try allocator.dupe(u8, a) else null,
+            .contains = if (self.contains) |c| try allocator.dupe(u8, c) else null,
+            .url = if (self.url) |u| try allocator.dupe(u8, u) else null,
+            .text = if (self.text) |t| try allocator.dupe(u8, t) else null,
+            .timeout = self.timeout,
+            .fallback = if (self.fallback) |f| try allocator.dupe(u8, f) else null,
         };
     }
 };
@@ -188,6 +218,48 @@ pub fn saveCommandMacro(allocator: std.mem.Allocator, io: std.Io, path: []const 
             const sy_str = try std.fmt.allocPrint(allocator, ", \"scrollY\": {}", .{sy});
             defer allocator.free(sy_str);
             try json_buf.appendSlice(allocator, sy_str);
+        }
+
+        // Assert-specific fields
+        if (cmd.attribute) |attr| {
+            const escaped = try escapeString(allocator, attr);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"attribute\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
+        if (cmd.contains) |cont| {
+            const escaped = try escapeString(allocator, cont);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"contains\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
+        if (cmd.url) |url_val| {
+            const escaped = try escapeString(allocator, url_val);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"url\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
+        if (cmd.text) |txt| {
+            const escaped = try escapeString(allocator, txt);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"text\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
+        if (cmd.timeout) |to| {
+            const to_str = try std.fmt.allocPrint(allocator, ", \"timeout\": {}", .{to});
+            defer allocator.free(to_str);
+            try json_buf.appendSlice(allocator, to_str);
+        }
+        if (cmd.fallback) |fb| {
+            const escaped = try escapeString(allocator, fb);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"fallback\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
         }
 
         try json_buf.appendSlice(allocator, "}");
@@ -286,6 +358,25 @@ pub fn loadCommandMacro(allocator: std.mem.Allocator, io: std.Io, path: []const 
                 }
                 if (obj.get("scrollY")) |sy| {
                     if (sy == .integer) cmd.scroll_y = @intCast(sy.integer);
+                }
+                // Assert-specific fields
+                if (obj.get("attribute")) |attr| {
+                    if (attr == .string) cmd.attribute = try allocator.dupe(u8, attr.string);
+                }
+                if (obj.get("contains")) |cont| {
+                    if (cont == .string) cmd.contains = try allocator.dupe(u8, cont.string);
+                }
+                if (obj.get("url")) |url_val| {
+                    if (url_val == .string) cmd.url = try allocator.dupe(u8, url_val.string);
+                }
+                if (obj.get("text")) |txt| {
+                    if (txt == .string) cmd.text = try allocator.dupe(u8, txt.string);
+                }
+                if (obj.get("timeout")) |to| {
+                    if (to == .integer) cmd.timeout = @intCast(to.integer);
+                }
+                if (obj.get("fallback")) |fb| {
+                    if (fb == .string) cmd.fallback = try allocator.dupe(u8, fb.string);
                 }
 
                 try cmds_list.append(allocator, cmd);

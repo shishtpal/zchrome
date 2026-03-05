@@ -1,0 +1,130 @@
+{
+  "version": 2,
+  "commands": [
+    {
+      "action": "navigate",
+      "value": "https://formfiller.ctechhindi.in/example/example-1.php"
+    },
+    {
+      "action": "fill",
+      "selector": "#full_name",
+      "value": "Raju Kumar"
+    },
+    {
+      "action": "assert",
+      "selector": "#full_name",
+      "value": "Raju Kumar"
+    },
+    {
+      "action": "fill",
+      "selector": "#email",
+      "value": "raju@gmail.com"
+    },
+    {
+      "action": "assert",
+      "selector": "#email",
+      "value": "raju@gmail.com"
+    },
+    {
+      "action": "fill",
+      "selector": "#dob",
+      "value": "05/08/1992"
+    },
+    {
+      "action": "assert",
+      "selector": "#dob",
+      "value": "05/08/1992"
+    },
+    {
+      "action": "select",
+      "selector": "#select",
+      "selectors": [
+        "#select",
+        "select[name=\"select\"]",
+        "#add_record > div:nth-of-type(4) > select:nth-of-type(1)"
+      ],
+      "value": "7"
+    },
+    {
+      "action": "assert",
+      "selector": "#select",
+      "value": "7"
+    },
+    {
+      "action": "multiselect",
+      "selector": "#multi_select",
+      "selectors": [
+        "#multi_select",
+        "select[name=\"multi_select\"]",
+        "#add_record > div:nth-of-type(5) > select:nth-of-type(1)"
+      ],
+      "value": "[\"1\", \"3\"]"
+    },
+    {
+      "action": "assert",
+      "selector": "#multi_select",
+      "value": "[\"1\", \"3\"]"
+    },
+    {
+      "action": "fill",
+      "selector": "#address",
+      "selectors": [
+        "#address",
+        "textarea[name=\"address\"]",
+        "#add_record > div:nth-of-type(6) > textarea:nth-of-type(1)"
+      ],
+      "value": "Dilra Raipur"
+    },
+    {
+      "action": "assert",
+      "selector": "#address",
+      "value": "Dilra Raipur"
+    },
+    {
+      "action": "check",
+      "selector": "#habit_music",
+      "selectors": [
+        "#habit_music",
+        "input[name=\"habit_music\"]",
+        "#add_record > div:nth-of-type(7) > div:nth-of-type(2) > input:nth-of-type(1)"
+      ]
+    },
+    {
+      "action": "check",
+      "selector": "#habit_gaming",
+      "selectors": [
+        "#habit_gaming",
+        "input[name=\"habit_gaming\"]",
+        "#add_record > div:nth-of-type(7) > div:nth-of-type(3) > input:nth-of-type(1)"
+      ]
+    },
+    {
+      "action": "check",
+      "selector": "input[name=\"marital_status\"][value=\"married\"]",
+      "selectors": [
+        "input[name=\"marital_status\"][value=\"married\"]",
+        "input[name=\"marital_status\"]",
+        "#add_record > div:nth-of-type(8) > div:nth-of-type(2) > input:nth-of-type(1)"
+      ],
+      "value": "married"
+    },
+    {
+      "action": "check",
+      "selector": "#agree",
+      "selectors": [
+        "#agree",
+        "input[name=\"agree\"]",
+        "#add_record > div:nth-of-type(9) > div:nth-of-type(1) > input:nth-of-type(1)"
+      ]
+    },
+    {
+      "action": "click",
+      "selector": "#add_record > button"
+    },
+    {
+      "action": "assert",
+      "text": "Data has been successful saved.",
+      "timeout": 5000
+    }
+  ]
+}

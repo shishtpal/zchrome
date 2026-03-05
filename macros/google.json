@@ -1,0 +1,29 @@
+{
+  "version": 2,
+  "commands": [
+    {
+      "action": "click",
+      "selector": "#APjFqb",
+      "selectors": [
+        "#APjFqb",
+        "textarea[name=\"q\"]",
+        "textarea[aria-label=\"Search\"]",
+        ".gLFyf",
+        ".a4bIc > textarea:nth-of-type(1)"
+      ]
+    },
+    {
+      "action": "fill",
+      "selector": "#APjFqb",
+      "selectors": [
+        "#APjFqb",
+        "textarea[name=\"q\"]",
+        "textarea[aria-label=\"Search\"]",
+        ".gLFyf",
+        ".a4bIc > textarea:nth-of-type(1)"
+      ],
+      "value": "schoolpi"
+    },
+    { "action": "press", "key": "Enter" }
+  ]
+}

@@ -103,12 +103,9 @@ pub const RecordServer = struct {
 
             // Process messages until disconnect or stop
             while (!self.should_stop.load(.acquire)) {
-                const frame = client.readFrame() catch |err| {
-                    if (err == cdp.WsServerError.ConnectionClosed) {
-                        std.debug.print("  (browser disconnected)\n", .{});
-                        break;
-                    }
-                    continue;
+                const frame = client.readFrame() catch {
+                    // Any read error means the connection is broken
+                    break;
                 };
                 defer self.allocator.free(frame.data);
 
@@ -208,7 +205,9 @@ pub fn getRecordingJs(allocator: std.mem.Allocator, port: u16) ![]const u8 {
         \\    focusSel: null,
         \\    typedText: '',
         \\    lastValue: '',
-        \\    scrollY: 0
+        \\    scrollY: 0,
+        \\    ws: ws,
+        \\    heartbeat: null
         \\  }};
         \\  window.__zchrome_rec = state;
         \\
@@ -348,8 +347,22 @@ pub fn getRecordingJs(allocator: std.mem.Allocator, port: u16) ![]const u8 {
         \\  }}, true);
         \\  state.scrollY = window.scrollY;
         \\
-        \\  ws.onopen = function() {{ console.log('[zchrome] Recording connected'); }};
-        \\  ws.onclose = function() {{ window.__zchrome_rec = null; }};
+        \\  ws.onopen = function() {{
+        \\    console.log('[zchrome] Recording connected');
+        \\    // Keep server read loop interruptible so CLI stop can join promptly.
+        \\    state.heartbeat = setInterval(function() {{
+        \\      if (ws && ws.readyState === 1) {{
+        \\        ws.send(JSON.stringify({{ action: '__heartbeat' }}));
+        \\      }}
+        \\    }}, 500);
+        \\  }};
+        \\  ws.onclose = function() {{
+        \\    if (state.heartbeat) {{
+        \\      clearInterval(state.heartbeat);
+        \\      state.heartbeat = null;
+        \\    }}
+        \\    window.__zchrome_rec = null;
+        \\  }};
         \\}})();
     , .{port});
 }

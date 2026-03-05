@@ -196,26 +196,29 @@ pub const Page = struct {
 
     /// Capture a screenshot
     pub fn captureScreenshot(self: *Self, allocator: std.mem.Allocator, params: CaptureScreenshotParams) ![]const u8 {
-        const result = try self.session.sendCommand("Page.captureScreenshot", params);
+        var result = try self.session.sendCommand("Page.captureScreenshot", params);
+        defer result.deinit(self.session.allocator);
         const data = try result.getString("data");
         return allocator.dupe(u8, data);
     }
 
     /// Print to PDF
     pub fn printToPDF(self: *Self, allocator: std.mem.Allocator, params: PrintToPDFParams) ![]const u8 {
-        const result = try self.session.sendCommand("Page.printToPDF", params);
+        var result = try self.session.sendCommand("Page.printToPDF", params);
+        defer result.deinit(self.session.allocator);
         const data = try result.getString("data");
         return allocator.dupe(u8, data);
     }
 
-    /// Get the frame tree
+    /// Get the frame tree. Caller must call result.deinit(allocator) when done.
     pub fn getFrameTree(self: *Self) !json.Value {
         return try self.session.sendCommand("Page.getFrameTree", .{});
     }
 
     /// Get the main frame
     pub fn getMainFrame(self: *Self, allocator: std.mem.Allocator) !Frame {
-        const result = try self.session.sendCommand("Page.getFrameTree", .{});
+        var result = try self.session.sendCommand("Page.getFrameTree", .{});
+        defer result.deinit(self.session.allocator);
 
         const frame_tree = result.get("frameTree") orelse return error.MissingField;
         const frame = frame_tree.get("frame") orelse return error.MissingField;

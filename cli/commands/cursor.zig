@@ -209,13 +209,21 @@ fn cursorRecord(session: *cdp.Session, allocator: std.mem.Allocator, io: std.Io,
     std.debug.print("(Events stream in real-time, survives page reloads)\n", .{});
 
     // Wait for Enter key (WebSocket server runs in background thread)
-    const stdin_file = std.Io.File.stdin();
-    var read_buf: [256]u8 = undefined;
-    var reader = stdin_file.readerStreaming(io, &read_buf);
+    waitForEnter(io);
 
-    while (true) {
-        const byte = reader.interface.takeByte() catch break;
-        if (byte == '\n' or byte == '\r') break;
+    // Ask browser-side recorder to close its WebSocket so server read loop unblocks.
+    var stop_result = runtime.evaluate(allocator,
+        \\(function() {
+        \\  try {
+        \\    if (window.__zchrome_rec && window.__zchrome_rec.ws) {
+        \\      window.__zchrome_rec.ws.close();
+        \\    }
+        \\  } catch (_) {}
+        \\  return true;
+        \\})()
+    , .{ .return_by_value = false }) catch null;
+    if (stop_result) |*res| {
+        res.deinit(allocator);
     }
 
     // Stop server and get commands
@@ -304,10 +312,11 @@ fn cursorReplay(session: *cdp.Session, allocator: std.mem.Allocator, io: std.Io,
     };
 
     // Parse to check version
-    const version_check = json.parse(allocator, content, .{}) catch |err| {
+    var version_check = json.parse(allocator, content, .{}) catch |err| {
         std.debug.print("Error parsing macro JSON: {}\n", .{err});
         return;
     };
+    defer version_check.deinit(allocator);
 
     var version: u32 = 1;
     if (version_check.get("version")) |v| {
@@ -622,6 +631,19 @@ fn printElementInfo(header: ?[]const u8, obj: json.Value) void {
             const yf = if (y_val == .float) y_val.float else if (y_val == .integer) @as(f64, @floatFromInt(y_val.integer)) else 0;
             std.debug.print("  position: ({d:.0}, {d:.0})\n", .{ xf, yf });
         }
+    }
+}
+
+/// Wait for user to press Enter from stdin.
+fn waitForEnter(io: std.Io) void {
+    const stdin_file = std.Io.File.stdin();
+    var buf: [32]u8 = undefined;
+    var reader = stdin_file.readerStreaming(io, &buf);
+
+    // Stop on either LF or CR so Enter works reliably across terminal modes.
+    while (true) {
+        const b = reader.interface.takeByte() catch break;
+        if (b == '\n' or b == '\r') break;
     }
 }
 

@@ -31,6 +31,7 @@ pub const ActionType = enum {
     navigate,
     wait,
     assert,
+    extract,
 
     pub fn toString(self: ActionType) []const u8 {
         return switch (self) {
@@ -47,6 +48,7 @@ pub const ActionType = enum {
             .navigate => "navigate",
             .wait => "wait",
             .assert => "assert",
+            .extract => "extract",
         };
     }
 
@@ -64,15 +66,16 @@ pub const ActionType = enum {
         if (std.mem.eql(u8, s, "navigate")) return .navigate;
         if (std.mem.eql(u8, s, "wait")) return .wait;
         if (std.mem.eql(u8, s, "assert")) return .assert;
+        if (std.mem.eql(u8, s, "extract")) return .extract;
         return null;
     }
 
-    /// Returns true if this action is a "real" action command (not press/scroll/wait/assert)
+    /// Returns true if this action is a "real" action command (not press/scroll/wait/assert/extract)
     /// Used to determine where to retry from on assertion failure
     pub fn isActionCommand(self: ActionType) bool {
         return switch (self) {
             .click, .dblclick, .fill, .check, .uncheck, .select, .multiselect, .hover, .navigate => true,
-            .press, .scroll, .wait, .assert => false,
+            .press, .scroll, .wait, .assert, .extract => false,
         };
     }
 };
@@ -93,6 +96,12 @@ pub const MacroCommand = struct {
     text: ?[]const u8 = null, // Text to find on page (for assert)
     timeout: ?u32 = null, // Assertion timeout in ms (default: 5000)
     fallback: ?[]const u8 = null, // Fallback JSON file on assertion failure
+    // Extract-specific fields
+    mode: ?[]const u8 = null, // Extraction mode: dom, text, html, attrs, table, form
+    output: ?[]const u8 = null, // Output file path for extract
+    extract_all: ?bool = null, // Use querySelectorAll for extract
+    // Snapshot assertion field
+    snapshot: ?[]const u8 = null, // Expected JSON file for snapshot comparison
 
     pub fn deinit(self: *MacroCommand, allocator: std.mem.Allocator) void {
         if (self.selector) |s| allocator.free(s);
@@ -107,6 +116,9 @@ pub const MacroCommand = struct {
         if (self.url) |u| allocator.free(u);
         if (self.text) |t| allocator.free(t);
         if (self.fallback) |f| allocator.free(f);
+        if (self.mode) |m| allocator.free(m);
+        if (self.output) |o| allocator.free(o);
+        if (self.snapshot) |sn| allocator.free(sn);
     }
 
     pub fn clone(self: *const MacroCommand, allocator: std.mem.Allocator) !MacroCommand {
@@ -132,6 +144,10 @@ pub const MacroCommand = struct {
             .text = if (self.text) |t| try allocator.dupe(u8, t) else null,
             .timeout = self.timeout,
             .fallback = if (self.fallback) |f| try allocator.dupe(u8, f) else null,
+            .mode = if (self.mode) |m| try allocator.dupe(u8, m) else null,
+            .output = if (self.output) |o| try allocator.dupe(u8, o) else null,
+            .extract_all = self.extract_all,
+            .snapshot = if (self.snapshot) |sn| try allocator.dupe(u8, sn) else null,
         };
     }
 };
@@ -262,6 +278,33 @@ pub fn saveCommandMacro(allocator: std.mem.Allocator, io: std.Io, path: []const 
             try json_buf.appendSlice(allocator, "\"");
         }
 
+        // Extract-specific fields
+        if (cmd.mode) |m| {
+            const escaped = try escapeString(allocator, m);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"mode\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
+        if (cmd.output) |o| {
+            const escaped = try escapeString(allocator, o);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"output\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
+        if (cmd.extract_all) |ea| {
+            try json_buf.appendSlice(allocator, if (ea) ", \"extract_all\": true" else ", \"extract_all\": false");
+        }
+        // Snapshot assertion field
+        if (cmd.snapshot) |sn| {
+            const escaped = try escapeString(allocator, sn);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"snapshot\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
+
         try json_buf.appendSlice(allocator, "}");
     }
 
@@ -377,6 +420,20 @@ pub fn loadCommandMacro(allocator: std.mem.Allocator, io: std.Io, path: []const 
                 }
                 if (obj.get("fallback")) |fb| {
                     if (fb == .string) cmd.fallback = try allocator.dupe(u8, fb.string);
+                }
+                // Extract-specific fields
+                if (obj.get("mode")) |m| {
+                    if (m == .string) cmd.mode = try allocator.dupe(u8, m.string);
+                }
+                if (obj.get("output")) |o| {
+                    if (o == .string) cmd.output = try allocator.dupe(u8, o.string);
+                }
+                if (obj.get("extract_all")) |ea| {
+                    if (ea == .bool) cmd.extract_all = ea.bool;
+                }
+                // Snapshot assertion field
+                if (obj.get("snapshot")) |sn| {
+                    if (sn == .string) cmd.snapshot = try allocator.dupe(u8, sn.string);
                 }
 
                 try cmds_list.append(allocator, cmd);

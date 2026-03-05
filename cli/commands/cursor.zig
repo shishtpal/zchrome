@@ -16,6 +16,7 @@ const wait_mod = @import("wait.zig");
 const navigation = @import("navigation.zig");
 const replay_state = @import("replay_state.zig");
 const session_mod = @import("../session.zig");
+const helpers = @import("helpers.zig");
 
 pub const CommandCtx = types.CommandCtx;
 
@@ -603,7 +604,7 @@ pub const ReplayOptions = struct {
 fn executeAssertion(
     session: *cdp.Session,
     allocator: std.mem.Allocator,
-    _: std.Io,
+    io: std.Io,
     cmd: macro_mod.MacroCommand,
     _: ?*const session_mod.SessionContext,
 ) !bool {
@@ -704,6 +705,36 @@ fn executeAssertion(
             return true;
         }
         return false;
+    }
+
+    // 4. Snapshot comparison
+    if (cmd.snapshot) |snapshot_path| {
+        if (cmd.selector) |sel| {
+            const dom_mod = @import("dom.zig");
+
+            // Extract current DOM state
+            const current_json = try dom_mod.executeExtract(session, allocator, sel, .dom, false);
+            defer allocator.free(current_json);
+
+            // Read expected snapshot file
+            const dir = std.Io.Dir.cwd();
+            const expected_json = dir.readFileAlloc(io, snapshot_path, allocator, std.Io.Limit.limited(10 * 1024 * 1024)) catch |err| {
+                std.debug.print("    Failed to read snapshot file {s}: {}\n", .{ snapshot_path, err });
+                return false;
+            };
+            defer allocator.free(expected_json);
+
+            // Normalize and compare JSON (trim whitespace for comparison)
+            const current_trimmed = std.mem.trim(u8, current_json, " \t\n\r");
+            const expected_trimmed = std.mem.trim(u8, expected_json, " \t\n\r");
+
+            if (std.mem.eql(u8, current_trimmed, expected_trimmed)) {
+                return true;
+            }
+
+            std.debug.print("    Snapshot mismatch for {s}\n", .{sel});
+            return false;
+        }
     }
 
     // No assertion conditions specified - pass by default
@@ -1067,6 +1098,32 @@ fn replayCommandsWithOptions(session: *cdp.Session, allocator: std.mem.Allocator
                 }
             },
             .assert => {}, // Already handled above
+            .extract => {
+                // Execute DOM extraction
+                const selector = cmd.selector orelse {
+                    std.debug.print("    Error: extract requires selector\n", .{});
+                    continue;
+                };
+                const dom_mod = @import("dom.zig");
+                const mode = if (cmd.mode) |m| dom_mod.ExtractMode.fromString(m) orelse .dom else .dom;
+                const extract_all = cmd.extract_all orelse false;
+
+                const result = dom_mod.executeExtract(session, allocator, selector, mode, extract_all) catch |err| {
+                    std.debug.print("    Error: {}\n", .{err});
+                    continue;
+                };
+                defer allocator.free(result);
+
+                if (cmd.output) |output_path| {
+                    helpers.writeFile(io, output_path, result) catch |err| {
+                        std.debug.print("    Error writing {s}: {}\n", .{ output_path, err });
+                        continue;
+                    };
+                    std.debug.print(" -> {s}\n", .{output_path});
+                } else {
+                    std.debug.print("\n{s}\n", .{result});
+                }
+            },
         }
 
         // Delay between commands

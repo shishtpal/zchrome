@@ -1576,6 +1576,82 @@ zchrome wait --match "**/dashboard"
 zchrome wait --fn "window.dashboardLoaded"
 ```
 
+## DOM Extraction
+
+Extract DOM structure and data as JSON. Useful for scraping, testing, and debugging.
+
+### dom
+
+Extract DOM elements as JSON with various modes.
+
+```bash
+zchrome dom <selector> [mode] [options]
+```
+
+**Modes:**
+
+| Mode | Description |
+|------|-------------|
+| `dom` | Full DOM tree structure (default) |
+| `text` | Text content only |
+| `html` | Raw innerHTML |
+| `attrs` | Attributes only |
+| `table` | HTML table to array of objects |
+| `form` | Form field values as key-value pairs |
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--all`, `-a` | Extract all matching elements (querySelectorAll) |
+| `--output <path>` | Save to file instead of stdout |
+
+**Examples:**
+
+```bash
+# Full DOM tree of an element
+zchrome dom "#app"
+
+# Extract table as JSON array
+zchrome dom "table.data" table
+# Output: [{"Name": "Alice", "Age": "30"}, {"Name": "Bob", "Age": "25"}]
+
+# Get form field values
+zchrome dom "form#login" form
+# Output: {"email": "user@example.com", "password": "", "remember": true}
+
+# Get text from all matching elements
+zchrome dom ".product-name" text --all
+# Output: ["Product A", "Product B", "Product C"]
+
+# Extract and save to file
+zchrome dom "#results" table --output data.json
+
+# Get attributes of an element
+zchrome dom "#header" attrs
+# Output: {"id": "header", "class": "main-header sticky"}
+```
+
+**Output Format (dom mode):**
+
+```json
+{
+  "tag": "div",
+  "attrs": {"id": "container", "class": "main"},
+  "children": [
+    {
+      "tag": "h1",
+      "children": ["Welcome"]
+    },
+    {
+      "tag": "p",
+      "attrs": {"class": "intro"},
+      "children": ["Hello world"]
+    }
+  ]
+}
+```
+
 ## Getters
 
 ### get text

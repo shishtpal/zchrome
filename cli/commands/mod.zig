@@ -33,6 +33,7 @@ const dev_mod = @import("dev.zig");
 const session_cmd_mod = @import("session.zig");
 const diff_mod = @import("../diff/mod.zig");
 const diff_cmd_mod = @import("diff.zig");
+const dom_mod = @import("dom.zig");
 
 // ─── Type Re-exports ─────────────────────────────────────────────────────────
 
@@ -184,3 +185,10 @@ pub const diffScreenshot = diff_mod.diffScreenshotCommand;
 pub const printDiffScreenshotHelp = diff_mod.printDiffScreenshotHelp;
 pub const diffUrl = diff_mod.diffUrlCommand;
 pub const printDiffUrlHelp = diff_mod.printDiffUrlHelp;
+
+// ─── DOM Re-exports ───────────────────────────────────────────────────────────
+
+pub const dom = dom_mod.dom;
+pub const executeExtract = dom_mod.executeExtract;
+pub const printDomHelp = dom_mod.printDomHelp;
+pub const ExtractMode = dom_mod.ExtractMode;

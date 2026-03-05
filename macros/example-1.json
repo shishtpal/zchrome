@@ -118,6 +118,11 @@
       ]
     },
     {
+      "action": "extract",
+      "selector": "#add_record",
+      "output": "example-1-dom.json"
+    },
+    {
       "action": "click",
       "selector": "#add_record > button"
     },

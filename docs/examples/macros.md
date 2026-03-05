@@ -110,12 +110,14 @@ This makes macros more robust across different page states or minor UI changes.
 | `check` | `selector`, `selectors`? | Check a checkbox |
 | `uncheck` | `selector`, `selectors`? | Uncheck a checkbox |
 | `select` | `selector`, `selectors`?, `value` | Select dropdown option by value |
+| `multiselect` | `selector`, `selectors`?, `value` | Select multiple options (value is JSON array string) |
 | `press` | `key` | Press a key (e.g., "Enter", "Tab", "Control+a") |
 | `scroll` | `scrollX`?, `scrollY` | Scroll the page (positive=down, negative=up) |
 | `hover` | `selector`, `selectors`? | Hover over an element |
 | `navigate` | `value` | Navigate to URL |
 | `wait` | `selector` or `value` | Wait for element, time (ms), or text |
 | `assert` | See below | Test conditions with retry on failure |
+| `extract` | `selector`, `mode`?, `output` | Extract DOM data as JSON |
 
 **Note:** `selectors` is an optional array of fallback CSS selectors tried if `selector` fails.
 
@@ -231,6 +233,11 @@ The `assert` action allows you to verify application state during replay. When a
 {"action": "assert", "selector": "#email", "value": "user@example.com"}
 ```
 
+**Multiselect has selected values:**
+```json
+{"action": "assert", "selector": "#multi_select", "value": "[\"option1\", \"option3\"]"}
+```
+
 **Element has attribute:**
 ```json
 {"action": "assert", "selector": "#btn", "attribute": "class", "contains": "active"}
@@ -313,6 +320,108 @@ Replay complete. All assertions passed.
   [4/6] click "#submit"
   [5/6] assert URL "**/dashboard" ✓
 Replay complete. 1 retry needed.
+```
+
+### Snapshot Assertions
+
+Compare DOM structure against a saved baseline file:
+
+```json
+{"action": "assert", "selector": "#user-profile", "snapshot": "expected-profile.json"}
+```
+
+This extracts the current DOM structure of the element and compares it to the JSON in the snapshot file. Useful for regression testing to catch unexpected DOM changes.
+
+**Creating a snapshot baseline:**
+
+1. Use the `extract` action to save the expected state:
+   ```json
+   {"action": "extract", "selector": "#user-profile", "output": "expected-profile.json"}
+   ```
+
+2. Then use `snapshot` assertions in subsequent runs:
+   ```json
+   {"action": "assert", "selector": "#user-profile", "snapshot": "expected-profile.json"}
+   ```
+
+## Data Extraction
+
+The `extract` action extracts DOM data as JSON during macro playback. Useful for scraping data after navigation/login.
+
+### Extract Action Format
+
+```json
+{
+  "action": "extract",
+  "selector": "#element",        // CSS selector for target element
+  "mode": "table",               // Extraction mode (default: "dom")
+  "output": "data.json",         // Output file path
+  "extract_all": true            // Optional: extract all matching elements
+}
+```
+
+### Extraction Modes
+
+| Mode | Description | Output |
+|------|-------------|--------|
+| `dom` | Full DOM tree structure (default) | `{"tag": "div", "attrs": {...}, "children": [...]}` |
+| `text` | Text content only | `"Hello world"` or `["Item 1", "Item 2"]` |
+| `html` | Raw innerHTML | `"<span>content</span>"` |
+| `attrs` | Attributes only | `{"id": "main", "class": "container"}` |
+| `table` | HTML table to objects | `[{"Name": "Alice", "Age": "30"}, ...]` |
+| `form` | Form field values | `{"email": "a@b.com", "name": "John"}` |
+
+### Extract Examples
+
+**Scrape table data:**
+```json
+{
+  "action": "extract",
+  "selector": "table#results",
+  "mode": "table",
+  "output": "scraped-data.json"
+}
+```
+
+**Get form values:**
+```json
+{
+  "action": "extract",
+  "selector": "form#checkout",
+  "mode": "form",
+  "output": "form-state.json"
+}
+```
+
+**Extract multiple elements:**
+```json
+{
+  "action": "extract",
+  "selector": ".product-card",
+  "mode": "dom",
+  "extract_all": true,
+  "output": "products.json"
+}
+```
+
+### Full Workflow Example
+
+Navigate to a page, login, and extract data:
+
+```json
+{
+  "version": 2,
+  "commands": [
+    {"action": "navigate", "value": "https://example.com/login"},
+    {"action": "fill", "selector": "#email", "value": "user@example.com"},
+    {"action": "fill", "selector": "#password", "value": "secret123"},
+    {"action": "click", "selector": "#login-btn"},
+    {"action": "assert", "url": "**/dashboard", "timeout": 10000},
+    {"action": "navigate", "value": "https://example.com/data"},
+    {"action": "wait", "selector": "table#results"},
+    {"action": "extract", "selector": "table#results", "mode": "table", "output": "results.json"}
+  ]
+}
 ```
 
 ### Multi-Branch Flows

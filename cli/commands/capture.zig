@@ -88,7 +88,12 @@ pub fn snapshot(session: *cdp.Session, ctx: CommandCtx) !void {
     std.debug.print("{s}\n", .{snap.tree});
     std.debug.print("\n--- {} element(s) with refs ---\n", .{snap.refs.count()});
 
-    const output_path = ctx.output orelse try config_mod.getSnapshotPath(ctx.allocator, ctx.io);
+    const output_path = ctx.output orelse blk: {
+        if (ctx.session) |s| {
+            break :blk try s.snapshotPath();
+        }
+        break :blk try config_mod.getSnapshotPath(ctx.allocator, ctx.io);
+    };
     defer if (ctx.output == null) ctx.allocator.free(output_path);
 
     try snapshot_mod.saveSnapshot(ctx.allocator, ctx.io, output_path, &snap);

@@ -2,16 +2,17 @@ const std = @import("std");
 const types = @import("types.zig");
 const snapshot_mod = @import("../snapshot.zig");
 const config_mod = @import("../config.zig");
+const session_mod = @import("../session.zig");
 
 pub const ResolvedElement = types.ResolvedElement;
 
 /// Resolve a selector string to element information
 /// Handles both CSS selectors and @ref notation
-pub fn resolveSelector(allocator: std.mem.Allocator, io: std.Io, selector: []const u8) !ResolvedElement {
+pub fn resolveSelector(allocator: std.mem.Allocator, io: std.Io, selector: []const u8, session_ctx: ?*const session_mod.SessionContext) !ResolvedElement {
     if (selector.len > 0 and selector[0] == '@') {
         // Ref-based selector: load from snapshot
         const ref_id = selector[1..];
-        const snapshot_path = try config_mod.getSnapshotPath(allocator, io);
+        const snapshot_path = if (session_ctx) |ctx| try ctx.snapshotPath() else try config_mod.getSnapshotPath(allocator, io);
         defer allocator.free(snapshot_path);
 
         var snapshot_data = snapshot_mod.loadSnapshot(allocator, io, snapshot_path) catch |err| {

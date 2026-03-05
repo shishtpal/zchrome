@@ -44,7 +44,7 @@ pub fn scrollIntoView(session: *cdp.Session, ctx: CommandCtx) !void {
         std.debug.print("Usage: scrollintoview <selector>\n", .{});
         return;
     }
-    var resolved = try actions_mod.resolveSelector(ctx.allocator, ctx.io, ctx.positional[0]);
+    var resolved = try actions_mod.resolveSelector(ctx.allocator, ctx.io, ctx.positional[0], ctx.session);
     defer resolved.deinit();
     try actions_mod.scrollIntoView(session, ctx.allocator, &resolved);
     std.debug.print("Scrolled into view: {s}\n", .{ctx.positional[0]});

@@ -4,11 +4,15 @@ const config_mod = @import("config.zig");
 const http_mod = @import("http.zig");
 const interactive_mod = @import("interactive/mod.zig");
 const impl = @import("commands/mod.zig");
+const session_mod = @import("session.zig");
 
 /// Save target ID to config file for subsequent commands
-fn saveTargetToConfig(target_id: []const u8, args: Args, allocator: std.mem.Allocator, io: std.Io) void {
+fn saveTargetToConfig(target_id: []const u8, args: Args) void {
+    const session_ctx = args.session_ctx orelse return;
+    const allocator = session_ctx.allocator;
+
     // Load existing config or create new one
-    var config = config_mod.loadConfig(allocator, io) orelse config_mod.Config{};
+    var config = session_ctx.loadConfig() orelse config_mod.Config{};
 
     // Update with current values
     if (config.last_target) |old| allocator.free(old);
@@ -19,7 +23,7 @@ fn saveTargetToConfig(target_id: []const u8, args: Args, allocator: std.mem.Allo
         config.ws_url = allocator.dupe(u8, args.url.?) catch null;
     }
 
-    config_mod.saveConfig(config, allocator, io) catch |err| {
+    session_ctx.saveConfig(config) catch |err| {
         std.debug.print("Warning: Could not save target to config: {}\n", .{err});
     };
 
@@ -64,6 +68,9 @@ const Args = struct {
     io: std.Io = undefined,
     command: Command,
     positional: []const []const u8,
+    // Session
+    session_arg: ?[]const u8 = null, // --session value (null = use env or default)
+    session_ctx: ?*const session_mod.SessionContext = null, // Set in main() after resolving session
     // Snapshot options
     snap_interactive: bool = false,
     snap_compact: bool = false,
@@ -120,6 +127,7 @@ const Args = struct {
         set,
         dialog,
         dev,
+        session,
         help,
     };
 };
@@ -145,6 +153,7 @@ pub fn main(init: std.process.Init) !void {
         if (args.wait_url) |w| allocator.free(w);
         if (args.wait_load) |w| allocator.free(w);
         if (args.wait_fn) |w| allocator.free(w);
+        if (args.session_arg) |s| allocator.free(s);
     }
 
     if (args.command == .help) {
@@ -152,8 +161,32 @@ pub fn main(init: std.process.Init) !void {
         return;
     }
 
-    // Load config file for defaults
-    var config = config_mod.loadConfig(allocator, init.io) orelse config_mod.Config{};
+    // Migrate old config to sessions/default/ if needed (one-time)
+    session_mod.migrateToSessions(allocator, init.io) catch {};
+
+    // Create session context - resolves session name from --session flag or ZCHROME_SESSION env
+    const session_name = session_mod.resolveSessionName(allocator, args.session_arg) catch {
+        std.debug.print("Error resolving session name\n", .{});
+        std.process.exit(1);
+    };
+    var session_ctx = session_mod.SessionContext{
+        .name = session_name,
+        .allocator = allocator,
+        .io = init.io,
+    };
+    defer session_ctx.deinit();
+
+    // Attach session context to args for easy access in commands
+    args.session_ctx = &session_ctx;
+
+    // Handle session command
+    if (args.command == .session) {
+        try impl.sessionCmd(&session_ctx, args.positional);
+        return;
+    }
+
+    // Load config file for defaults using session context
+    var config = session_ctx.loadConfig() orelse config_mod.Config{};
     defer config.deinit(allocator);
 
     // Apply config defaults if args not explicitly provided
@@ -169,7 +202,7 @@ pub fn main(init: std.process.Init) !void {
     // Only apply last_target for page-level commands (not version, pages, list_targets, etc.)
     const needs_target = switch (args.command) {
         .navigate, .screenshot, .pdf, .evaluate, .network, .cookies, .storage, .snapshot, .click, .dblclick, .focus, .type, .fill, .select, .hover, .check, .uncheck, .scroll, .scrollintoview, .drag, .get, .upload, .back, .forward, .reload, .press, .keydown, .keyup, .wait, .mouse, .cursor, .set, .dialog, .dev => true,
-        .tab, .window, .version, .list_targets, .pages, .interactive, .open, .connect, .help => false,
+        .tab, .window, .version, .list_targets, .pages, .interactive, .open, .connect, .session, .help => false,
     };
     if (needs_target and args.use_target == null and config.last_target != null) {
         args.use_target = allocator.dupe(u8, config.last_target.?) catch null;
@@ -237,7 +270,7 @@ pub fn main(init: std.process.Init) !void {
             .pages => try cmdPages(browser, allocator),
             .interactive => try cmdInteractive(browser, args, allocator),
             .snapshot => try cmdSnapshot(browser, args, allocator),
-            .open, .connect, .help => unreachable,
+            .open, .connect, .session, .help => unreachable,
             // All other commands use first real page
             else => try withFirstPage(browser, args, allocator),
         }
@@ -252,6 +285,7 @@ fn buildCtx(args: Args, allocator: std.mem.Allocator) impl.CommandCtx {
         .positional = args.positional,
         .output = args.output,
         .full_page = args.full_page,
+        .session = args.session_ctx,
         .snap_interactive = args.snap_interactive,
         .snap_compact = args.snap_compact,
         .snap_depth = args.snap_depth,
@@ -270,7 +304,7 @@ fn executeWithSession(browser: *cdp.Browser, session_id: []const u8, args: Args,
     defer session.deinit();
 
     // Apply saved emulation settings (user agent, viewport, etc.)
-    impl.applyEmulationSettings(session, allocator, args.io);
+    impl.applyEmulationSettings(session, allocator, args.io, args.session_ctx);
 
     const ctx = buildCtx(args, allocator);
     if (!try impl.dispatchSessionCommand(session, args.command, ctx)) {
@@ -329,7 +363,7 @@ fn withFirstPage(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator
     defer session.deinit();
 
     // Apply saved emulation settings (user agent, viewport, etc.)
-    impl.applyEmulationSettings(session, allocator, args.io);
+    impl.applyEmulationSettings(session, allocator, args.io, args.session_ctx);
 
     const ctx = buildCtx(args, allocator);
     if (!try impl.dispatchSessionCommand(session, args.command, ctx)) {
@@ -394,7 +428,7 @@ fn cmdNavigate(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) 
     defer session.deinit();
 
     // Apply saved emulation settings (user agent, viewport, etc.)
-    impl.applyEmulationSettings(session, allocator, args.io);
+    impl.applyEmulationSettings(session, allocator, args.io, args.session_ctx);
 
     var page = cdp.Page.init(session);
     try page.enable();
@@ -423,7 +457,7 @@ fn cmdNavigate(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) 
     std.debug.print("Target: {s}\n", .{target_id});
 
     // Save target ID to config
-    saveTargetToConfig(target_id, args, allocator, args.io);
+    saveTargetToConfig(target_id, args);
 
     if (created_new) {
         allocator.free(target_id);
@@ -436,7 +470,7 @@ fn cmdScreenshot(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator
     defer session.detach() catch {};
 
     // Apply saved emulation settings (user agent, viewport, etc.)
-    impl.applyEmulationSettings(session, allocator, args.io);
+    impl.applyEmulationSettings(session, allocator, args.io, args.session_ctx);
 
     var page = cdp.Page.init(session);
     try page.enable();
@@ -474,7 +508,7 @@ fn cmdPdf(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void
     defer session.detach() catch {};
 
     // Apply saved emulation settings (user agent, viewport, etc.)
-    impl.applyEmulationSettings(session, allocator, args.io);
+    impl.applyEmulationSettings(session, allocator, args.io, args.session_ctx);
 
     var page = cdp.Page.init(session);
     try page.enable();
@@ -516,7 +550,7 @@ fn cmdEvaluate(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) 
     defer session.detach() catch {};
 
     // Apply saved emulation settings (user agent, viewport, etc.)
-    impl.applyEmulationSettings(session, allocator, args.io);
+    impl.applyEmulationSettings(session, allocator, args.io, args.session_ctx);
 
     var page = cdp.Page.init(session);
     try page.enable();
@@ -568,7 +602,7 @@ fn cmdTab(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void
         const url = if (args.positional.len >= 2) args.positional[1] else "about:blank";
         const target_id = try target.createTarget(url);
         std.debug.print("New tab: {s}\n", .{target_id});
-        saveTargetToConfig(target_id, args, allocator, args.io);
+        saveTargetToConfig(target_id, args);
         return;
     }
 
@@ -629,7 +663,7 @@ fn cmdTab(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void
         }
         const selected = page_tabs[tab_num - 1];
         try target.activateTarget(selected.target_id);
-        saveTargetToConfig(selected.target_id, args, allocator, args.io);
+        saveTargetToConfig(selected.target_id, args);
         std.debug.print("Switched to tab {}: {s} ({s})\n", .{ tab_num, selected.title, selected.url });
         return;
     }
@@ -776,6 +810,7 @@ fn cmdInteractive(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocato
         .session = null,
         .target_id = null,
         .verbose = args.verbose,
+        .session_ctx = args.session_ctx,
     };
     defer state.deinit();
 
@@ -798,7 +833,7 @@ fn cmdInteractive(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocato
 
         // Apply saved emulation settings (user agent, viewport, etc.)
         if (state.session) |s| {
-            impl.applyEmulationSettings(s, allocator, args.io);
+            impl.applyEmulationSettings(s, allocator, args.io, args.session_ctx);
         }
     }
 
@@ -840,7 +875,7 @@ fn cmdSnapshot(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) 
     defer session.deinit();
 
     // Apply saved emulation settings (user agent, viewport, etc.)
-    impl.applyEmulationSettings(session, allocator, args.io);
+    impl.applyEmulationSettings(session, allocator, args.io, args.session_ctx);
 
     const ctx = buildCtx(args, allocator);
     try impl.snapshot(session, ctx);
@@ -878,7 +913,7 @@ fn cmdOpen(args: Args, allocator: std.mem.Allocator, io: std.Io) !void {
 
         std.debug.print("WebSocket URL: {s}\n", .{ws_url});
 
-        // Save to config
+        // Save to config using session context
         const save_config = config_mod.Config{
             .chrome_path = args.chrome_path,
             .data_dir = args.data_dir,
@@ -886,9 +921,11 @@ fn cmdOpen(args: Args, allocator: std.mem.Allocator, io: std.Io) !void {
             .ws_url = ws_url,
             .last_target = null,
         };
-        config_mod.saveConfig(save_config, allocator, io) catch |err| {
-            std.debug.print("Warning: Could not save config: {}\n", .{err});
-        };
+        if (args.session_ctx) |ctx| {
+            ctx.saveConfig(save_config) catch |err| {
+                std.debug.print("Warning: Could not save config: {}\n", .{err});
+            };
+        }
         return;
     }
 
@@ -901,8 +938,20 @@ fn cmdOpen(args: Args, allocator: std.mem.Allocator, io: std.Io) !void {
         };
     };
 
-    // Get data directory
-    const data_dir = args.data_dir orelse "zchrome-profile";
+    // Get data directory (session-specific by default)
+    var data_dir_allocated = false;
+    const data_dir = args.data_dir orelse blk: {
+        if (args.session_ctx) |ctx| {
+            // Use session-specific chrome profile directory
+            const session_dir = session_mod.getSessionDir(allocator, io, ctx.name) catch break :blk @as([]const u8, "zchrome-profile");
+            defer allocator.free(session_dir);
+            const profile_dir = std.fs.path.join(allocator, &.{ session_dir, "chrome-profile" }) catch break :blk @as([]const u8, "zchrome-profile");
+            data_dir_allocated = true;
+            break :blk profile_dir;
+        }
+        break :blk @as([]const u8, "zchrome-profile");
+    };
+    defer if (data_dir_allocated) allocator.free(data_dir);
 
     // Build command arguments
     var argv_list: std.ArrayList([]const u8) = .empty;
@@ -954,9 +1003,11 @@ fn cmdOpen(args: Args, allocator: std.mem.Allocator, io: std.Io) !void {
         .ws_url = null,
         .last_target = null,
     };
-    config_mod.saveConfig(new_config, allocator, io) catch |err| {
-        std.debug.print("Warning: Could not save config: {}\n", .{err});
-    };
+    if (args.session_ctx) |ctx| {
+        ctx.saveConfig(new_config) catch |err| {
+            std.debug.print("Warning: Could not save config: {}\n", .{err});
+        };
+    }
 }
 
 /// Connect command - connect to existing Chrome and get WebSocket URL
@@ -999,9 +1050,11 @@ fn cmdConnect(args: Args, allocator: std.mem.Allocator, io: std.Io) !void {
         .ws_url = ws_url,
         .last_target = args.use_target,
     };
-    config_mod.saveConfig(save_config, allocator, io) catch |err| {
-        std.debug.print("Warning: Could not save config: {}\n", .{err});
-    };
+    if (args.session_ctx) |ctx| {
+        ctx.saveConfig(save_config) catch |err| {
+            std.debug.print("Warning: Could not save config: {}\n", .{err});
+        };
+    }
 
     if (args.verbose) {
         std.debug.print("Config saved successfully.\n", .{});
@@ -1043,6 +1096,8 @@ fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
     var wait_load: ?[]const u8 = null;
     var wait_fn: ?[]const u8 = null;
     var click_js: bool = false;
+    // Session
+    var session_arg: ?[]const u8 = null;
 
     _ = iter.skip(); // Skip program name
 
@@ -1086,6 +1141,9 @@ fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
             } else if (std.mem.eql(u8, arg, "--data-dir")) {
                 const val = iter.next() orelse return error.MissingArgument;
                 data_dir = try allocator.dupe(u8, val);
+            } else if (std.mem.eql(u8, arg, "--session")) {
+                const val = iter.next() orelse return error.MissingArgument;
+                session_arg = try allocator.dupe(u8, val);
             } else if (std.mem.eql(u8, arg, "--timeout")) {
                 const val = iter.next() orelse return error.MissingArgument;
                 timeout_ms = try std.fmt.parseInt(u32, val, 10);
@@ -1172,6 +1230,7 @@ fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
         .wait_load = wait_load,
         .wait_fn = wait_fn,
         .click_js = click_js,
+        .session_arg = session_arg,
     };
 }
 

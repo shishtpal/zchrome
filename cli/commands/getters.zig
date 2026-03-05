@@ -63,7 +63,7 @@ pub fn get(session: *cdp.Session, ctx: CommandCtx) !void {
     const selector = ctx.positional[1];
 
     if (std.mem.eql(u8, subcommand, "text")) {
-        var resolved = try actions_mod.resolveSelector(ctx.allocator, ctx.io, selector);
+        var resolved = try actions_mod.resolveSelector(ctx.allocator, ctx.io, selector, ctx.session);
         defer resolved.deinit();
         if (try actions_mod.getText(session, ctx.allocator, &resolved)) |text| {
             defer ctx.allocator.free(text);
@@ -72,7 +72,7 @@ pub fn get(session: *cdp.Session, ctx: CommandCtx) !void {
             std.debug.print("(not found)\n", .{});
         }
     } else if (std.mem.eql(u8, subcommand, "html")) {
-        var resolved = try actions_mod.resolveSelector(ctx.allocator, ctx.io, selector);
+        var resolved = try actions_mod.resolveSelector(ctx.allocator, ctx.io, selector, ctx.session);
         defer resolved.deinit();
         if (try actions_mod.getHtml(session, ctx.allocator, &resolved)) |html| {
             defer ctx.allocator.free(html);
@@ -81,7 +81,7 @@ pub fn get(session: *cdp.Session, ctx: CommandCtx) !void {
             std.debug.print("(not found)\n", .{});
         }
     } else if (std.mem.eql(u8, subcommand, "dom")) {
-        var resolved = try actions_mod.resolveSelector(ctx.allocator, ctx.io, selector);
+        var resolved = try actions_mod.resolveSelector(ctx.allocator, ctx.io, selector, ctx.session);
         defer resolved.deinit();
 
         const js = try actions_mod.helpers.buildGetterJs(ctx.allocator, &resolved, "el.outerHTML");
@@ -99,7 +99,7 @@ pub fn get(session: *cdp.Session, ctx: CommandCtx) !void {
             std.debug.print("(not found)\n", .{});
         }
     } else if (std.mem.eql(u8, subcommand, "value")) {
-        var resolved = try actions_mod.resolveSelector(ctx.allocator, ctx.io, selector);
+        var resolved = try actions_mod.resolveSelector(ctx.allocator, ctx.io, selector, ctx.session);
         defer resolved.deinit();
         if (try actions_mod.getValue(session, ctx.allocator, &resolved)) |value| {
             defer ctx.allocator.free(value);
@@ -112,7 +112,7 @@ pub fn get(session: *cdp.Session, ctx: CommandCtx) !void {
             std.debug.print("Error: Missing attribute name\nUsage: get attr <selector> <attribute>\n", .{});
             return;
         }
-        var resolved = try actions_mod.resolveSelector(ctx.allocator, ctx.io, selector);
+        var resolved = try actions_mod.resolveSelector(ctx.allocator, ctx.io, selector, ctx.session);
         defer resolved.deinit();
         if (try actions_mod.getAttribute(session, ctx.allocator, &resolved, ctx.positional[2])) |v| {
             defer ctx.allocator.free(v);
@@ -124,7 +124,7 @@ pub fn get(session: *cdp.Session, ctx: CommandCtx) !void {
         const count = try actions_mod.getCount(session, ctx.allocator, selector);
         std.debug.print("{}\n", .{count});
     } else if (std.mem.eql(u8, subcommand, "box")) {
-        var resolved = try actions_mod.resolveSelector(ctx.allocator, ctx.io, selector);
+        var resolved = try actions_mod.resolveSelector(ctx.allocator, ctx.io, selector, ctx.session);
         defer resolved.deinit();
         const pos = actions_mod.getElementPosition(session, ctx.allocator, &resolved) catch {
             std.debug.print("(not found)\n", .{});
@@ -132,7 +132,7 @@ pub fn get(session: *cdp.Session, ctx: CommandCtx) !void {
         };
         std.debug.print("x={d:.0} y={d:.0} width={d:.0} height={d:.0}\n", .{ pos.x, pos.y, pos.width, pos.height });
     } else if (std.mem.eql(u8, subcommand, "styles")) {
-        var resolved = try actions_mod.resolveSelector(ctx.allocator, ctx.io, selector);
+        var resolved = try actions_mod.resolveSelector(ctx.allocator, ctx.io, selector, ctx.session);
         defer resolved.deinit();
         if (try actions_mod.getStyles(session, ctx.allocator, &resolved)) |styles| {
             defer ctx.allocator.free(styles);

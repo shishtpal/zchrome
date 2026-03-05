@@ -52,20 +52,41 @@ pub fn getConfigPath(allocator: std.mem.Allocator, io: std.Io) ![]const u8 {
     return std.fs.path.join(allocator, &.{ exe_dir, config_filename });
 }
 
-/// Load configuration from zchrome.json
+/// Load configuration from zchrome.json (legacy - uses exe directory)
 pub fn loadConfig(allocator: std.mem.Allocator, io: std.Io) ?Config {
     // Try to get exe directory, fall back to cwd
     const exe_dir_path = std.process.executableDirPathAlloc(io, allocator) catch null;
     defer if (exe_dir_path) |p| allocator.free(p);
 
-    const dir = if (exe_dir_path) |p|
-        std.Io.Dir.openDirAbsolute(io, p, .{}) catch std.Io.Dir.cwd()
+    const config_path = if (exe_dir_path) |p|
+        std.fs.path.join(allocator, &.{ p, config_filename }) catch null
     else
-        std.Io.Dir.cwd();
+        null;
+    defer if (config_path) |cp| allocator.free(cp);
 
+    if (config_path) |path| {
+        return loadConfigFromPath(allocator, io, path);
+    }
+
+    return loadConfigFromPath(allocator, io, config_filename);
+}
+
+/// Load configuration from a specific path
+pub fn loadConfigFromPath(allocator: std.mem.Allocator, io: std.Io, path: []const u8) ?Config {
     // Read the file
     var file_buf: [64 * 1024]u8 = undefined;
-    const content = dir.readFile(io, config_filename, &file_buf) catch return null;
+
+    // Try absolute path first
+    const content = blk: {
+        const dir = std.Io.Dir.cwd();
+        break :blk dir.readFile(io, path, &file_buf) catch {
+            // Try as absolute path by opening parent directory
+            const parent = std.fs.path.dirname(path) orelse return null;
+            const filename = std.fs.path.basename(path);
+            const abs_dir = std.Io.Dir.openDirAbsolute(io, parent, .{}) catch return null;
+            break :blk abs_dir.readFile(io, filename, &file_buf) catch return null;
+        };
+    };
 
     // Parse JSON
     var parsed = json.parse(allocator, content, .{}) catch return null;
@@ -137,8 +158,15 @@ pub fn loadConfig(allocator: std.mem.Allocator, io: std.Io) ?Config {
     return config;
 }
 
-/// Save configuration to zchrome.json
+/// Save configuration to zchrome.json (legacy - uses exe directory)
 pub fn saveConfig(config: Config, allocator: std.mem.Allocator, io: std.Io) !void {
+    const config_path = try getConfigPath(allocator, io);
+    defer allocator.free(config_path);
+    try saveConfigToPath(config, allocator, io, config_path);
+}
+
+/// Save configuration to a specific path
+pub fn saveConfigToPath(config: Config, allocator: std.mem.Allocator, io: std.Io, path: []const u8) !void {
     // Build JSON string
     var json_buf: std.ArrayList(u8) = .empty;
     defer json_buf.deinit(allocator);
@@ -147,11 +175,11 @@ pub fn saveConfig(config: Config, allocator: std.mem.Allocator, io: std.Io) !voi
 
     var first = true;
 
-    if (config.chrome_path) |path| {
+    if (config.chrome_path) |cp| {
         if (!first) try json_buf.appendSlice(allocator, ",\n");
         first = false;
         try json_buf.appendSlice(allocator, "  \"chrome_path\": \"");
-        try appendEscapedString(&json_buf, allocator, path);
+        try appendEscapedString(&json_buf, allocator, cp);
         try json_buf.appendSlice(allocator, "\"");
     }
 
@@ -280,23 +308,31 @@ pub fn saveConfig(config: Config, allocator: std.mem.Allocator, io: std.Io) !voi
 
     try json_buf.appendSlice(allocator, "\n}\n");
 
-    // Try to get exe directory, fall back to cwd
-    const exe_dir_path = std.process.executableDirPathAlloc(io, allocator) catch null;
-    defer if (exe_dir_path) |p| allocator.free(p);
+    // Write to file at specified path
+    const parent_dir = std.fs.path.dirname(path);
+    const filename = std.fs.path.basename(path);
 
-    const dir = if (exe_dir_path) |p|
-        std.Io.Dir.openDirAbsolute(io, p, .{}) catch std.Io.Dir.cwd()
-    else
-        std.Io.Dir.cwd();
-
-    // Write to file
-    dir.writeFile(io, .{
-        .sub_path = config_filename,
-        .data = json_buf.items,
-    }) catch |err| {
-        std.debug.print("Error writing config: {}\n", .{err});
-        return err;
-    };
+    if (parent_dir) |pd| {
+        // Absolute or relative path with directory
+        const dir = std.Io.Dir.openDirAbsolute(io, pd, .{}) catch std.Io.Dir.cwd();
+        dir.writeFile(io, .{
+            .sub_path = filename,
+            .data = json_buf.items,
+        }) catch |err| {
+            std.debug.print("Error writing config: {}\n", .{err});
+            return err;
+        };
+    } else {
+        // Just a filename, use cwd
+        const dir = std.Io.Dir.cwd();
+        dir.writeFile(io, .{
+            .sub_path = path,
+            .data = json_buf.items,
+        }) catch |err| {
+            std.debug.print("Error writing config: {}\n", .{err});
+            return err;
+        };
+    }
 }
 
 /// Escape a string for JSON output (handles backslashes and quotes)

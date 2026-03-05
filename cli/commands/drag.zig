@@ -12,9 +12,9 @@ pub fn drag(session: *cdp.Session, ctx: CommandCtx) !void {
         std.debug.print("Usage: drag <source-selector> <target-selector>\n", .{});
         return;
     }
-    var src_resolved = try actions_mod.resolveSelector(ctx.allocator, ctx.io, ctx.positional[0]);
+    var src_resolved = try actions_mod.resolveSelector(ctx.allocator, ctx.io, ctx.positional[0], ctx.session);
     defer src_resolved.deinit();
-    var tgt_resolved = try actions_mod.resolveSelector(ctx.allocator, ctx.io, ctx.positional[1]);
+    var tgt_resolved = try actions_mod.resolveSelector(ctx.allocator, ctx.io, ctx.positional[1], ctx.session);
     defer tgt_resolved.deinit();
     try actions_mod.dragElement(session, ctx.allocator, &src_resolved, &tgt_resolved);
     std.debug.print("Dragged: {s} -> {s}\n", .{ ctx.positional[0], ctx.positional[1] });

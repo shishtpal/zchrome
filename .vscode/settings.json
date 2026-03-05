@@ -2,12 +2,16 @@
     "cSpell.words": [
         "dblclick",
         "domcontentloaded",
+        "Geolocation",
         "keyup",
         "mousedown",
         "mousemove",
         "networkidle",
         "scrollintoview",
         "spinloop",
-        "zchrome"
+        "subcmd",
+        "subcontext",
+        "zchrome",
+        "zsnap"
     ]
 }

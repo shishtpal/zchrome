@@ -6,6 +6,7 @@
 const std = @import("std");
 const cdp = @import("cdp");
 const commands = @import("commands.zig");
+const session_mod = @import("../session.zig");
 
 /// State maintained throughout the interactive session
 pub const InteractiveState = struct {
@@ -17,6 +18,7 @@ pub const InteractiveState = struct {
     verbose: bool,
     mouse_x: ?f64 = null,
     mouse_y: ?f64 = null,
+    session_ctx: ?*const session_mod.SessionContext = null,
 
     pub fn deinit(self: *InteractiveState) void {
         if (self.session) |s| s.deinit();

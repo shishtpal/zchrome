@@ -12,7 +12,7 @@ pub fn upload(session: *cdp.Session, ctx: CommandCtx) !void {
         std.debug.print("Usage: upload <selector> <file1> [file2...]\n", .{});
         return;
     }
-    var resolved = try actions_mod.resolveSelector(ctx.allocator, ctx.io, ctx.positional[0]);
+    var resolved = try actions_mod.resolveSelector(ctx.allocator, ctx.io, ctx.positional[0], ctx.session);
     defer resolved.deinit();
     const files = ctx.positional[1..];
     try actions_mod.uploadFiles(session, ctx.allocator, ctx.io, &resolved, files);

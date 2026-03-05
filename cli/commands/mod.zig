@@ -30,6 +30,7 @@ const dialog_mod = @import("dialog.zig");
 const dispatch_mod = @import("dispatch.zig");
 const help_mod = @import("help.zig");
 const dev_mod = @import("dev.zig");
+const session_cmd_mod = @import("session.zig");
 
 // ─── Type Re-exports ─────────────────────────────────────────────────────────
 
@@ -165,3 +166,8 @@ pub const writeFile = helpers_mod.writeFile;
 
 pub const dev = dev_mod.dev;
 pub const printDevHelp = dev_mod.printDevHelp;
+
+// ─── Session Re-exports ──────────────────────────────────────────────────────
+
+pub const sessionCmd = session_cmd_mod.session;
+pub const printSessionHelp = session_cmd_mod.printSessionHelp;

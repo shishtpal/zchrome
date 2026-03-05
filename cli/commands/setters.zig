@@ -25,8 +25,8 @@ pub fn set(session: *cdp.Session, ctx: CommandCtx) !void {
 
     const sub = ctx.positional[0];
 
-    // Load config for persistence
-    var config = config_mod.loadConfig(ctx.allocator, ctx.io) orelse config_mod.Config{};
+    // Load config for persistence (using session context if available)
+    var config = ctx.loadConfig();
     defer config.deinit(ctx.allocator);
 
     if (std.mem.eql(u8, sub, "viewport")) {
@@ -48,7 +48,7 @@ pub fn set(session: *cdp.Session, ctx: CommandCtx) !void {
 
         config.viewport_width = w;
         config.viewport_height = h;
-        try config_mod.saveConfig(config, ctx.allocator, ctx.io);
+        try ctx.saveConfig(config);
         std.debug.print("Viewport set to {}x{} (page reloaded)\n", .{ w, h });
     } else if (std.mem.eql(u8, sub, "device")) {
         if (ctx.positional.len < 2) {
@@ -77,7 +77,7 @@ pub fn set(session: *cdp.Session, ctx: CommandCtx) !void {
             if (config.user_agent) |old| ctx.allocator.free(old);
             config.user_agent = ctx.allocator.dupe(u8, ua) catch null;
         }
-        try config_mod.saveConfig(config, ctx.allocator, ctx.io);
+        try ctx.saveConfig(config);
         std.debug.print("Device emulation: {s} ({}x{}, page reloaded)\n", .{ device_name, device.width, device.height });
     } else if (std.mem.eql(u8, sub, "geo")) {
         if (ctx.positional.len < 3) {
@@ -97,7 +97,7 @@ pub fn set(session: *cdp.Session, ctx: CommandCtx) !void {
 
         config.geo_lat = lat;
         config.geo_lng = lng;
-        try config_mod.saveConfig(config, ctx.allocator, ctx.io);
+        try ctx.saveConfig(config);
         std.debug.print("Geolocation set to {d}, {d}\n", .{ lat, lng });
     } else if (std.mem.eql(u8, sub, "offline")) {
         if (ctx.positional.len < 2) {
@@ -109,7 +109,7 @@ pub fn set(session: *cdp.Session, ctx: CommandCtx) !void {
         try emulation.applyOfflineMode(session, offline);
 
         config.offline = offline;
-        try config_mod.saveConfig(config, ctx.allocator, ctx.io);
+        try ctx.saveConfig(config);
         std.debug.print("Offline mode: {}\n", .{offline});
     } else if (std.mem.eql(u8, sub, "headers")) {
         if (ctx.positional.len < 2) {
@@ -134,7 +134,7 @@ pub fn set(session: *cdp.Session, ctx: CommandCtx) !void {
         // Save to config (applied on next navigate/session)
         if (config.headers) |old| ctx.allocator.free(old);
         config.headers = ctx.allocator.dupe(u8, json_str) catch null;
-        try config_mod.saveConfig(config, ctx.allocator, ctx.io);
+        try ctx.saveConfig(config);
         std.debug.print("HTTP headers saved (applied on next navigate)\n", .{});
     } else if (std.mem.eql(u8, sub, "credentials")) {
         if (ctx.positional.len < 3) {
@@ -149,7 +149,7 @@ pub fn set(session: *cdp.Session, ctx: CommandCtx) !void {
         config.auth_user = ctx.allocator.dupe(u8, username) catch null;
         if (config.auth_pass) |old| ctx.allocator.free(old);
         config.auth_pass = ctx.allocator.dupe(u8, password) catch null;
-        try config_mod.saveConfig(config, ctx.allocator, ctx.io);
+        try ctx.saveConfig(config);
         std.debug.print("HTTP basic auth saved (applied on next navigate)\n", .{});
     } else if (std.mem.eql(u8, sub, "media")) {
         if (ctx.positional.len < 2) {
@@ -167,7 +167,7 @@ pub fn set(session: *cdp.Session, ctx: CommandCtx) !void {
 
         if (config.media_feature) |old| ctx.allocator.free(old);
         config.media_feature = ctx.allocator.dupe(u8, scheme) catch null;
-        try config_mod.saveConfig(config, ctx.allocator, ctx.io);
+        try ctx.saveConfig(config);
         std.debug.print("Color scheme set to {s} (page reloaded)\n", .{scheme});
     } else if (std.mem.eql(u8, sub, "useragent") or std.mem.eql(u8, sub, "ua")) {
         if (ctx.positional.len < 2) {
@@ -185,7 +185,7 @@ pub fn set(session: *cdp.Session, ctx: CommandCtx) !void {
 
         if (config.user_agent) |old| ctx.allocator.free(old);
         config.user_agent = ctx.allocator.dupe(u8, ua_string) catch null;
-        try config_mod.saveConfig(config, ctx.allocator, ctx.io);
+        try ctx.saveConfig(config);
 
         // Show friendly name if it was a preset
         if (getUserAgent(ua_input) != null) {

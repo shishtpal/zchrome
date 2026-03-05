@@ -112,7 +112,7 @@ pub fn cmdTab(state: *InteractiveState, args: []const []const u8) !void {
 
         // Apply saved emulation settings (user agent, viewport, etc.)
         if (state.session) |s| {
-            impl.applyEmulationSettings(s, state.allocator, state.io);
+            impl.applyEmulationSettings(s, state.allocator, state.io, state.session_ctx);
         }
 
         std.debug.print("Switched to tab {}: {s} ({s})\n", .{ tab_num, selected.title, selected.url });
@@ -207,7 +207,7 @@ pub fn cmdUse(state: *InteractiveState, args: []const []const u8) !void {
 
     // Apply saved emulation settings (user agent, viewport, etc.)
     if (state.session) |s| {
-        impl.applyEmulationSettings(s, state.allocator, state.io);
+        impl.applyEmulationSettings(s, state.allocator, state.io, state.session_ctx);
     }
 
     std.debug.print("Switched to target: {s}\n", .{args[0]});

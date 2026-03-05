@@ -4,6 +4,7 @@ const std = @import("std");
 const cdp = @import("cdp");
 const types = @import("types.zig");
 const actions_mod = @import("../actions/mod.zig");
+const session_mod = @import("../session.zig");
 
 pub const CommandCtx = types.CommandCtx;
 
@@ -34,7 +35,7 @@ pub fn wait(session: *cdp.Session, ctx: CommandCtx) !void {
             std.debug.print("Waited {}ms\n", .{ms});
         } else |_| {
             // Treat as selector
-            try waitForSelector(session, ctx.allocator, ctx.io, arg, timeout_ms);
+            try waitForSelector(session, ctx.allocator, ctx.io, arg, timeout_ms, ctx.session);
         }
     } else {
         printWaitUsage();
@@ -71,8 +72,8 @@ fn waitForTime(ms: u32) void {
     }
 }
 
-fn waitForSelector(session: *cdp.Session, allocator: std.mem.Allocator, io: std.Io, selector: []const u8, timeout_ms: u32) !void {
-    var resolved = try actions_mod.resolveSelector(allocator, io, selector);
+fn waitForSelector(session: *cdp.Session, allocator: std.mem.Allocator, io: std.Io, selector: []const u8, timeout_ms: u32, session_ctx: ?*const session_mod.SessionContext) !void {
+    var resolved = try actions_mod.resolveSelector(allocator, io, selector, session_ctx);
     defer resolved.deinit();
 
     // Build JS to check element visibility (handles both CSS and role-based)

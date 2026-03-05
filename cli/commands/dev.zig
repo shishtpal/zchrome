@@ -15,6 +15,7 @@ const json = @import("json");
 const cdp = @import("cdp");
 const types = @import("types.zig");
 const helpers = @import("helpers.zig");
+const session_mod = @import("../session.zig");
 
 pub const CommandCtx = types.CommandCtx;
 
@@ -58,6 +59,7 @@ pub fn dev(session: *cdp.Session, ctx: CommandCtx) !void {
         .positional = sub_positional,
         .output = ctx.output,
         .full_page = ctx.full_page,
+        .session = ctx.session,
         .snap_interactive = ctx.snap_interactive,
         .snap_compact = ctx.snap_compact,
         .snap_depth = ctx.snap_depth,
@@ -484,21 +486,29 @@ fn state(session: *cdp.Session, ctx: CommandCtx) !void {
     }
 }
 
-/// Get the states directory path (alongside executable)
-fn getStatesDir(allocator: std.mem.Allocator, io: std.Io) ![]const u8 {
-    const exe_dir = std.process.executableDirPathAlloc(io, allocator) catch {
-        return allocator.dupe(u8, "zchrome-states");
+/// Get the states directory path (uses session directory if available)
+fn getStatesDir(ctx: CommandCtx) ![]const u8 {
+    // If session context is available, use session-specific states directory
+    if (ctx.session) |session_ctx| {
+        const session_dir = try session_mod.getSessionDir(ctx.allocator, ctx.io, session_ctx.name);
+        defer ctx.allocator.free(session_dir);
+        return std.fs.path.join(ctx.allocator, &.{ session_dir, "states" });
+    }
+
+    // Fallback to global states directory alongside executable
+    const exe_dir = std.process.executableDirPathAlloc(ctx.io, ctx.allocator) catch {
+        return ctx.allocator.dupe(u8, "zchrome-states");
     };
-    defer allocator.free(exe_dir);
-    return std.fs.path.join(allocator, &.{ exe_dir, "zchrome-states" });
+    defer ctx.allocator.free(exe_dir);
+    return std.fs.path.join(ctx.allocator, &.{ exe_dir, "zchrome-states" });
 }
 
 /// Ensure states directory exists
-fn ensureStatesDir(allocator: std.mem.Allocator, io: std.Io) ![]const u8 {
-    const states_dir = try getStatesDir(allocator, io);
+fn ensureStatesDir(ctx: CommandCtx) ![]const u8 {
+    const states_dir = try getStatesDir(ctx);
     const dir = std.Io.Dir.cwd();
     const perms: std.Io.File.Permissions = @enumFromInt(0o755);
-    dir.createDir(io, states_dir, perms) catch |err| {
+    dir.createDir(ctx.io, states_dir, perms) catch |err| {
         if (err != error.PathAlreadyExists) {
             std.debug.print("Warning: Could not create states directory: {}\n", .{err});
         }
@@ -584,7 +594,7 @@ fn stateSave(session: *cdp.Session, ctx: CommandCtx, path: []const u8) !void {
     defer if (!std.mem.endsWith(u8, filename, ".json")) ctx.allocator.free(filename_with_ext);
 
     // Save to zchrome-states directory (alongside executable)
-    const states_dir = try ensureStatesDir(ctx.allocator, ctx.io);
+    const states_dir = try ensureStatesDir(ctx);
     defer ctx.allocator.free(states_dir);
     const output_path = try std.fs.path.join(ctx.allocator, &.{ states_dir, filename_with_ext });
     defer ctx.allocator.free(output_path);
@@ -601,7 +611,7 @@ fn stateLoad(session: *cdp.Session, ctx: CommandCtx, path: []const u8) !void {
 
     // Try zchrome-states directory first, then fall back to provided path
     const filename = std.fs.path.basename(path);
-    const states_dir = getStatesDir(ctx.allocator, ctx.io) catch path;
+    const states_dir = getStatesDir(ctx) catch path;
     const states_path = std.fs.path.join(ctx.allocator, &.{ states_dir, filename }) catch path;
     defer if (states_path.ptr != path.ptr) ctx.allocator.free(states_path);
     defer if (states_dir.ptr != path.ptr) ctx.allocator.free(states_dir);
@@ -716,7 +726,7 @@ fn stateLoad(session: *cdp.Session, ctx: CommandCtx, path: []const u8) !void {
 
 /// List saved state files
 fn stateList(ctx: CommandCtx) !void {
-    const states_dir = try getStatesDir(ctx.allocator, ctx.io);
+    const states_dir = try getStatesDir(ctx);
     defer ctx.allocator.free(states_dir);
 
     const dir = std.Io.Dir.openDirAbsolute(ctx.io, states_dir, .{ .iterate = true }) catch {
@@ -750,7 +760,7 @@ fn stateShow(ctx: CommandCtx, path: []const u8) !void {
 
     // Try zchrome-states directory first, then fall back to provided path
     const filename = std.fs.path.basename(path);
-    const states_dir = getStatesDir(ctx.allocator, ctx.io) catch path;
+    const states_dir = getStatesDir(ctx) catch path;
     const states_path = std.fs.path.join(ctx.allocator, &.{ states_dir, filename }) catch path;
     defer if (states_path.ptr != path.ptr) ctx.allocator.free(states_path);
     defer if (states_dir.ptr != path.ptr) ctx.allocator.free(states_dir);
@@ -792,7 +802,7 @@ fn stateShow(ctx: CommandCtx, path: []const u8) !void {
 
 /// Rename state file
 fn stateRename(ctx: CommandCtx, old_name: []const u8, new_name: []const u8) !void {
-    const states_dir = try getStatesDir(ctx.allocator, ctx.io);
+    const states_dir = try getStatesDir(ctx);
     defer ctx.allocator.free(states_dir);
 
     // Use basenames only and ensure .json extension
@@ -823,7 +833,7 @@ fn stateRename(ctx: CommandCtx, old_name: []const u8, new_name: []const u8) !voi
 /// Clear state files
 fn stateClear(ctx: CommandCtx, clear_all: bool, specific_name: ?[]const u8) !void {
     if (clear_all) {
-        const states_dir = try getStatesDir(ctx.allocator, ctx.io);
+        const states_dir = try getStatesDir(ctx);
         defer ctx.allocator.free(states_dir);
 
         const dir = std.Io.Dir.openDirAbsolute(ctx.io, states_dir, .{ .iterate = true }) catch {
@@ -843,7 +853,7 @@ fn stateClear(ctx: CommandCtx, clear_all: bool, specific_name: ?[]const u8) !voi
 
         std.debug.print("Cleared {} state file(s)\n", .{count});
     } else if (specific_name) |name| {
-        const states_dir = try getStatesDir(ctx.allocator, ctx.io);
+        const states_dir = try getStatesDir(ctx);
         defer ctx.allocator.free(states_dir);
 
         // Use basename and ensure .json extension
@@ -869,7 +879,7 @@ fn stateClear(ctx: CommandCtx, clear_all: bool, specific_name: ?[]const u8) !voi
 
 /// Clean old state files
 fn stateClean(ctx: CommandCtx, days: u32) !void {
-    const states_dir = try getStatesDir(ctx.allocator, ctx.io);
+    const states_dir = try getStatesDir(ctx);
     defer ctx.allocator.free(states_dir);
 
     std.debug.print("Cleaning states older than {} days in {s}\n", .{ days, states_dir });

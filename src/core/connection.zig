@@ -152,11 +152,15 @@ pub const Connection = struct {
                         return error.ProtocolError;
                     }
 
-                    // Return the result
-                    if (parsed.get("result")) |_| {
-                        // We need to extract just the result part
-                        // For now, return the full parsed value and let caller extract result
-                        return parsed;
+                    // Return just the result object (not the full response)
+                    if (parsed.object.get("result")) |result_val| {
+                        // Clone the result value so we can free the full response
+                        const result_clone = result_val.clone(self.allocator) catch {
+                            parsed.deinit(self.allocator);
+                            return error.OutOfMemory;
+                        };
+                        parsed.deinit(self.allocator);
+                        return result_clone;
                     }
 
                     // Empty result is valid for some commands

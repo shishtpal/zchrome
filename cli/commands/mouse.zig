@@ -3,7 +3,6 @@
 const std = @import("std");
 const cdp = @import("cdp");
 const types = @import("types.zig");
-const config_mod = @import("../config.zig");
 const actions_mod = @import("../actions/mod.zig");
 
 pub const CommandCtx = types.CommandCtx;
@@ -37,13 +36,13 @@ pub fn mouse(session: *cdp.Session, ctx: CommandCtx) !void {
     const args = if (ctx.positional.len > 1) ctx.positional[1..] else &[_][]const u8{};
 
     if (std.mem.eql(u8, subcommand, "move")) {
-        try mouseMoveCmd(session, ctx.allocator, ctx.io, args);
+        try mouseMoveCmd(session, ctx, args);
     } else if (std.mem.eql(u8, subcommand, "down")) {
-        try mouseDownCmd(session, ctx.allocator, ctx.io, args);
+        try mouseDownCmd(session, ctx, args);
     } else if (std.mem.eql(u8, subcommand, "up")) {
-        try mouseUpCmd(session, ctx.allocator, ctx.io, args);
+        try mouseUpCmd(session, ctx, args);
     } else if (std.mem.eql(u8, subcommand, "wheel")) {
-        try mouseWheelCmd(session, ctx.allocator, ctx.io, args);
+        try mouseWheelCmd(session, ctx, args);
     } else {
         std.debug.print("Unknown mouse subcommand: {s}\n", .{subcommand});
         printMouseUsage();
@@ -69,7 +68,7 @@ fn printMouseUsage() void {
     , .{});
 }
 
-fn mouseMoveCmd(session: *cdp.Session, allocator: std.mem.Allocator, io: std.Io, args: []const []const u8) !void {
+fn mouseMoveCmd(session: *cdp.Session, ctx: CommandCtx, args: []const []const u8) !void {
     if (args.len < 2) {
         std.debug.print("Usage: mouse move <x> <y>\n", .{});
         return;
@@ -87,22 +86,22 @@ fn mouseMoveCmd(session: *cdp.Session, allocator: std.mem.Allocator, io: std.Io,
     try actions_mod.mouseMove(session, x, y);
     std.debug.print("Mouse moved to ({d}, {d})\n", .{ x, y });
 
-    // Save position to config; defer runs after saveConfig below
-    var config = config_mod.loadConfig(allocator, io) orelse config_mod.Config{};
-    defer config.deinit(allocator);
+    // Save position to config using session context
+    var config = ctx.loadConfig();
+    defer config.deinit(ctx.allocator);
     config.last_mouse_x = x;
     config.last_mouse_y = y;
-    config_mod.saveConfig(config, allocator, io) catch |err| {
+    ctx.saveConfig(config) catch |err| {
         std.debug.print("Warning: Could not save mouse position: {}\n", .{err});
     };
 }
 
-fn mouseDownCmd(session: *cdp.Session, allocator: std.mem.Allocator, io: std.Io, args: []const []const u8) !void {
+fn mouseDownCmd(session: *cdp.Session, ctx: CommandCtx, args: []const []const u8) !void {
     const button = parseMouseButton(if (args.len > 0) args[0] else null);
 
     // Get position from config
-    var config = config_mod.loadConfig(allocator, io) orelse config_mod.Config{};
-    defer config.deinit(allocator);
+    var config = ctx.loadConfig();
+    defer config.deinit(ctx.allocator);
 
     const x = config.last_mouse_x orelse blk: {
         std.debug.print("Warning: No mouse position set. Use 'mouse move <x> <y>' first.\n", .{});
@@ -114,12 +113,12 @@ fn mouseDownCmd(session: *cdp.Session, allocator: std.mem.Allocator, io: std.Io,
     std.debug.print("Mouse button {s} pressed at ({d}, {d})\n", .{ @tagName(button), x, y });
 }
 
-fn mouseUpCmd(session: *cdp.Session, allocator: std.mem.Allocator, io: std.Io, args: []const []const u8) !void {
+fn mouseUpCmd(session: *cdp.Session, ctx: CommandCtx, args: []const []const u8) !void {
     const button = parseMouseButton(if (args.len > 0) args[0] else null);
 
     // Get position from config
-    var config = config_mod.loadConfig(allocator, io) orelse config_mod.Config{};
-    defer config.deinit(allocator);
+    var config = ctx.loadConfig();
+    defer config.deinit(ctx.allocator);
 
     const x = config.last_mouse_x orelse blk: {
         std.debug.print("Warning: No mouse position set. Use 'mouse move <x> <y>' first.\n", .{});
@@ -131,7 +130,7 @@ fn mouseUpCmd(session: *cdp.Session, allocator: std.mem.Allocator, io: std.Io, a
     std.debug.print("Mouse button {s} released at ({d}, {d})\n", .{ @tagName(button), x, y });
 }
 
-fn mouseWheelCmd(session: *cdp.Session, allocator: std.mem.Allocator, io: std.Io, args: []const []const u8) !void {
+fn mouseWheelCmd(session: *cdp.Session, ctx: CommandCtx, args: []const []const u8) !void {
     if (args.len < 1) {
         std.debug.print("Usage: mouse wheel <dy> [dx]\n", .{});
         return;
@@ -147,8 +146,8 @@ fn mouseWheelCmd(session: *cdp.Session, allocator: std.mem.Allocator, io: std.Io
         0;
 
     // Get position from config
-    var config = config_mod.loadConfig(allocator, io) orelse config_mod.Config{};
-    defer config.deinit(allocator);
+    var config = ctx.loadConfig();
+    defer config.deinit(ctx.allocator);
 
     const x = config.last_mouse_x orelse blk: {
         std.debug.print("Warning: No mouse position set. Use 'mouse move <x> <y>' first.\n", .{});

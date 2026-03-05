@@ -3,6 +3,7 @@
 const std = @import("std");
 const cdp = @import("cdp");
 const config_mod = @import("../config.zig");
+const session_mod = @import("../session.zig");
 
 pub fn applyUserAgent(session: *cdp.Session, ua: []const u8) !void {
     // Enable domains first
@@ -52,8 +53,9 @@ pub fn applyMediaFeature(session: *cdp.Session, scheme: []const u8) !void {
 
 /// Apply saved emulation settings from config to a session.
 /// Call this after attaching to a target to ensure user agent and other settings persist.
-pub fn applyEmulationSettings(session: *cdp.Session, allocator: std.mem.Allocator, io: std.Io) void {
-    var config = config_mod.loadConfig(allocator, io) orelse return;
+/// If session_ctx is provided, loads config from session-specific path.
+pub fn applyEmulationSettings(session: *cdp.Session, allocator: std.mem.Allocator, io: std.Io, session_ctx: ?*const session_mod.SessionContext) void {
+    var config = if (session_ctx) |ctx| ctx.loadConfig() orelse return else config_mod.loadConfig(allocator, io) orelse return;
     defer config.deinit(allocator);
 
     if (config.user_agent) |ua| {

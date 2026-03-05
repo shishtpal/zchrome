@@ -85,7 +85,7 @@ pub fn cursor(session: *cdp.Session, ctx: CommandCtx) !void {
     if (std.mem.eql(u8, subcommand, "active")) {
         try cursorActive(session, ctx.allocator);
     } else if (std.mem.eql(u8, subcommand, "hover")) {
-        try cursorHover(session, ctx.allocator, ctx.io);
+        try cursorHover(session, ctx);
     } else if (std.mem.eql(u8, subcommand, "record")) {
         try cursorRecord(session, ctx.allocator, ctx.io, args);
     } else if (std.mem.eql(u8, subcommand, "replay")) {
@@ -129,10 +129,10 @@ fn cursorActive(session: *cdp.Session, allocator: std.mem.Allocator) !void {
 }
 
 /// Show the element under the mouse cursor
-fn cursorHover(session: *cdp.Session, allocator: std.mem.Allocator, io: std.Io) !void {
-    // Get mouse position from config
-    var config = config_mod.loadConfig(allocator, io) orelse config_mod.Config{};
-    defer config.deinit(allocator);
+fn cursorHover(session: *cdp.Session, ctx: CommandCtx) !void {
+    // Get mouse position from config (using session context if available)
+    var config = ctx.loadConfig();
+    defer config.deinit(ctx.allocator);
 
     const x = config.last_mouse_x orelse {
         std.debug.print("No mouse position recorded. Use 'mouse move <x> <y>' first.\n", .{});
@@ -147,14 +147,14 @@ fn cursorHover(session: *cdp.Session, allocator: std.mem.Allocator, io: std.Io) 
     try runtime.enable();
 
     // Replace ELEMENT_VAR with document.elementFromPoint(x, y)
-    const element_var = try std.fmt.allocPrint(allocator, "document.elementFromPoint({d}, {d})", .{ x, y });
-    defer allocator.free(element_var);
+    const element_var = try std.fmt.allocPrint(ctx.allocator, "document.elementFromPoint({d}, {d})", .{ x, y });
+    defer ctx.allocator.free(element_var);
 
-    const js = try std.mem.replaceOwned(u8, allocator, GET_ELEMENT_INFO_JS, "ELEMENT_VAR", element_var);
-    defer allocator.free(js);
+    const js = try std.mem.replaceOwned(u8, ctx.allocator, GET_ELEMENT_INFO_JS, "ELEMENT_VAR", element_var);
+    defer ctx.allocator.free(js);
 
-    var result = try runtime.evaluate(allocator, js, .{ .return_by_value = true });
-    defer result.deinit(allocator);
+    var result = try runtime.evaluate(ctx.allocator, js, .{ .return_by_value = true });
+    defer result.deinit(ctx.allocator);
 
     std.debug.print("Element at cursor ({d:.0}, {d:.0}):\n", .{ x, y });
 

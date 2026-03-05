@@ -35,6 +35,7 @@ export default defineConfig({
           items: [
             { text: 'Browser Management', link: '/guide/browser-management' },
             { text: 'Sessions & Targets', link: '/guide/sessions' },
+            { text: 'CLI Sessions', link: '/guide/cli-sessions' },
             { text: 'Error Handling', link: '/guide/error-handling' },
             { text: 'Memory Management', link: '/guide/memory-management' },
           ]

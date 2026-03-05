@@ -57,7 +57,7 @@ fn extractTargetIdFromUrl(url: []const u8) ?[]const u8 {
 const Args = struct {
     url: ?[]const u8 = null,
     headless: cdp.Headless = .new,
-    port: u16 = 9222,
+    port: ?u16 = null, // null means use config or default (9222)
     chrome_path: ?[]const u8 = null,
     data_dir: ?[]const u8 = null,
     timeout_ms: u32 = 30_000,
@@ -198,6 +198,10 @@ pub fn main(init: std.process.Init) !void {
     }
     if (args.url == null and config.ws_url != null) {
         args.url = allocator.dupe(u8, config.ws_url.?) catch null;
+    }
+    // Apply port from config if not explicitly provided via --port
+    if (args.port == null) {
+        args.port = config.port; // Config defaults to 9222 if not set
     }
     // Only apply last_target for page-level commands (not version, pages, list_targets, etc.)
     const needs_target = switch (args.command) {
@@ -906,33 +910,54 @@ fn findFirstRealPage(pages: []cdp.TargetInfo) ?*cdp.TargetInfo {
 
 /// Open command - launch Chrome with remote debugging
 fn cmdOpen(args: Args, allocator: std.mem.Allocator, io: std.Io) !void {
-    const port = args.port;
+    const port = args.port orelse 9222;
 
     // Check if Chrome is already running on this port
     if (http_mod.isChromeRunning(io, port)) {
-        std.debug.print("Chrome already running on port {}\n", .{port});
-
-        // Try to get the WebSocket URL
-        const ws_url = http_mod.getChromeWsUrl(allocator, io, port) catch |err| {
+        // Try to get the WebSocket URL of the running Chrome
+        const current_ws_url = http_mod.getChromeWsUrl(allocator, io, port) catch |err| {
             std.debug.print("Warning: Could not get WebSocket URL: {}\n", .{err});
             return;
         };
-        defer allocator.free(ws_url);
+        defer allocator.free(current_ws_url);
 
-        std.debug.print("WebSocket URL: {s}\n", .{ws_url});
-
-        // Save to config using session context
-        const save_config = config_mod.Config{
-            .chrome_path = args.chrome_path,
-            .data_dir = args.data_dir,
-            .port = port,
-            .ws_url = ws_url,
-            .last_target = null,
-        };
+        // Check if this Chrome instance belongs to the current session
+        // by comparing the ws_url with what's saved in the session's config
+        var is_same_session = false;
         if (args.session_ctx) |ctx| {
-            ctx.saveConfig(save_config) catch |err| {
-                std.debug.print("Warning: Could not save config: {}\n", .{err});
+            if (ctx.loadConfig()) |cfg| {
+                var config = cfg;
+                defer config.deinit(allocator);
+                if (config.ws_url) |saved_ws_url| {
+                    is_same_session = std.mem.eql(u8, saved_ws_url, current_ws_url);
+                }
+            }
+        }
+
+        if (is_same_session) {
+            // Same session - just show the existing connection info
+            std.debug.print("Chrome already running on port {}\n", .{port});
+            std.debug.print("WebSocket URL: {s}\n", .{current_ws_url});
+
+            // Update config with current ws_url (it might have changed)
+            const save_config = config_mod.Config{
+                .chrome_path = args.chrome_path,
+                .data_dir = args.data_dir,
+                .port = port,
+                .ws_url = current_ws_url,
+                .last_target = null,
             };
+            if (args.session_ctx) |ctx| {
+                ctx.saveConfig(save_config) catch |err| {
+                    std.debug.print("Warning: Could not save config: {}\n", .{err});
+                };
+            }
+        } else {
+            // Different session or unknown - show error with guidance
+            std.debug.print("Error: Port {} is already in use by another Chrome instance.\n\n", .{port});
+            std.debug.print("To run multiple Chrome instances for different sessions, use --port:\n", .{});
+            std.debug.print("  zchrome open --port {}\n\n", .{port + 1});
+            std.debug.print("The port will be saved to this session's config for future commands.\n", .{});
         }
         return;
     }
@@ -1020,7 +1045,7 @@ fn cmdOpen(args: Args, allocator: std.mem.Allocator, io: std.Io) !void {
 
 /// Connect command - connect to existing Chrome and get WebSocket URL
 fn cmdConnect(args: Args, allocator: std.mem.Allocator, io: std.Io) !void {
-    const port = args.port;
+    const port = args.port orelse 9222;
 
     if (args.verbose) {
         std.debug.print("Checking if Chrome is running on port {}...\n", .{port});
@@ -1085,7 +1110,7 @@ fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
     var command: Args.Command = .help;
     var url: ?[]const u8 = null;
     var headless: cdp.Headless = .off;
-    var port: u16 = 9222;
+    var port: ?u16 = null;
     var chrome_path: ?[]const u8 = null;
     var data_dir: ?[]const u8 = null;
     var timeout_ms: u32 = 30_000;

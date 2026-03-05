@@ -150,7 +150,15 @@ zchrome open --chrome "C:\Program Files\Google\Chrome\Application\chrome.exe" --
 
 # Launch in headless mode
 zchrome open --headless
+
+# Launch on a specific port (for multiple sessions)
+zchrome --session youtube open --port 9223
 ```
+
+**Port handling:**
+- The port is saved to the session's config and reused automatically
+- If the port is already in use by another Chrome instance, an error is shown with guidance to use a different port
+- If reconnecting to the same session's Chrome, the existing connection info is displayed
 
 ### connect
 

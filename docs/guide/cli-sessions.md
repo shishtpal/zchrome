@@ -210,15 +210,39 @@ zchrome --session mobile screenshot --output mobile.png
 Run multiple Chrome instances on different ports:
 
 ```bash
-# Session 1: Port 9222
-zchrome --session dev1 open --port 9222 --data-dir ~/chrome-dev1
+# Session 1: Port 9222 (default)
+zchrome --session dev1 open
 
 # Session 2: Port 9223 (different terminal)
-zchrome --session dev2 open --port 9223 --data-dir ~/chrome-dev2
+zchrome --session dev2 open --port 9223
 
-# Commands target the correct instance
+# Commands target the correct instance automatically
+# (each session remembers its port)
 zchrome --session dev1 navigate https://example.com
 zchrome --session dev2 navigate https://google.com
+```
+
+**Port persistence:** When you specify `--port`, it's saved to the session's config. Future commands automatically use the saved port - no need to repeat `--port`.
+
+**Port conflict detection:** If you try to open a new session on a port already in use by another Chrome instance:
+
+```
+> $env:ZCHROME_SESSION="youtube"
+> zchrome open
+Error: Port 9222 is already in use by another Chrome instance.
+
+To run multiple Chrome instances for different sessions, use --port:
+  zchrome open --port 9223
+
+The port will be saved to this session's config for future commands.
+```
+
+**Reconnecting to same session:** If the port is already used by the *same* session's Chrome instance, zchrome reconnects normally:
+
+```
+> zchrome open
+Chrome already running on port 9223
+WebSocket URL: ws://127.0.0.1:9223/devtools/browser/...
 ```
 
 ### Interactive Mode with Sessions

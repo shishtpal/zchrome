@@ -15,12 +15,12 @@ pub const DOM = struct {
 
     /// Enable DOM domain
     pub fn enable(self: *Self) !void {
-        _ = try self.session.sendCommand("DOM.enable", .{});
+        try self.session.sendCommandIgnoreResult("DOM.enable", .{});
     }
 
     /// Disable DOM domain
     pub fn disable(self: *Self) !void {
-        _ = try self.session.sendCommand("DOM.disable", .{});
+        try self.session.sendCommandIgnoreResult("DOM.disable", .{});
     }
 
     /// Get document
@@ -75,7 +75,7 @@ pub const DOM = struct {
 
     /// Set outer HTML
     pub fn setOuterHTML(self: *Self, node_id: i64, outer_html: []const u8) !void {
-        _ = try self.session.sendCommand("DOM.setOuterHTML", .{
+        try self.session.sendCommandIgnoreResult("DOM.setOuterHTML", .{
             .node_id = node_id,
             .outer_html = outer_html,
         });
@@ -105,7 +105,7 @@ pub const DOM = struct {
 
     /// Set attribute value
     pub fn setAttributeValue(self: *Self, node_id: i64, name: []const u8, value: []const u8) !void {
-        _ = try self.session.sendCommand("DOM.setAttributeValue", .{
+        try self.session.sendCommandIgnoreResult("DOM.setAttributeValue", .{
             .node_id = node_id,
             .name = name,
             .value = value,
@@ -114,7 +114,7 @@ pub const DOM = struct {
 
     /// Remove attribute
     pub fn removeAttribute(self: *Self, node_id: i64, name: []const u8) !void {
-        _ = try self.session.sendCommand("DOM.removeAttribute", .{
+        try self.session.sendCommandIgnoreResult("DOM.removeAttribute", .{
             .node_id = node_id,
             .name = name,
         });
@@ -122,21 +122,21 @@ pub const DOM = struct {
 
     /// Remove node
     pub fn removeNode(self: *Self, node_id: i64) !void {
-        _ = try self.session.sendCommand("DOM.removeNode", .{
+        try self.session.sendCommandIgnoreResult("DOM.removeNode", .{
             .node_id = node_id,
         });
     }
 
     /// Focus node
     pub fn focus(self: *Self, node_id: i64) !void {
-        _ = try self.session.sendCommand("DOM.focus", .{
+        try self.session.sendCommandIgnoreResult("DOM.focus", .{
             .node_id = node_id,
         });
     }
 
     /// Set files for file input element (for file uploads)
     pub fn setFileInputFiles(self: *Self, node_id: i64, files: []const []const u8) !void {
-        _ = try self.session.sendCommand("DOM.setFileInputFiles", .{
+        try self.session.sendCommandIgnoreResult("DOM.setFileInputFiles", .{
             .node_id = node_id,
             .files = files,
         });

@@ -14,12 +14,12 @@ pub const Network = struct {
 
     /// Enable network domain
     pub fn enable(self: *Self) !void {
-        _ = try self.session.sendCommand("Network.enable", .{});
+        try self.session.sendCommandIgnoreResult("Network.enable", .{});
     }
 
     /// Disable network domain
     pub fn disable(self: *Self) !void {
-        _ = try self.session.sendCommand("Network.disable", .{});
+        try self.session.sendCommandIgnoreResult("Network.disable", .{});
     }
 
     /// Get response body for a given request
@@ -44,14 +44,14 @@ pub const Network = struct {
 
     /// Set request interception (deprecated, use Fetch domain instead)
     pub fn setRequestInterception(self: *Self, patterns: []const RequestPattern) !void {
-        _ = try self.session.sendCommand("Network.setRequestInterception", .{
+        try self.session.sendCommandIgnoreResult("Network.setRequestInterception", .{
             .patterns = patterns,
         });
     }
 
     /// Continue intercepted request
     pub fn continueInterceptedRequest(self: *Self, interception_id: []const u8, opts: ContinueInterceptedRequestOptions) !void {
-        _ = try self.session.sendCommand("Network.continueInterceptedRequest", .{
+        try self.session.sendCommandIgnoreResult("Network.continueInterceptedRequest", .{
             .interceptionId = interception_id,
             .errorReason = opts.error_reason,
             .rawResponse = opts.raw_response,
@@ -64,31 +64,31 @@ pub const Network = struct {
 
     /// Set cache disabled
     pub fn setCacheDisabled(self: *Self, disabled: bool) !void {
-        _ = try self.session.sendCommand("Network.setCacheDisabled", .{
+        try self.session.sendCommandIgnoreResult("Network.setCacheDisabled", .{
             .cacheDisabled = disabled,
         });
     }
 
     /// Clear browser cache
     pub fn clearBrowserCache(self: *Self) !void {
-        _ = try self.session.sendCommand("Network.clearBrowserCache", .{});
+        try self.session.sendCommandIgnoreResult("Network.clearBrowserCache", .{});
     }
 
     /// Clear browser cookies
     pub fn clearBrowserCookies(self: *Self) !void {
-        _ = try self.session.sendCommand("Network.clearBrowserCookies", .{});
+        try self.session.sendCommandIgnoreResult("Network.clearBrowserCookies", .{});
     }
 
     /// Set extra HTTP headers to be sent with every request
     pub fn setExtraHTTPHeaders(self: *Self, headers: json.Value) !void {
-        _ = try self.session.sendCommand("Network.setExtraHTTPHeaders", .{
+        try self.session.sendCommandIgnoreResult("Network.setExtraHTTPHeaders", .{
             .headers = headers,
         });
     }
 
     /// Emulate network conditions (offline, latency, throughput)
     pub fn emulateNetworkConditions(self: *Self, opts: NetworkConditions) !void {
-        _ = try self.session.sendCommand("Network.emulateNetworkConditions", .{
+        try self.session.sendCommandIgnoreResult("Network.emulateNetworkConditions", .{
             .offline = opts.offline,
             .latency = opts.latency,
             .downloadThroughput = opts.download_throughput,
@@ -99,7 +99,7 @@ pub const Network = struct {
 
     /// Enable network tracking, network events will now be delivered to the client
     pub fn enableWithOptions(self: *Self, opts: EnableOptions) !void {
-        _ = try self.session.sendCommand("Network.enable", .{
+        try self.session.sendCommandIgnoreResult("Network.enable", .{
             .maxTotalBufferSize = opts.max_total_buffer_size,
             .maxResourceBufferSize = opts.max_resource_buffer_size,
             .maxPostDataSize = opts.max_post_data_size,
@@ -108,14 +108,14 @@ pub const Network = struct {
 
     /// Set blocked URLs (requests to these URLs will fail)
     pub fn setBlockedURLs(self: *Self, urls: []const []const u8) !void {
-        _ = try self.session.sendCommand("Network.setBlockedURLs", .{
+        try self.session.sendCommandIgnoreResult("Network.setBlockedURLs", .{
             .urls = urls,
         });
     }
 
     /// Replay XHR request
     pub fn replayXHR(self: *Self, request_id: []const u8) !void {
-        _ = try self.session.sendCommand("Network.replayXHR", .{
+        try self.session.sendCommandIgnoreResult("Network.replayXHR", .{
             .requestId = request_id,
         });
     }

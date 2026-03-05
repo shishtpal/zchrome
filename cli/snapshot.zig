@@ -35,6 +35,7 @@ pub const SnapshotResult = struct {
         self.allocator.free(self.tree);
         var iter = self.refs.iterator();
         while (iter.next()) |entry| {
+            self.allocator.free(entry.key_ptr.*); // Free the key (ref ID)
             var ref = entry.value_ptr.*;
             ref.deinit(self.allocator);
         }
@@ -308,10 +309,9 @@ pub const SnapshotProcessor = struct {
 
             if (should_have_ref) {
                 const ref_id = try self.nextRef();
-                errdefer self.allocator.free(ref_id);
+                defer self.allocator.free(ref_id); // Free after duping for ElementRef and refs map
 
                 const selector = try self.buildSelector(parsed.role, parsed.name);
-                errdefer self.allocator.free(selector);
 
                 const nth = try self.getNextIndex(parsed.role, parsed.name);
 

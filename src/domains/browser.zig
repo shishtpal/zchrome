@@ -27,7 +27,7 @@ pub const BrowserDomain = struct {
 
     /// Close browser
     pub fn close(self: *Self) !void {
-        _ = try self.connection.sendCommand("Browser.close", .{});
+        try self.connection.sendCommandIgnoreResult("Browser.close", .{});
     }
 
     /// Get window for target
@@ -44,7 +44,7 @@ pub const BrowserDomain = struct {
 
     /// Set window bounds
     pub fn setWindowBounds(self: *Self, window_id: i64, bounds: Bounds) !void {
-        _ = try self.connection.sendCommand("Browser.setWindowBounds", .{
+        try self.connection.sendCommandIgnoreResult("Browser.setWindowBounds", .{
             .window_id = window_id,
             .bounds = bounds,
         });

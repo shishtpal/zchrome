@@ -14,7 +14,7 @@ pub const Fetch = struct {
 
     /// Enable fetch domain
     pub fn enable(self: *Self, patterns: ?[]const RequestPattern, handle_auth_requests: ?bool) !void {
-        _ = try self.session.sendCommand("Fetch.enable", .{
+        try self.session.sendCommandIgnoreResult("Fetch.enable", .{
             .patterns = patterns,
             .handle_auth_requests = handle_auth_requests,
         });
@@ -22,17 +22,17 @@ pub const Fetch = struct {
 
     /// Disable fetch domain
     pub fn disable(self: *Self) !void {
-        _ = try self.session.sendCommand("Fetch.disable", .{});
+        try self.session.sendCommandIgnoreResult("Fetch.disable", .{});
     }
 
     /// Fulfill a request
     pub fn fulfillRequest(self: *Self, params: FulfillParams) !void {
-        _ = try self.session.sendCommand("Fetch.fulfillRequest", params);
+        try self.session.sendCommandIgnoreResult("Fetch.fulfillRequest", params);
     }
 
     /// Fail a request
     pub fn failRequest(self: *Self, request_id: []const u8, reason: []const u8) !void {
-        _ = try self.session.sendCommand("Fetch.failRequest", .{
+        try self.session.sendCommandIgnoreResult("Fetch.failRequest", .{
             .request_id = request_id,
             .error_reason = reason,
         });
@@ -40,12 +40,12 @@ pub const Fetch = struct {
 
     /// Continue a request
     pub fn continueRequest(self: *Self, params: ContinueParams) !void {
-        _ = try self.session.sendCommand("Fetch.continueRequest", params);
+        try self.session.sendCommandIgnoreResult("Fetch.continueRequest", params);
     }
 
     /// Continue with auth
     pub fn continueWithAuth(self: *Self, request_id: []const u8, response: AuthResponse) !void {
-        _ = try self.session.sendCommand("Fetch.continueWithAuth", .{
+        try self.session.sendCommandIgnoreResult("Fetch.continueWithAuth", .{
             .request_id = request_id,
             .auth_challenge_response = response,
         });

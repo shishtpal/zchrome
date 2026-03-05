@@ -13,22 +13,22 @@ pub const Overlay = struct {
 
     /// Enable overlay domain
     pub fn enable(self: *Self) !void {
-        _ = try self.session.sendCommand("Overlay.enable", .{});
+        try self.session.sendCommandIgnoreResult("Overlay.enable", .{});
     }
 
     /// Disable overlay domain
     pub fn disable(self: *Self) !void {
-        _ = try self.session.sendCommand("Overlay.disable", .{});
+        try self.session.sendCommandIgnoreResult("Overlay.disable", .{});
     }
 
     /// Hide any visible highlight
     pub fn hideHighlight(self: *Self) !void {
-        _ = try self.session.sendCommand("Overlay.hideHighlight", .{});
+        try self.session.sendCommandIgnoreResult("Overlay.hideHighlight", .{});
     }
 
     /// Highlight a DOM node
     pub fn highlightNode(self: *Self, config: HighlightConfig, node_id: ?i64, backend_node_id: ?i64, object_id: ?[]const u8, selector: ?[]const u8) !void {
-        _ = try self.session.sendCommand("Overlay.highlightNode", .{
+        try self.session.sendCommandIgnoreResult("Overlay.highlightNode", .{
             .highlightConfig = .{
                 .showInfo = config.show_info,
                 .showStyles = config.show_styles,
@@ -49,7 +49,7 @@ pub const Overlay = struct {
 
     /// Highlight a quad (arbitrary quadrilateral)
     pub fn highlightQuad(self: *Self, quad: [8]f64, color: ?RGBA, outline_color: ?RGBA) !void {
-        _ = try self.session.sendCommand("Overlay.highlightQuad", .{
+        try self.session.sendCommandIgnoreResult("Overlay.highlightQuad", .{
             .quad = quad,
             .color = if (color) |c| .{ .r = c.r, .g = c.g, .b = c.b, .a = c.a } else null,
             .outlineColor = if (outline_color) |c| .{ .r = c.r, .g = c.g, .b = c.b, .a = c.a } else null,
@@ -58,7 +58,7 @@ pub const Overlay = struct {
 
     /// Highlight a rectangular area
     pub fn highlightRect(self: *Self, x: i32, y: i32, width: i32, height: i32, color: ?RGBA, outline_color: ?RGBA) !void {
-        _ = try self.session.sendCommand("Overlay.highlightRect", .{
+        try self.session.sendCommandIgnoreResult("Overlay.highlightRect", .{
             .x = x,
             .y = y,
             .width = width,
@@ -70,7 +70,7 @@ pub const Overlay = struct {
 
     /// Highlight a source order (for accessibility)
     pub fn highlightSourceOrder(self: *Self, config: SourceOrderConfig, node_id: ?i64, backend_node_id: ?i64, object_id: ?[]const u8) !void {
-        _ = try self.session.sendCommand("Overlay.highlightSourceOrder", .{
+        try self.session.sendCommandIgnoreResult("Overlay.highlightSourceOrder", .{
             .sourceOrderConfig = .{
                 .parentOutlineColor = if (config.parent_outline_color) |c| .{ .r = c.r, .g = c.g, .b = c.b, .a = c.a } else null,
                 .childOutlineColor = if (config.child_outline_color) |c| .{ .r = c.r, .g = c.g, .b = c.b, .a = c.a } else null,
@@ -84,7 +84,7 @@ pub const Overlay = struct {
     /// Set inspect mode
     pub fn setInspectMode(self: *Self, mode: []const u8, config: ?HighlightConfig) !void {
         if (config) |cfg| {
-            _ = try self.session.sendCommand("Overlay.setInspectMode", .{
+            try self.session.sendCommandIgnoreResult("Overlay.setInspectMode", .{
                 .mode = mode,
                 .highlightConfig = .{
                     .showInfo = cfg.show_info,
@@ -97,7 +97,7 @@ pub const Overlay = struct {
                 },
             });
         } else {
-            _ = try self.session.sendCommand("Overlay.setInspectMode", .{
+            try self.session.sendCommandIgnoreResult("Overlay.setInspectMode", .{
                 .mode = mode,
             });
         }
@@ -105,42 +105,42 @@ pub const Overlay = struct {
 
     /// Set paused in debugger message
     pub fn setPausedInDebuggerMessage(self: *Self, message: ?[]const u8) !void {
-        _ = try self.session.sendCommand("Overlay.setPausedInDebuggerMessage", .{
+        try self.session.sendCommandIgnoreResult("Overlay.setPausedInDebuggerMessage", .{
             .message = message,
         });
     }
 
     /// Show debug border for elements
     pub fn setShowDebugBorders(self: *Self, show: bool) !void {
-        _ = try self.session.sendCommand("Overlay.setShowDebugBorders", .{
+        try self.session.sendCommandIgnoreResult("Overlay.setShowDebugBorders", .{
             .show = show,
         });
     }
 
     /// Show FPS counter
     pub fn setShowFPSCounter(self: *Self, show: bool) !void {
-        _ = try self.session.sendCommand("Overlay.setShowFPSCounter", .{
+        try self.session.sendCommandIgnoreResult("Overlay.setShowFPSCounter", .{
             .show = show,
         });
     }
 
     /// Show paint rectangles
     pub fn setShowPaintRects(self: *Self, result: bool) !void {
-        _ = try self.session.sendCommand("Overlay.setShowPaintRects", .{
+        try self.session.sendCommandIgnoreResult("Overlay.setShowPaintRects", .{
             .result = result,
         });
     }
 
     /// Show scroll snap overlays
     pub fn setShowScrollSnapOverlays(self: *Self, scroll_snap_highlight_configs: []const ScrollSnapHighlightConfig) !void {
-        _ = try self.session.sendCommand("Overlay.setShowScrollSnapOverlays", .{
+        try self.session.sendCommandIgnoreResult("Overlay.setShowScrollSnapOverlays", .{
             .scrollSnapHighlightConfigs = scroll_snap_highlight_configs,
         });
     }
 
     /// Show viewport size on resize
     pub fn setShowViewportSizeOnResize(self: *Self, show: bool) !void {
-        _ = try self.session.sendCommand("Overlay.setShowViewportSizeOnResize", .{
+        try self.session.sendCommandIgnoreResult("Overlay.setShowViewportSizeOnResize", .{
             .show = show,
         });
     }

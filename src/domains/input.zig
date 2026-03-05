@@ -13,17 +13,17 @@ pub const Input = struct {
 
     /// Dispatch mouse event
     pub fn dispatchMouseEvent(self: *Self, params: MouseEvent) !void {
-        _ = try self.session.sendCommand("Input.dispatchMouseEvent", params);
+        try self.session.sendCommandIgnoreResult("Input.dispatchMouseEvent", params);
     }
 
     /// Dispatch key event
     pub fn dispatchKeyEvent(self: *Self, params: KeyEvent) !void {
-        _ = try self.session.sendCommand("Input.dispatchKeyEvent", params);
+        try self.session.sendCommandIgnoreResult("Input.dispatchKeyEvent", params);
     }
 
     /// Dispatch touch event
     pub fn dispatchTouchEvent(self: *Self, params: TouchEvent) !void {
-        _ = try self.session.sendCommand("Input.dispatchTouchEvent", params);
+        try self.session.sendCommandIgnoreResult("Input.dispatchTouchEvent", params);
     }
 
     /// Convenience: Click at position

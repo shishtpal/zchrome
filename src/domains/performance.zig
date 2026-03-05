@@ -13,12 +13,12 @@ pub const Performance = struct {
 
     /// Enable performance domain
     pub fn enable(self: *Self) !void {
-        _ = try self.session.sendCommand("Performance.enable", .{});
+        try self.session.sendCommandIgnoreResult("Performance.enable", .{});
     }
 
     /// Disable performance domain
     pub fn disable(self: *Self) !void {
-        _ = try self.session.sendCommand("Performance.disable", .{});
+        try self.session.sendCommandIgnoreResult("Performance.disable", .{});
     }
 
     /// Get performance metrics

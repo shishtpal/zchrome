@@ -38,6 +38,17 @@ pub const Session = struct {
         return self.connection.sendCommand(method, params, sid);
     }
 
+    /// Send a command and discard the result (automatically frees memory).
+    /// Use this for commands where you don't need the response data.
+    pub fn sendCommandIgnoreResult(
+        self: *Self,
+        method: []const u8,
+        params: anytype,
+    ) !void {
+        const sid = if (self.id.len > 0) self.id else null;
+        try self.connection.sendCommandIgnoreResult(method, params, sid);
+    }
+
     /// Detach from the target
     pub fn detach(self: *Self) !void {
         var result = try self.connection.sendCommand("Target.detachFromTarget", .{

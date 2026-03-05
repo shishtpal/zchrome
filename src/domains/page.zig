@@ -101,19 +101,21 @@ pub const Page = struct {
 
     /// Enable page domain
     pub fn enable(self: *Self) !void {
-        _ = try self.session.sendCommand("Page.enable", .{});
+        var result = try self.session.sendCommand("Page.enable", .{});
+        result.deinit(self.session.allocator);
     }
 
     /// Disable page domain
     pub fn disable(self: *Self) !void {
-        _ = try self.session.sendCommand("Page.disable", .{});
+        try self.session.sendCommandIgnoreResult("Page.disable", .{});
     }
 
     /// Navigate to a URL
     pub fn navigate(self: *Self, allocator: std.mem.Allocator, url: []const u8) !NavigateResult {
-        const result = try self.session.sendCommand("Page.navigate", .{
+        var result = try self.session.sendCommand("Page.navigate", .{
             .url = url,
         });
+        defer result.deinit(allocator);
 
         return .{
             .frame_id = try allocator.dupe(u8, try result.getString("frameId")),
@@ -130,7 +132,7 @@ pub const Page = struct {
 
     /// Reload the page
     pub fn reload(self: *Self, ignore_cache: ?bool) !void {
-        _ = try self.session.sendCommand("Page.reload", .{
+        try self.session.sendCommandIgnoreResult("Page.reload", .{
             .ignore_cache = ignore_cache,
         });
     }
@@ -145,7 +147,7 @@ pub const Page = struct {
             else => return error.TypeMismatch,
         };
         if (current_index <= 0) return false;
-        _ = try self.session.sendCommand("Page.navigateToHistoryEntry", .{
+        try self.session.sendCommandIgnoreResult("Page.navigateToHistoryEntry", .{
             .entryId = blk: {
                 const entries = result.get("entries") orelse return error.MissingField;
                 const arr = entries.asArray() orelse return error.MissingField;
@@ -173,7 +175,7 @@ pub const Page = struct {
         const entries = result.get("entries") orelse return error.MissingField;
         const arr = entries.asArray() orelse return error.MissingField;
         if (current_index >= @as(i64, @intCast(arr.len)) - 1) return false;
-        _ = try self.session.sendCommand("Page.navigateToHistoryEntry", .{
+        try self.session.sendCommandIgnoreResult("Page.navigateToHistoryEntry", .{
             .entryId = blk: {
                 const target_entry = arr[@intCast(current_index + 1)];
                 const id_val = target_entry.get("id") orelse return error.MissingField;
@@ -189,7 +191,7 @@ pub const Page = struct {
 
     /// Stop loading
     pub fn stopLoading(self: *Self) !void {
-        _ = try self.session.sendCommand("Page.stopLoading", .{});
+        try self.session.sendCommandIgnoreResult("Page.stopLoading", .{});
     }
 
     /// Capture a screenshot
@@ -243,7 +245,7 @@ pub const Page = struct {
 
     /// Set lifecycle events enabled
     pub fn setLifecycleEventsEnabled(self: *Self, enabled: bool) !void {
-        _ = try self.session.sendCommand("Page.setLifecycleEventsEnabled", .{
+        try self.session.sendCommandIgnoreResult("Page.setLifecycleEventsEnabled", .{
             .enabled = enabled,
         });
     }
@@ -258,19 +260,19 @@ pub const Page = struct {
 
     /// Remove script to evaluate on new document
     pub fn removeScriptToEvaluateOnNewDocument(self: *Self, identifier: []const u8) !void {
-        _ = try self.session.sendCommand("Page.removeScriptToEvaluateOnNewDocument", .{
+        try self.session.sendCommandIgnoreResult("Page.removeScriptToEvaluateOnNewDocument", .{
             .identifier = identifier,
         });
     }
 
     /// Bring page to front
     pub fn bringToFront(self: *Self) !void {
-        _ = try self.session.sendCommand("Page.bringToFront", .{});
+        try self.session.sendCommandIgnoreResult("Page.bringToFront", .{});
     }
 
     /// Handle a JavaScript dialog (alert/confirm/prompt)
     pub fn handleJavaScriptDialog(self: *Self, params: HandleJavaScriptDialogParams) !void {
-        _ = try self.session.sendCommand("Page.handleJavaScriptDialog", .{
+        try self.session.sendCommandIgnoreResult("Page.handleJavaScriptDialog", .{
             .accept = params.accept,
             .promptText = params.prompt_text,
         });
@@ -278,7 +280,7 @@ pub const Page = struct {
 
     /// Set document content
     pub fn setDocumentContent(self: *Self, html: []const u8) !void {
-        _ = try self.session.sendCommand("Page.setDocumentContent", .{
+        try self.session.sendCommandIgnoreResult("Page.setDocumentContent", .{
             .html = html,
         });
     }

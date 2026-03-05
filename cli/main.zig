@@ -450,7 +450,15 @@ fn cmdNavigate(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) 
     var runtime = cdp.Runtime.init(session);
     try runtime.enable();
 
-    const title = runtime.evaluateAs([]const u8, "document.title") catch "Unknown";
+    var eval_result = runtime.evaluate(allocator, "document.title", .{ .return_by_value = true }) catch null;
+    defer if (eval_result) |*r| r.deinit(allocator);
+    const title = if (eval_result) |r|
+        if (r.value) |v| switch (v) {
+            .string => |s| s,
+            else => r.description orelse "Unknown",
+        } else r.description orelse "Unknown"
+    else
+        "Unknown";
 
     std.debug.print("URL: {s}\n", .{target_url});
     std.debug.print("Title: {s}\n", .{title});

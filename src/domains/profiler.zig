@@ -14,24 +14,24 @@ pub const Profiler = struct {
 
     /// Enable profiler
     pub fn enable(self: *Self) !void {
-        _ = try self.session.sendCommand("Profiler.enable", .{});
+        try self.session.sendCommandIgnoreResult("Profiler.enable", .{});
     }
 
     /// Disable profiler
     pub fn disable(self: *Self) !void {
-        _ = try self.session.sendCommand("Profiler.disable", .{});
+        try self.session.sendCommandIgnoreResult("Profiler.disable", .{});
     }
 
     /// Set sampling interval in microseconds
     pub fn setSamplingInterval(self: *Self, interval: u32) !void {
-        _ = try self.session.sendCommand("Profiler.setSamplingInterval", .{
+        try self.session.sendCommandIgnoreResult("Profiler.setSamplingInterval", .{
             .interval = interval,
         });
     }
 
     /// Start CPU profiling
     pub fn start(self: *Self) !void {
-        _ = try self.session.sendCommand("Profiler.start", .{});
+        try self.session.sendCommandIgnoreResult("Profiler.start", .{});
     }
 
     /// Stop CPU profiling and return the profile
@@ -53,7 +53,7 @@ pub const Profiler = struct {
 
     /// Stop coverage collection
     pub fn stopPreciseCoverage(self: *Self) !void {
-        _ = try self.session.sendCommand("Profiler.stopPreciseCoverage", .{});
+        try self.session.sendCommandIgnoreResult("Profiler.stopPreciseCoverage", .{});
     }
 
     /// Take coverage snapshot

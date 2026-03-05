@@ -29,7 +29,15 @@ pub fn navigate(session: *cdp.Session, ctx: CommandCtx) !void {
 
     var runtime = cdp.Runtime.init(session);
     try runtime.enable();
-    const title = runtime.evaluateAs([]const u8, "document.title") catch "Unknown";
+    var eval_result = runtime.evaluate(ctx.allocator, "document.title", .{ .return_by_value = true }) catch null;
+    defer if (eval_result) |*r| r.deinit(ctx.allocator);
+    const title = if (eval_result) |r|
+        if (r.value) |v| switch (v) {
+            .string => |s| s,
+            else => r.description orelse "Unknown",
+        } else r.description orelse "Unknown"
+    else
+        "Unknown";
     std.debug.print("URL: {s}\nTitle: {s}\n", .{ target_url, title });
 }
 

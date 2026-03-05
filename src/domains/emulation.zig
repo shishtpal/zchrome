@@ -13,17 +13,17 @@ pub const Emulation = struct {
 
     /// Set device metrics override
     pub fn setDeviceMetricsOverride(self: *Self, params: DeviceMetrics) !void {
-        _ = try self.session.sendCommand("Emulation.setDeviceMetricsOverride", params);
+        try self.session.sendCommandIgnoreResult("Emulation.setDeviceMetricsOverride", params);
     }
 
     /// Clear device metrics override
     pub fn clearDeviceMetricsOverride(self: *Self) !void {
-        _ = try self.session.sendCommand("Emulation.clearDeviceMetricsOverride", .{});
+        try self.session.sendCommandIgnoreResult("Emulation.clearDeviceMetricsOverride", .{});
     }
 
     /// Set user agent override
     pub fn setUserAgentOverride(self: *Self, user_agent: []const u8, platform: ?[]const u8) !void {
-        _ = try self.session.sendCommand("Emulation.setUserAgentOverride", .{
+        try self.session.sendCommandIgnoreResult("Emulation.setUserAgentOverride", .{
             .user_agent = user_agent,
             .platform = platform,
         });
@@ -31,7 +31,7 @@ pub const Emulation = struct {
 
     /// Set geolocation override
     pub fn setGeolocationOverride(self: *Self, lat: ?f64, lon: ?f64, accuracy: ?f64) !void {
-        _ = try self.session.sendCommand("Emulation.setGeolocationOverride", .{
+        try self.session.sendCommandIgnoreResult("Emulation.setGeolocationOverride", .{
             .latitude = lat,
             .longitude = lon,
             .accuracy = accuracy,
@@ -40,33 +40,33 @@ pub const Emulation = struct {
 
     /// Clear geolocation override
     pub fn clearGeolocationOverride(self: *Self) !void {
-        _ = try self.session.sendCommand("Emulation.clearGeolocationOverride", .{});
+        try self.session.sendCommandIgnoreResult("Emulation.clearGeolocationOverride", .{});
     }
 
     /// Set timezone override
     pub fn setTimezoneOverride(self: *Self, timezone_id: []const u8) !void {
-        _ = try self.session.sendCommand("Emulation.setTimezoneOverride", .{
+        try self.session.sendCommandIgnoreResult("Emulation.setTimezoneOverride", .{
             .timezone_id = timezone_id,
         });
     }
 
     /// Set locale override
     pub fn setLocaleOverride(self: *Self, locale: ?[]const u8) !void {
-        _ = try self.session.sendCommand("Emulation.setLocaleOverride", .{
+        try self.session.sendCommandIgnoreResult("Emulation.setLocaleOverride", .{
             .locale = locale,
         });
     }
 
     /// Set touch emulation enabled
     pub fn setTouchEmulationEnabled(self: *Self, enabled: bool) !void {
-        _ = try self.session.sendCommand("Emulation.setTouchEmulationEnabled", .{
+        try self.session.sendCommandIgnoreResult("Emulation.setTouchEmulationEnabled", .{
             .enabled = enabled,
         });
     }
 
     /// Set emulated media
     pub fn setEmulatedMedia(self: *Self, media: ?[]const u8, features: ?[]const MediaFeature) !void {
-        _ = try self.session.sendCommand("Emulation.setEmulatedMedia", .{
+        try self.session.sendCommandIgnoreResult("Emulation.setEmulatedMedia", .{
             .media = media,
             .features = features,
         });
@@ -74,7 +74,7 @@ pub const Emulation = struct {
 
     /// Set script execution disabled
     pub fn setScriptExecutionDisabled(self: *Self, value: bool) !void {
-        _ = try self.session.sendCommand("Emulation.setScriptExecutionDisabled", .{
+        try self.session.sendCommandIgnoreResult("Emulation.setScriptExecutionDisabled", .{
             .value = value,
         });
     }

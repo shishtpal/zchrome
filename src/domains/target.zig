@@ -62,10 +62,11 @@ pub const Target = struct {
     /// Attach to a target
     /// Returns owned session ID string (caller must free)
     pub fn attachToTarget(self: *Self, allocator: std.mem.Allocator, target_id: []const u8, flatten: bool) ![]const u8 {
-        const result = try self.connection.sendCommand("Target.attachToTarget", .{
+        var result = try self.connection.sendCommand("Target.attachToTarget", .{
             .targetId = target_id,
             .flatten = flatten,
         }, null);
+        defer result.deinit(allocator);
 
         const session_id = try result.getString("sessionId");
         return try allocator.dupe(u8, session_id);
@@ -73,21 +74,21 @@ pub const Target = struct {
 
     /// Detach from a target
     pub fn detachFromTarget(self: *Self, session_id: []const u8) !void {
-        _ = try self.connection.sendCommand("Target.detachFromTarget", .{
+        try self.connection.sendCommandIgnoreResult("Target.detachFromTarget", .{
             .session_id = session_id,
         }, null);
     }
 
     /// Activate a target
     pub fn activateTarget(self: *Self, target_id: []const u8) !void {
-        _ = try self.connection.sendCommand("Target.activateTarget", .{
+        try self.connection.sendCommandIgnoreResult("Target.activateTarget", .{
             .target_id = target_id,
         }, null);
     }
 
     /// Enable target discovery
     pub fn setDiscoverTargets(self: *Self, discover: bool) !void {
-        _ = try self.connection.sendCommand("Target.setDiscoverTargets", .{
+        try self.connection.sendCommandIgnoreResult("Target.setDiscoverTargets", .{
             .discover = discover,
         }, null);
     }
@@ -100,7 +101,7 @@ pub const Target = struct {
 
     /// Dispose a browser context
     pub fn disposeBrowserContext(self: *Self, context_id: []const u8) !void {
-        _ = try self.connection.sendCommand("Target.disposeBrowserContext", .{
+        try self.connection.sendCommandIgnoreResult("Target.disposeBrowserContext", .{
             .browser_context_id = context_id,
         }, null);
     }

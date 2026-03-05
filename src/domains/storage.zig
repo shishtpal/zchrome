@@ -31,19 +31,19 @@ pub const Storage = struct {
 
     /// Set cookies
     pub fn setCookies(self: *Self, cookies: []const CookieParam) !void {
-        _ = try self.session.sendCommand("Storage.setCookies", .{
+        try self.session.sendCommandIgnoreResult("Storage.setCookies", .{
             .cookies = cookies,
         });
     }
 
     /// Clear cookies
     pub fn clearCookies(self: *Self) !void {
-        _ = try self.session.sendCommand("Storage.clearCookies", .{});
+        try self.session.sendCommandIgnoreResult("Storage.clearCookies", .{});
     }
 
     /// Delete cookies
     pub fn deleteCookies(self: *Self, name: []const u8, url: ?[]const u8, domain: ?[]const u8) !void {
-        _ = try self.session.sendCommand("Storage.deleteCookies", .{
+        try self.session.sendCommandIgnoreResult("Storage.deleteCookies", .{
             .name = name,
             .url = url,
             .domain = domain,

@@ -15,17 +15,18 @@ pub const Runtime = struct {
 
     /// Enable runtime domain
     pub fn enable(self: *Self) !void {
-        _ = try self.session.sendCommand("Runtime.enable", .{});
+        var result = try self.session.sendCommand("Runtime.enable", .{});
+        result.deinit(self.session.allocator);
     }
 
     /// Disable runtime domain
     pub fn disable(self: *Self) !void {
-        _ = try self.session.sendCommand("Runtime.disable", .{});
+        try self.session.sendCommandIgnoreResult("Runtime.disable", .{});
     }
 
     /// Evaluate JavaScript expression
     pub fn evaluate(self: *Self, allocator: std.mem.Allocator, expression: []const u8, opts: EvaluateOptions) !RemoteObject {
-        const result = try self.session.sendCommand("Runtime.evaluate", .{
+        var result = try self.session.sendCommand("Runtime.evaluate", .{
             .expression = expression,
             .object_group = opts.object_group,
             .include_command_line_api = opts.include_command_line_api,
@@ -35,6 +36,7 @@ pub const Runtime = struct {
             .await_promise = opts.await_promise,
             .user_gesture = opts.user_gesture,
         });
+        defer result.deinit(allocator);
 
         const result_obj = result.get("result") orelse return error.MissingField;
         return try parseRemoteObject(allocator, result_obj);
@@ -49,7 +51,7 @@ pub const Runtime = struct {
         arguments: ?[]const CallArgument,
         opts: CallFunctionOptions,
     ) !RemoteObject {
-        const result = try self.session.sendCommand("Runtime.callFunctionOn", .{
+        var result = try self.session.sendCommand("Runtime.callFunctionOn", .{
             .function_declaration = function_declaration,
             .object_id = object_id,
             .arguments = arguments,
@@ -57,6 +59,7 @@ pub const Runtime = struct {
             .await_promise = opts.await_promise,
             .execution_context_id = opts.execution_context_id,
         });
+        defer result.deinit(allocator);
 
         const result_obj = result.get("result") orelse return error.MissingField;
         return try parseRemoteObject(allocator, result_obj);
@@ -64,10 +67,11 @@ pub const Runtime = struct {
 
     /// Get properties of an object
     pub fn getProperties(self: *Self, allocator: std.mem.Allocator, object_id: []const u8, own_properties: ?bool) ![]PropertyDescriptor {
-        const result = try self.session.sendCommand("Runtime.getProperties", .{
+        var result = try self.session.sendCommand("Runtime.getProperties", .{
             .object_id = object_id,
             .own_properties = own_properties,
         });
+        defer result.deinit(allocator);
 
         const props = try result.getArray("result");
         var properties = std.ArrayList(PropertyDescriptor).init(allocator);
@@ -82,41 +86,42 @@ pub const Runtime = struct {
 
     /// Release a remote object
     pub fn releaseObject(self: *Self, object_id: []const u8) !void {
-        _ = try self.session.sendCommand("Runtime.releaseObject", .{
+        try self.session.sendCommandIgnoreResult("Runtime.releaseObject", .{
             .object_id = object_id,
         });
     }
 
     /// Release all objects in an object group
     pub fn releaseObjectGroup(self: *Self, object_group: []const u8) !void {
-        _ = try self.session.sendCommand("Runtime.releaseObjectGroup", .{
+        try self.session.sendCommandIgnoreResult("Runtime.releaseObjectGroup", .{
             .object_group = object_group,
         });
     }
 
     /// Discard collected console entries
     pub fn discardConsoleEntries(self: *Self) !void {
-        _ = try self.session.sendCommand("Runtime.discardConsoleEntries", .{});
+        try self.session.sendCommandIgnoreResult("Runtime.discardConsoleEntries", .{});
     }
 
     /// Run garbage collection
     pub fn runIfWaitingForDebugger(self: *Self) !void {
-        _ = try self.session.sendCommand("Runtime.runIfWaitingForDebugger", .{});
+        try self.session.sendCommandIgnoreResult("Runtime.runIfWaitingForDebugger", .{});
     }
 
     /// Set custom object formatter enabled
     pub fn setCustomObjectFormatterEnabled(self: *Self, enabled: bool) !void {
-        _ = try self.session.sendCommand("Runtime.setCustomObjectFormatterEnabled", .{
+        try self.session.sendCommandIgnoreResult("Runtime.setCustomObjectFormatterEnabled", .{
             .enabled = enabled,
         });
     }
 
     /// Await a promise
     pub fn awaitPromise(self: *Self, allocator: std.mem.Allocator, promise_object_id: []const u8) !RemoteObject {
-        const result = try self.session.sendCommand("Runtime.awaitPromise", .{
+        var result = try self.session.sendCommand("Runtime.awaitPromise", .{
             .promise_object_id = promise_object_id,
             .return_by_value = true,
         });
+        defer result.deinit(allocator);
 
         const result_obj = result.get("result") orelse return error.MissingField;
         return try parseRemoteObject(allocator, result_obj);
@@ -194,6 +199,7 @@ pub const RemoteObject = struct {
         allocator.free(self.type);
         if (self.subtype) |s| allocator.free(s);
         if (self.class_name) |c| allocator.free(c);
+        if (self.value) |*v| v.deinit(allocator);
         if (self.description) |d| allocator.free(d);
         if (self.object_id) |o| allocator.free(o);
     }
@@ -281,7 +287,7 @@ fn parseRemoteObject(allocator: std.mem.Allocator, obj: json.Value) !RemoteObjec
             .string => |s| try allocator.dupe(u8, s),
             else => null,
         } else null,
-        .value = obj.get("value"),
+        .value = if (obj.get("value")) |v| try v.clone(allocator) else null,
         .description = if (obj.get("description")) |v| switch (v) {
             .string => |s| try allocator.dupe(u8, s),
             else => null,

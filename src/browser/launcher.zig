@@ -136,9 +136,10 @@ pub const Browser = struct {
     /// Create a new page
     pub fn newPage(self: *Self) !*Session {
         // Create target
-        const create_result = try self.connection.sendCommand("Target.createTarget", .{
+        var create_result = try self.connection.sendCommand("Target.createTarget", .{
             .url = "about:blank",
         }, null);
+        defer create_result.deinit(self.allocator);
 
         const target_id = try create_result.getString("targetId");
 
@@ -148,7 +149,8 @@ pub const Browser = struct {
 
     /// Get all open pages
     pub fn pages(self: *Self) ![]TargetInfo {
-        const result = try self.connection.sendCommand("Target.getTargets", .{}, null);
+        var result = try self.connection.sendCommand("Target.getTargets", .{}, null);
+        defer result.deinit(self.allocator);
 
         const target_infos = try result.getArray("targetInfos");
         var targets: std.ArrayList(TargetInfo) = .empty;
@@ -176,14 +178,16 @@ pub const Browser = struct {
 
     /// Close a page
     pub fn closePage(self: *Self, target_id: []const u8) !void {
-        _ = try self.connection.sendCommand("Target.closeTarget", .{
+        var result = try self.connection.sendCommand("Target.closeTarget", .{
             .target_id = target_id,
         }, null);
+        result.deinit(self.allocator);
     }
 
     /// Get browser version
     pub fn version(self: *Self) !BrowserVersion {
-        const result = try self.connection.sendCommand("Browser.getVersion", .{}, null);
+        var result = try self.connection.sendCommand("Browser.getVersion", .{}, null);
+        defer result.deinit(self.allocator);
 
         return .{
             .protocol_version = try self.allocator.dupe(u8, try result.getString("protocolVersion")),
@@ -198,6 +202,7 @@ pub const Browser = struct {
     pub fn disconnect(self: *Self) void {
         // Just close the WebSocket connection
         self.connection.close();
+        self.allocator.destroy(self.connection);
 
         self.allocator.free(self.ws_url);
         self.allocator.destroy(self);
@@ -206,10 +211,14 @@ pub const Browser = struct {
     /// Close the browser (terminates Chrome)
     pub fn close(self: *Self) void {
         // Send Browser.close command to terminate Chrome
-        _ = self.connection.sendCommand("Browser.close", .{}, null) catch {};
+        if (self.connection.sendCommand("Browser.close", .{}, null)) |result| {
+            var close_result = result;
+            close_result.deinit(self.allocator);
+        } else |_| {}
 
         // Close connection
         self.connection.close();
+        self.allocator.destroy(self.connection);
 
         // Clean up process
         if (self.process) |proc| {

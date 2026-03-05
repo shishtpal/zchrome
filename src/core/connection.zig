@@ -182,6 +182,18 @@ pub const Connection = struct {
         return self.last_error;
     }
 
+    /// Send a command and discard the result (automatically frees memory).
+    /// Use this for commands where you don't need the response data.
+    pub fn sendCommandIgnoreResult(
+        self: *Self,
+        method: []const u8,
+        params: anytype,
+        session_id: ?[]const u8,
+    ) !void {
+        var result = try self.sendCommand(method, params, session_id);
+        result.deinit(self.allocator);
+    }
+
     /// Create a session attached to a target
     pub fn createSession(self: *Self, target_id: []const u8) !*Session {
         var result = try self.sendCommand("Target.attachToTarget", .{

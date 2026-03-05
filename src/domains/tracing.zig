@@ -14,7 +14,7 @@ pub const Tracing = struct {
 
     /// Start trace recording
     pub fn start(self: *Self, opts: StartOptions) !void {
-        _ = try self.session.sendCommand("Tracing.start", .{
+        try self.session.sendCommandIgnoreResult("Tracing.start", .{
             .categories = opts.categories,
             .options = opts.options,
             .bufferUsageReportingInterval = opts.buffer_usage_reporting_interval,
@@ -28,7 +28,7 @@ pub const Tracing = struct {
 
     /// Stop trace recording
     pub fn end(self: *Self) !void {
-        _ = try self.session.sendCommand("Tracing.end", .{});
+        try self.session.sendCommandIgnoreResult("Tracing.end", .{});
     }
 
     /// Get current trace buffer usage
@@ -63,7 +63,7 @@ pub const Tracing = struct {
 
     /// Record clock sync marker
     pub fn recordClockSyncMarker(self: *Self, sync_id: []const u8) !void {
-        _ = try self.session.sendCommand("Tracing.recordClockSyncMarker", .{
+        try self.session.sendCommandIgnoreResult("Tracing.recordClockSyncMarker", .{
             .syncId = sync_id,
         });
     }

@@ -257,7 +257,7 @@ pub fn selectOption(
         const escaped_css = try helpers.escapeJsString(allocator, css);
         defer allocator.free(escaped_css);
         js = try std.fmt.allocPrint(allocator,
-            \\(function(s,v){{var e=document.querySelector(s);if(e){{e.value=v;e.dispatchEvent(new Event('change',{{bubbles:true}}))}}}}({s},{s})
+            \\(function(s,v){{var e=document.querySelector(s);if(!e)return false;e.value=v;e.dispatchEvent(new Event('change',{{bubbles:true}}));return true}})({s},{s})
         , .{ escaped_css, escaped_val });
     } else {
         const role = resolved.role orelse return error.InvalidSelector;
@@ -268,7 +268,75 @@ pub fn selectOption(
         js = try std.fmt.allocPrint(allocator, "{s}('{s}',{s},{},{s});", .{ helpers.FIND_AND_SELECT_JS, role, name_arg, nth, escaped_val });
     }
 
-    _ = try runtime.evaluate(allocator, js, .{});
+    var result = try runtime.evaluate(allocator, js, .{ .return_by_value = true });
+    defer result.deinit(allocator);
+
+    // Check if the function returned false (element not found)
+    if (result.value) |val| {
+        if (val == .bool and !val.bool) {
+            return error.ElementNotFound;
+        }
+    }
+}
+
+/// Select multiple options in a multiselect dropdown (values is JSON array: ["val1","val2"])
+pub fn multiselectOptions(
+    session: *cdp.Session,
+    allocator: std.mem.Allocator,
+    resolved: *const ResolvedElement,
+    values_json: []const u8,
+) !void {
+    var runtime = cdp.Runtime.init(session);
+    try runtime.enable();
+
+    const escaped_val = try helpers.escapeJsString(allocator, values_json);
+    defer allocator.free(escaped_val);
+
+    var js: []const u8 = undefined;
+    defer allocator.free(js);
+
+    if (resolved.css_selector) |css| {
+        const escaped_css = try helpers.escapeJsString(allocator, css);
+        defer allocator.free(escaped_css);
+        js = try std.fmt.allocPrint(allocator,
+            \\(function(s,v){{
+            \\  var e=document.querySelector(s);
+            \\  if(!e)return false;
+            \\  var vals=JSON.parse(v);
+            \\  Array.from(e.options).forEach(function(o){{o.selected=vals.includes(o.value);}});
+            \\  e.dispatchEvent(new Event('change',{{bubbles:true}}));
+            \\  return true;
+            \\}})({s},{s})
+        , .{ escaped_css, escaped_val });
+    } else {
+        // Role-based selector path (fallback to simple implementation)
+        const role = resolved.role orelse return error.InvalidSelector;
+        const name_arg = if (resolved.name) |n| try helpers.escapeJsString(allocator, n) else try allocator.dupe(u8, "null");
+        defer allocator.free(name_arg);
+        const nth = resolved.nth orelse 0;
+
+        js = try std.fmt.allocPrint(allocator,
+            \\(function(role,name,nth,v){{
+            \\  var els=document.querySelectorAll('select[multiple]');
+            \\  var el=els[nth||0];
+            \\  if(!el)return false;
+            \\  var vals=JSON.parse(v);
+            \\  Array.from(el.options).forEach(function(o){{o.selected=vals.includes(o.value);}});
+            \\  el.dispatchEvent(new Event('change',{{bubbles:true}}));
+            \\  return true;
+            \\}})('{s}',{s},{},{s});
+        , .{ role, name_arg, nth, escaped_val });
+    }
+
+    var result = try runtime.evaluate(allocator, js, .{ .return_by_value = true });
+    defer result.deinit(allocator);
+
+    // Check if the function returned false (element not found)
+    if (result.value) |val| {
+        if (val == .bool and !val.bool) {
+            return error.ElementNotFound;
+        }
+    }
 }
 
 /// Check or uncheck a checkbox
@@ -290,7 +358,7 @@ pub fn setChecked(
         const escaped_css = try helpers.escapeJsString(allocator, css);
         defer allocator.free(escaped_css);
         js = try std.fmt.allocPrint(allocator,
-            \\(function(s,c){{var e=document.querySelector(s);if(e&&e.checked!==c)e.click()}}({s},{s})
+            \\(function(s,c){{var e=document.querySelector(s);if(!e)return false;if(e.checked!==c)e.click();return true}})({s},{s})
         , .{ escaped_css, check_str });
     } else {
         const role = resolved.role orelse return error.InvalidSelector;
@@ -301,7 +369,15 @@ pub fn setChecked(
         js = try std.fmt.allocPrint(allocator, "{s}('{s}',{s},{},{s});", .{ helpers.FIND_AND_CHECK_JS, role, name_arg, nth, check_str });
     }
 
-    _ = try runtime.evaluate(allocator, js, .{});
+    var result = try runtime.evaluate(allocator, js, .{ .return_by_value = true });
+    defer result.deinit(allocator);
+
+    // Check if the function returned false (element not found)
+    if (result.value) |val| {
+        if (val == .bool and !val.bool) {
+            return error.ElementNotFound;
+        }
+    }
 }
 
 /// Scroll the page

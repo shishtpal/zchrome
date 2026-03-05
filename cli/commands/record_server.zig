@@ -240,7 +240,13 @@ pub fn getRecordingJs(allocator: std.mem.Allocator, port: u16) ![]const u8 {
         \\    // ID (highest priority)
         \\    if (el.id) sels.push('#' + CSS.escape(el.id));
         \\    // name attribute (for form inputs)
-        \\    if (el.name) sels.push(el.tagName.toLowerCase() + '[name="' + el.name + '"]');
+        \\    if (el.name) {{
+        \\      // For radio buttons, include value to disambiguate
+        \\      if (el.type === 'radio' && el.value) {{
+        \\        sels.push('input[name="' + el.name + '"][value="' + el.value + '"]');
+        \\      }}
+        \\      sels.push(el.tagName.toLowerCase() + '[name="' + el.name + '"]');
+        \\    }}
         \\    // data-testid (common in React/testing)
         \\    if (el.dataset.testid) sels.push('[data-testid="' + el.dataset.testid + '"]');
         \\    // aria-label
@@ -313,6 +319,12 @@ pub fn getRecordingJs(allocator: std.mem.Allocator, port: u16) ![]const u8 {
         \\      return;
         \\    }}
         \\
+        \\    // Check if it's a radio button
+        \\    if (el.type === 'radio') {{
+        \\      send({{ action: 'check', selector: sels[0], selectors: sels, value: el.value }});
+        \\      return;
+        \\    }}
+        \\
         \\    // Regular click
         \\    send({{ action: 'click', selector: sels[0], selectors: sels }});
         \\  }}, true);
@@ -346,7 +358,13 @@ pub fn getRecordingJs(allocator: std.mem.Allocator, port: u16) ![]const u8 {
         \\    var sels = getSelectors(el);
         \\    if (sels.length === 0) return;
         \\    if (el.tagName === 'SELECT') {{
-        \\      send({{ action: 'select', selector: sels[0], selectors: sels, value: el.value }});
+        \\      if (el.multiple) {{
+        \\        // Multiselect: capture all selected values as JSON array
+        \\        var values = Array.from(el.selectedOptions).map(function(o) {{ return o.value; }});
+        \\        send({{ action: 'multiselect', selector: sels[0], selectors: sels, value: JSON.stringify(values) }});
+        \\      }} else {{
+        \\        send({{ action: 'select', selector: sels[0], selectors: sels, value: el.value }});
+        \\      }}
         \\    }}
         \\  }}, true);
         \\

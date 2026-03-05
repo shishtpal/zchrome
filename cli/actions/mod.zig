@@ -31,6 +31,7 @@ pub const clearField = element.clearField;
 pub const fillElement = element.fillElement;
 pub const hoverElement = element.hoverElement;
 pub const selectOption = element.selectOption;
+pub const multiselectOptions = element.multiselectOptions;
 pub const setChecked = element.setChecked;
 pub const scroll = element.scroll;
 pub const scrollIntoView = element.scrollIntoView;

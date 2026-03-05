@@ -23,7 +23,23 @@
       var l = document.querySelector('label[for="' + id + '"]');
       if (l) return l.textContent.trim();
     }
+    // For checkboxes/radios, also check parent label
+    if (el.type === 'checkbox' || el.type === 'radio') {
+      var parent = el.closest('label');
+      if (parent) return parent.textContent.trim();
+    }
     return el.textContent.trim();
+  }
+
+  function matchesName(el, targetName) {
+    // First check the accessible label
+    if (getLabel(el) === targetName) return true;
+    // For radio/checkbox, also match by name attribute or id
+    if (el.type === 'checkbox' || el.type === 'radio') {
+      if (el.getAttribute('name') === targetName) return true;
+      if (el.id === targetName) return true;
+    }
+    return false;
   }
 
   var els = queryAll(document, '[role="' + role + '"]');
@@ -34,7 +50,7 @@
   }
 
   if (name) {
-    els = els.filter(function(el) { return getLabel(el) === name; });
+    els = els.filter(function(el) { return matchesName(el, name); });
   }
 
   var el = els[nth || 0];

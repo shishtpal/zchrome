@@ -24,6 +24,7 @@ pub const ActionType = enum {
     check,
     uncheck,
     select,
+    multiselect,
     press,
     scroll,
     hover,
@@ -38,6 +39,7 @@ pub const ActionType = enum {
             .check => "check",
             .uncheck => "uncheck",
             .select => "select",
+            .multiselect => "multiselect",
             .press => "press",
             .scroll => "scroll",
             .hover => "hover",
@@ -53,6 +55,7 @@ pub const ActionType = enum {
         if (std.mem.eql(u8, s, "check")) return .check;
         if (std.mem.eql(u8, s, "uncheck")) return .uncheck;
         if (std.mem.eql(u8, s, "select")) return .select;
+        if (std.mem.eql(u8, s, "multiselect")) return .multiselect;
         if (std.mem.eql(u8, s, "press")) return .press;
         if (std.mem.eql(u8, s, "scroll")) return .scroll;
         if (std.mem.eql(u8, s, "hover")) return .hover;

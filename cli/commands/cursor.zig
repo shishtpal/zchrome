@@ -532,6 +532,44 @@ fn tryWithFallbackSelectorsSelect(
     }
 }
 
+/// Try multiselect command with fallback selectors (value is JSON array)
+fn tryWithFallbackSelectorsMultiselect(
+    session: *cdp.Session,
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    cmd: macro_mod.MacroCommand,
+) void {
+    const value = cmd.value orelse return;
+    const selectors = cmd.selectors orelse if (cmd.selector) |sel| blk: {
+        var single: [1][]const u8 = .{sel};
+        break :blk &single;
+    } else return;
+
+    const actions_mod = @import("../actions/mod.zig");
+
+    for (selectors, 0..) |sel, idx| {
+        var resolved = actions_mod.resolveSelector(allocator, io, sel, null) catch {
+            if (idx + 1 < selectors.len) {
+                std.debug.print("    (trying fallback selector...)\n", .{});
+                continue;
+            }
+            std.debug.print("    Error: selector resolution failed\n", .{});
+            return;
+        };
+        defer resolved.deinit();
+
+        actions_mod.multiselectOptions(session, allocator, &resolved, value) catch |err| {
+            if (idx + 1 < selectors.len) {
+                std.debug.print("    (trying fallback selector...)\n", .{});
+                continue;
+            }
+            std.debug.print("    Error: {}\n", .{err});
+            return;
+        };
+        return; // Success
+    }
+}
+
 /// Replay semantic commands from a v2 macro file
 fn replayCommands(session: *cdp.Session, allocator: std.mem.Allocator, io: std.Io, filename: []const u8, interval: ReplayInterval) !void {
     var macro = macro_mod.loadCommandMacro(allocator, io, filename) catch |err| {
@@ -597,6 +635,7 @@ fn replayCommands(session: *cdp.Session, allocator: std.mem.Allocator, io: std.I
             .check => tryWithFallbackSelectors(session, allocator, io, cmd, elements.check),
             .uncheck => tryWithFallbackSelectors(session, allocator, io, cmd, elements.uncheck),
             .select => tryWithFallbackSelectorsSelect(session, allocator, io, cmd),
+            .multiselect => tryWithFallbackSelectorsMultiselect(session, allocator, io, cmd),
             .press => keyboard.press(session, ctx) catch |err| {
                 std.debug.print("    Error: {}\n", .{err});
             },

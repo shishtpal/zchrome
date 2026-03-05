@@ -43,6 +43,7 @@ pub fn dispatchSessionCommand(session: *cdp.Session, command: anytype, ctx: Comm
         .type => try elements.typeText(session, ctx),
         .fill => try elements.fill(session, ctx),
         .select => try elements.selectOption(session, ctx),
+        .multiselect => try elements.multiselect(session, ctx),
         .hover => try elements.hover(session, ctx),
         .check => try elements.check(session, ctx),
         .uncheck => try elements.uncheck(session, ctx),

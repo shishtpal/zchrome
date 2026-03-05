@@ -76,6 +76,18 @@ pub fn selectOption(session: *cdp.Session, ctx: CommandCtx) !void {
     std.debug.print("Selected '{s}' in: {s}\n", .{ ctx.positional[1], ctx.positional[0] });
 }
 
+pub fn multiselect(session: *cdp.Session, ctx: CommandCtx) !void {
+    if (ctx.positional.len < 2) {
+        std.debug.print("Usage: multiselect <selector> <json-values>\n", .{});
+        std.debug.print("Example: multiselect \"#myselect\" '[\"opt1\",\"opt2\"]'\n", .{});
+        return;
+    }
+    var resolved = try actions_mod.resolveSelector(ctx.allocator, ctx.io, ctx.positional[0], ctx.session);
+    defer resolved.deinit();
+    try actions_mod.multiselectOptions(session, ctx.allocator, &resolved, ctx.positional[1]);
+    std.debug.print("Multiselected {s} in: {s}\n", .{ ctx.positional[1], ctx.positional[0] });
+}
+
 pub fn check(session: *cdp.Session, ctx: CommandCtx) !void {
     if (ctx.positional.len == 0) {
         std.debug.print("Usage: check <selector>\n", .{});

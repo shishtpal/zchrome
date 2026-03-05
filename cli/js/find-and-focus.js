@@ -31,6 +31,13 @@
     return el.textContent.trim();
   }
 
+  function matchesName(el, targetName) {
+    if (getLabel(el) === targetName) return true;
+    if (el.getAttribute('name') === targetName) return true;
+    if (el.id === targetName) return true;
+    return false;
+  }
+
   var els = queryAll(document, '[role="' + role + '"]');
   if (IMPLICIT_ROLES[role]) {
     var implicit = queryAll(document, IMPLICIT_ROLES[role]);
@@ -39,7 +46,7 @@
   }
 
   if (name) {
-    els = els.filter(function(el) { return getLabel(el) === name; });
+    els = els.filter(function(el) { return matchesName(el, name); });
   }
 
   var el = els[nth || 0];

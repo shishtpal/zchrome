@@ -15,5 +15,8 @@
         .zlib_json = .{
             .path = "../zlib-json",
         },
+        .zlib_png = .{
+            .path = "../zlib-png",
+        },
     },
 }

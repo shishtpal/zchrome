@@ -22,6 +22,7 @@ const getters = @import("getters.zig");
 const setters = @import("setters.zig");
 const dialog_cmd = @import("dialog.zig");
 const dev_cmd = @import("dev.zig");
+const diff_cmd = @import("diff.zig");
 
 pub const CommandCtx = types.CommandCtx;
 
@@ -62,6 +63,7 @@ pub fn dispatchSessionCommand(session: *cdp.Session, command: anytype, ctx: Comm
         .set => try setters.set(session, ctx),
         .dialog => try dialog_cmd.dialog(session, ctx),
         .dev => try dev_cmd.dev(session, ctx),
+        .diff => try diff_cmd.dispatchDiffSubcommand(session, ctx),
         else => {
             std.debug.print("Warning: unhandled command in dispatchSessionCommand\n", .{});
             return false;

@@ -449,3 +449,8 @@ pub fn cmdDev(state: *InteractiveState, args: []const []const u8) !void {
     const session = try requireSession(state);
     try impl.dev(session, buildCtx(state, args));
 }
+
+pub fn cmdDiff(state: *InteractiveState, args: []const []const u8) !void {
+    const session = try requireSession(state);
+    try impl.diff(session, buildCtx(state, args));
+}

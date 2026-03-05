@@ -19,6 +19,7 @@ COMMANDS:
   pdf [url]                Generate PDF
   evaluate [url] <expr>    Evaluate JS expression
   snapshot                 Capture accessibility tree of active page, save to zsnap.json
+  diff <subcommand>        Compare snapshots or screenshots (snapshot/screenshot/url)
   version                  Print browser version info
   help                     Show this help message
 
@@ -136,6 +137,17 @@ DEVELOPER TOOLS (dev):
   dev state clear --all              Clear all saved state files
   dev state clean --older-than <days>  Delete states older than N days
 
+DIFF (comparing pages):
+  diff snapshot                        Compare current vs last session snapshot
+  diff snapshot --baseline <file>      Compare current vs saved snapshot file
+  diff snapshot -s "#main" -c          Scoped snapshot diff, compact mode
+  diff screenshot --baseline <file>    Visual pixel diff against baseline image
+  diff screenshot -b b.png -o d.png    Save diff image to custom path
+  diff screenshot -b b.png -t 0.2      Adjust color threshold (0-1)
+  diff url <url1> <url2>               Compare two URLs (snapshot diff)
+  diff url <url1> <url2> --screenshot  Also do visual diff between URLs
+  diff url <url1> <url2> --wait-until networkidle  Custom wait strategy
+
 SNAPSHOT OPTIONS:
   -i, --interactive-only   Only include interactive elements
   -c, --compact            Compact output (skip empty structural elements)
@@ -225,3 +237,12 @@ EXAMPLES:
   zchrome dev state load login.json     # Restore auth state
   zchrome dev profiler 10 profile.cpuprofile  # Profile for 10 seconds
   zchrome dev profiler 0 profile.cpuprofile   # Profile until Enter pressed
+
+  # Diff commands - compare pages
+  zchrome diff snapshot                          # Compare vs last snapshot
+  zchrome diff snapshot --baseline before.txt    # Compare vs saved file
+  zchrome diff snapshot -s "#main" -c            # Scoped, compact diff
+  zchrome diff screenshot --baseline before.png  # Visual pixel diff
+  zchrome diff screenshot -b before.png -t 0.05  # Stricter threshold
+  zchrome diff url https://v1.com https://v2.com # Compare two URLs
+  zchrome diff url https://v1.com https://v2.com --screenshot  # With visual diff

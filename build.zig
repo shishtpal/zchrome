@@ -11,6 +11,13 @@ pub fn build(b: *std.Build) void {
     });
     const json_mod = json_dep.module("json");
 
+    // ─── PNG Module (from zlib-png) ────────────────────────────
+    const png_dep = b.dependency("zlib_png", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const png_mod = png_dep.module("png");
+
     // ─── Library Module ──────────────────────────────────────
     const cdp_mod = b.createModule(.{
         .root_source_file = b.path("src/root.zig"),
@@ -27,6 +34,7 @@ pub fn build(b: *std.Build) void {
     });
     cli_mod.addImport("cdp", cdp_mod);
     cli_mod.addImport("json", json_mod);
+    cli_mod.addImport("png", png_mod);
 
     const cli = b.addExecutable(.{
         .name = "zchrome",

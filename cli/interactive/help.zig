@@ -126,6 +126,11 @@ pub fn print() void {
         \\  dev state show <file>         Show state summary
         \\  dev state clear [name|--all]  Clear state(s)
         \\
+        \\Diff & Comparison:
+        \\  diff snapshot <file1> <file2> Compare two snapshot files
+        \\  diff screenshot -b <f1> -c <f2> Compare screenshots (visual diff)
+        \\  diff url <url1> <url2>        Compare two URLs
+        \\
         \\Selectors can be CSS selectors or @refs from snapshot (e.g., @e3)
         \\
     , .{});

@@ -715,6 +715,180 @@ Snapshot saved to: zsnap.json
 Use @e<N> refs in subsequent commands
 ```
 
+### diff
+
+Compare pages using text-based (snapshot) or visual (pixel) diffing. Useful for detecting changes between page versions, regression testing, or A/B comparison.
+
+```bash
+zchrome diff snapshot                        # Compare current vs last session snapshot
+zchrome diff snapshot --baseline <file>      # Compare current vs saved baseline
+zchrome diff screenshot --baseline <file>    # Visual pixel diff against baseline PNG
+zchrome diff url <url1> <url2>               # Compare two URLs
+```
+
+#### diff snapshot
+
+Compare the current page's accessibility tree against a baseline using the Myers diff algorithm.
+
+```bash
+zchrome diff snapshot [options]
+```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `-b, --baseline <file>` | Baseline snapshot file (default: last session's zsnap.json) |
+| `-i, --interactive-only` | Only include interactive elements |
+| `-c, --compact` | Skip empty structural elements |
+| `-d, --depth <n>` | Limit tree depth |
+| `-s, --selector <sel>` | Scope snapshot to CSS selector |
+
+**Example:**
+
+```bash
+# Compare against last session snapshot
+zchrome diff snapshot
+
+# Compare against a saved baseline
+zchrome diff snapshot --baseline before.txt
+
+# Scoped comparison with compact mode
+zchrome diff snapshot -s "#main-content" -c
+```
+
+**Output:**
+
+```
+=== Snapshot Diff ===
+
+- heading "Old Title" [ref=e1]
++ heading "New Title" [ref=e1]
+  navigation
+    - link "About" [ref=e2]
+    + link "Contact" [ref=e2]
+
+--- Diff Stats ---
+Additions:    2
+Removals:     2
+Unchanged:    15
+```
+
+#### diff screenshot
+
+Compare the current page screenshot against a baseline image using pixel-level comparison.
+
+```bash
+zchrome diff screenshot --baseline <file> [options]
+```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `-b, --baseline <file>` | Baseline PNG file (required) |
+| `-o, --output <file>` | Output diff image path (default: diff.png) |
+| `-t, --threshold <0-1>` | Color difference threshold (default: 0.1) |
+| `--full` | Capture full page screenshot |
+
+**Example:**
+
+```bash
+# Basic screenshot diff
+zchrome diff screenshot --baseline before.png
+
+# Custom output and stricter threshold
+zchrome diff screenshot -b before.png -o result.png -t 0.05
+
+# Full page comparison
+zchrome diff screenshot --baseline before.png --full
+```
+
+**Output:**
+
+```
+Loaded baseline: 1920x1080 pixels
+Current screenshot: 1920x1080 pixels
+
+=== Screenshot Diff ===
+
+Total pixels: 2073600
+Different pixels: 1234 (0.06%)
+
+Diff image saved to: diff.png
+```
+
+The diff image shows changed pixels in bright red against a darkened version of the baseline.
+
+#### diff url
+
+Compare two URLs by capturing and diffing their snapshots (and optionally screenshots).
+
+```bash
+zchrome diff url <url1> <url2> [options]
+```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--screenshot` | Also perform visual (pixel) diff |
+| `--wait-until <strategy>` | Wait strategy: load, domcontentloaded, networkidle |
+| `-t, --threshold <0-1>` | Color difference threshold for screenshots |
+| `-i, --interactive-only` | Only include interactive elements in snapshot |
+| `-c, --compact` | Compact snapshot output |
+| `-d, --depth <n>` | Limit snapshot tree depth |
+| `-s, --selector <sel>` | Scope snapshot to CSS selector |
+
+**Example:**
+
+```bash
+# Compare two URLs (snapshot diff only)
+zchrome diff url https://v1.example.com https://v2.example.com
+
+# Include visual diff
+zchrome diff url https://v1.example.com https://v2.example.com --screenshot
+
+# Wait for network idle before capturing
+zchrome diff url https://v1.example.com https://v2.example.com --wait-until networkidle
+
+# Scoped comparison
+zchrome diff url https://v1.example.com https://v2.example.com -s "#main" -c
+```
+
+**Output:**
+
+```
+Comparing URLs:
+  URL1: https://v1.example.com
+  URL2: https://v2.example.com
+
+Capturing URL1...
+  Snapshot: 45 lines
+  Screenshot: 1920x1080 pixels
+
+Capturing URL2...
+  Snapshot: 48 lines
+  Screenshot: 1920x1080 pixels
+
+=== Snapshot Diff ===
+
++ heading "New Feature" [ref=e5]
+  paragraph "Updated description..."
+
+--- Diff Stats ---
+Additions:    3
+Removals:     0
+Unchanged:    45
+
+=== Screenshot Diff ===
+
+Total pixels: 2073600
+Different pixels: 5678 (0.27%)
+
+Diff image saved to: url-diff.png
+```
+
 ## Element Actions
 
 All element action commands accept a `<selector>` which can be:

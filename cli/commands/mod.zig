@@ -31,6 +31,8 @@ const dispatch_mod = @import("dispatch.zig");
 const help_mod = @import("help.zig");
 const dev_mod = @import("dev.zig");
 const session_cmd_mod = @import("session.zig");
+const diff_mod = @import("../diff/mod.zig");
+const diff_cmd_mod = @import("diff.zig");
 
 // ─── Type Re-exports ─────────────────────────────────────────────────────────
 
@@ -171,3 +173,14 @@ pub const printDevHelp = dev_mod.printDevHelp;
 
 pub const sessionCmd = session_cmd_mod.session;
 pub const printSessionHelp = session_cmd_mod.printSessionHelp;
+
+// ─── Diff Re-exports ─────────────────────────────────────────────────────────
+
+pub const diff = diff_cmd_mod.dispatchDiffSubcommand;
+pub const printDiffHelp = diff_cmd_mod.printDiffHelp;
+pub const diffSnapshot = diff_mod.diffSnapshotCommand;
+pub const printDiffSnapshotHelp = diff_mod.printDiffSnapshotHelp;
+pub const diffScreenshot = diff_mod.diffScreenshotCommand;
+pub const printDiffScreenshotHelp = diff_mod.printDiffScreenshotHelp;
+pub const diffUrl = diff_mod.diffUrlCommand;
+pub const printDiffUrlHelp = diff_mod.printDiffUrlHelp;

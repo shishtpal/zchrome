@@ -120,6 +120,7 @@ This makes macros more robust across different page states or minor UI changes.
 | `dialog` | `accept`, `value`? | Handle JavaScript dialog (see below) |
 | `assert` | See below | Test conditions with retry on failure |
 | `extract` | `selector`, `mode`?, `output` | Extract DOM data as JSON |
+| `capture` | `selector`, capture fields | Capture values into variables for comparison |
 
 **Note:** `selectors` is an optional array of fallback CSS selectors tried if `selector` fails.
 
@@ -264,6 +265,15 @@ The `assert` action allows you to verify application state during replay. When a
 
 Use `*` as a wildcard to match any characters. This is useful for asserting text that contains dynamic values like IDs, timestamps, or usernames.
 
+**Element count assertions:**
+```json
+{"action": "assert", "selector": "table#results tbody tr", "count": 5}
+{"action": "assert", "selector": ".item", "count_min": 1}
+{"action": "assert", "selector": ".item", "count_max": 10}
+```
+
+Use `count` for exact count, `count_min` for minimum, `count_max` for maximum. These can be combined.
+
 **With custom timeout:**
 ```json
 {"action": "assert", "selector": ".slow-element", "timeout": 10000}
@@ -356,6 +366,64 @@ This extracts the current DOM structure of the element and compares it to the JS
    ```json
    {"action": "assert", "selector": "#user-profile", "snapshot": "expected-profile.json"}
    ```
+
+### Capture Action (Variables)
+
+The `capture` action stores values into variables for later comparison. This enables "before/after" assertions.
+
+**Capture Modes:**
+
+| Field | Captures | Description |
+|-------|----------|-------------|
+| `count_as` | Integer | Number of elements matching selector |
+| `text_as` | String | Text content of element |
+| `value_as` | String | Value of input/select element |
+| `attr_as` | String | Attribute value (requires `attribute` field) |
+
+**Example: Verify row count increased after form submission:**
+```json
+{
+  "version": 2,
+  "commands": [
+    {"action": "capture", "selector": "table#results tbody tr", "count_as": "before"},
+    {"action": "fill", "selector": "#name", "value": "John Doe"},
+    {"action": "fill", "selector": "#email", "value": "john@example.com"},
+    {"action": "click", "selector": "#submit"},
+    {"action": "wait", "value": "1000"},
+    {"action": "assert", "selector": "table#results tbody tr", "count_gt": "$before"}
+  ]
+}
+```
+
+**Variable-Based Comparison Operators:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `count_gt` | `"5"` or `"$var"` | Count greater than value or variable |
+| `count_lt` | `"5"` or `"$var"` | Count less than |
+| `count_gte` | `"5"` or `"$var"` | Count greater than or equal |
+| `count_lte` | `"5"` or `"$var"` | Count less than or equal |
+| `text_eq` | `"text"` or `"$var"` | Text equals value or variable |
+| `text_neq` | `"text"` or `"$var"` | Text not equals |
+| `text_contains` | `"text"` or `"$var"` | Text contains substring |
+| `value_eq` | `"val"` or `"$var"` | Input value equals |
+| `value_neq` | `"val"` or `"$var"` | Input value not equals |
+
+**Example: Verify text changed:**
+```json
+{"action": "capture", "selector": "#status", "text_as": "old_status"}
+{"action": "click", "selector": "#refresh"}
+{"action": "assert", "selector": "#status", "text_neq": "$old_status"}
+```
+
+**Example: Capture attribute:**
+```json
+{"action": "capture", "selector": "#row-1", "attribute": "data-id", "attr_as": "row_id"}
+{"action": "click", "selector": "#delete"}
+{"action": "assert", "text": "Deleted row $row_id"}
+```
+
+Variables persist across `--resume`, allowing assertions to work correctly after retry.
 
 ## Data Extraction
 

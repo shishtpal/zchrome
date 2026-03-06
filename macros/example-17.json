@@ -1,0 +1,58 @@
+{
+  "version": 2,
+  "description": "Form submission with table row count verification using capture/assert",
+  "commands": [
+    {
+      "action": "capture",
+      "selector": "table tbody tr",
+      "count_as": "initial_rows"
+    },
+    {
+      "action": "fill",
+      "selector": "#full_name",
+      "selectors": ["#full_name", "input[name=\"full_name\"]"],
+      "value": "Raju Kumar"
+    },
+    {
+      "action": "assert",
+      "selector": "#full_name",
+      "value": "Raju Kumar"
+    },
+    {
+      "action": "fill",
+      "selector": "#email",
+      "selectors": ["#email", "input[name=\"email\"]"],
+      "value": "raju@gmail.com"
+    },
+    {
+      "action": "assert",
+      "selector": "#email",
+      "value": "raju@gmail.com"
+    },
+    {
+      "action": "select",
+      "selector": "#select",
+      "selectors": ["#select", "select[name=\"select\"]"],
+      "value": "3"
+    },
+    {
+      "action": "assert",
+      "selector": "#select",
+      "value": "3"
+    },
+    {
+      "action": "click",
+      "selector": "#add_record > button"
+    },
+    {
+      "action": "wait",
+      "value": "500"
+    },
+    {
+      "action": "assert",
+      "selector": "table tbody tr",
+      "count_gt": "$initial_rows"
+    }
+  ]
+}
+

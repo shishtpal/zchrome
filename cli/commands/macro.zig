@@ -34,6 +34,7 @@ pub const ActionType = enum {
     extract,
     dialog,
     upload,
+    capture,
 
     pub fn toString(self: ActionType) []const u8 {
         return switch (self) {
@@ -53,6 +54,7 @@ pub const ActionType = enum {
             .extract => "extract",
             .dialog => "dialog",
             .upload => "upload",
+            .capture => "capture",
         };
     }
 
@@ -73,6 +75,7 @@ pub const ActionType = enum {
         if (std.mem.eql(u8, s, "extract")) return .extract;
         if (std.mem.eql(u8, s, "dialog")) return .dialog;
         if (std.mem.eql(u8, s, "upload")) return .upload;
+        if (std.mem.eql(u8, s, "capture")) return .capture;
         return null;
     }
 
@@ -81,7 +84,7 @@ pub const ActionType = enum {
     pub fn isActionCommand(self: ActionType) bool {
         return switch (self) {
             .click, .dblclick, .fill, .check, .uncheck, .select, .multiselect, .hover, .navigate, .upload => true,
-            .press, .scroll, .wait, .assert, .extract, .dialog => false,
+            .press, .scroll, .wait, .assert, .extract, .dialog, .capture => false,
         };
     }
 };
@@ -102,6 +105,10 @@ pub const MacroCommand = struct {
     text: ?[]const u8 = null, // Text to find on page (for assert), or expected dialog message (for dialog)
     timeout: ?u32 = null, // Timeout in ms (default: 5000)
     fallback: ?[]const u8 = null, // Fallback JSON file on assertion failure
+    // Count assertion fields
+    count: ?u32 = null, // Exact element count
+    count_min: ?u32 = null, // Minimum element count
+    count_max: ?u32 = null, // Maximum element count
     // Extract-specific fields
     mode: ?[]const u8 = null, // Extraction mode: dom, text, html, attrs, table, form
     output: ?[]const u8 = null, // Output file path for extract
@@ -112,6 +119,21 @@ pub const MacroCommand = struct {
     accept: ?bool = null, // For dialog: true=accept (OK), false=dismiss (Cancel)
     // Upload-specific fields
     files: ?[][]const u8 = null, // File paths for upload action
+    // Capture-specific fields
+    count_as: ?[]const u8 = null, // Variable name to store element count
+    text_as: ?[]const u8 = null, // Variable name to store text content
+    value_as: ?[]const u8 = null, // Variable name to store input value
+    attr_as: ?[]const u8 = null, // Variable name to store attribute value
+    // Comparison assertion fields (for use with captured variables)
+    count_gt: ?[]const u8 = null, // Count greater than (value or $variable)
+    count_lt: ?[]const u8 = null, // Count less than (value or $variable)
+    count_gte: ?[]const u8 = null, // Count greater than or equal
+    count_lte: ?[]const u8 = null, // Count less than or equal
+    text_eq: ?[]const u8 = null, // Text equals (value or $variable)
+    text_neq: ?[]const u8 = null, // Text not equals
+    text_contains_var: ?[]const u8 = null, // Text contains (value or $variable)
+    value_eq: ?[]const u8 = null, // Input value equals
+    value_neq: ?[]const u8 = null, // Input value not equals
 
     pub fn deinit(self: *MacroCommand, allocator: std.mem.Allocator) void {
         if (self.selector) |s| allocator.free(s);
@@ -133,6 +155,21 @@ pub const MacroCommand = struct {
             for (f) |file| allocator.free(file);
             allocator.free(f);
         }
+        // Capture fields
+        if (self.count_as) |ca| allocator.free(ca);
+        if (self.text_as) |ta| allocator.free(ta);
+        if (self.value_as) |va| allocator.free(va);
+        if (self.attr_as) |aa| allocator.free(aa);
+        // Comparison fields
+        if (self.count_gt) |cg| allocator.free(cg);
+        if (self.count_lt) |cl| allocator.free(cl);
+        if (self.count_gte) |cge| allocator.free(cge);
+        if (self.count_lte) |cle| allocator.free(cle);
+        if (self.text_eq) |te| allocator.free(te);
+        if (self.text_neq) |tn| allocator.free(tn);
+        if (self.text_contains_var) |tc| allocator.free(tc);
+        if (self.value_eq) |ve| allocator.free(ve);
+        if (self.value_neq) |vn| allocator.free(vn);
     }
 
     pub fn clone(self: *const MacroCommand, allocator: std.mem.Allocator) !MacroCommand {
@@ -166,12 +203,30 @@ pub const MacroCommand = struct {
             .text = if (self.text) |t| try allocator.dupe(u8, t) else null,
             .timeout = self.timeout,
             .fallback = if (self.fallback) |f| try allocator.dupe(u8, f) else null,
+            .count = self.count,
+            .count_min = self.count_min,
+            .count_max = self.count_max,
             .mode = if (self.mode) |m| try allocator.dupe(u8, m) else null,
             .output = if (self.output) |o| try allocator.dupe(u8, o) else null,
             .extract_all = self.extract_all,
             .snapshot = if (self.snapshot) |sn| try allocator.dupe(u8, sn) else null,
             .accept = self.accept,
             .files = cloned_files,
+            // Capture fields
+            .count_as = if (self.count_as) |ca| try allocator.dupe(u8, ca) else null,
+            .text_as = if (self.text_as) |ta| try allocator.dupe(u8, ta) else null,
+            .value_as = if (self.value_as) |va| try allocator.dupe(u8, va) else null,
+            .attr_as = if (self.attr_as) |aa| try allocator.dupe(u8, aa) else null,
+            // Comparison fields
+            .count_gt = if (self.count_gt) |cg| try allocator.dupe(u8, cg) else null,
+            .count_lt = if (self.count_lt) |cl| try allocator.dupe(u8, cl) else null,
+            .count_gte = if (self.count_gte) |cge| try allocator.dupe(u8, cge) else null,
+            .count_lte = if (self.count_lte) |cle| try allocator.dupe(u8, cle) else null,
+            .text_eq = if (self.text_eq) |te| try allocator.dupe(u8, te) else null,
+            .text_neq = if (self.text_neq) |tn| try allocator.dupe(u8, tn) else null,
+            .text_contains_var = if (self.text_contains_var) |tc| try allocator.dupe(u8, tc) else null,
+            .value_eq = if (self.value_eq) |ve| try allocator.dupe(u8, ve) else null,
+            .value_neq = if (self.value_neq) |vn| try allocator.dupe(u8, vn) else null,
         };
     }
 };
@@ -301,6 +356,22 @@ pub fn saveCommandMacro(allocator: std.mem.Allocator, io: std.Io, path: []const 
             try json_buf.appendSlice(allocator, escaped);
             try json_buf.appendSlice(allocator, "\"");
         }
+        // Count assertion fields
+        if (cmd.count) |c| {
+            const c_str = try std.fmt.allocPrint(allocator, ", \"count\": {}", .{c});
+            defer allocator.free(c_str);
+            try json_buf.appendSlice(allocator, c_str);
+        }
+        if (cmd.count_min) |c| {
+            const c_str = try std.fmt.allocPrint(allocator, ", \"count_min\": {}", .{c});
+            defer allocator.free(c_str);
+            try json_buf.appendSlice(allocator, c_str);
+        }
+        if (cmd.count_max) |c| {
+            const c_str = try std.fmt.allocPrint(allocator, ", \"count_max\": {}", .{c});
+            defer allocator.free(c_str);
+            try json_buf.appendSlice(allocator, c_str);
+        }
 
         // Extract-specific fields
         if (cmd.mode) |m| {
@@ -344,6 +415,99 @@ pub fn saveCommandMacro(allocator: std.mem.Allocator, io: std.Io, path: []const 
                 try json_buf.appendSlice(allocator, "\"");
             }
             try json_buf.appendSlice(allocator, "]");
+        }
+        // Capture-specific fields
+        if (cmd.count_as) |ca| {
+            const escaped = try escapeString(allocator, ca);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"count_as\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
+        if (cmd.text_as) |ta| {
+            const escaped = try escapeString(allocator, ta);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"text_as\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
+        if (cmd.value_as) |va| {
+            const escaped = try escapeString(allocator, va);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"value_as\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
+        if (cmd.attr_as) |aa| {
+            const escaped = try escapeString(allocator, aa);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"attr_as\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
+        // Comparison assertion fields
+        if (cmd.count_gt) |cg| {
+            const escaped = try escapeString(allocator, cg);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"count_gt\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
+        if (cmd.count_lt) |cl| {
+            const escaped = try escapeString(allocator, cl);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"count_lt\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
+        if (cmd.count_gte) |cge| {
+            const escaped = try escapeString(allocator, cge);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"count_gte\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
+        if (cmd.count_lte) |cle| {
+            const escaped = try escapeString(allocator, cle);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"count_lte\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
+        if (cmd.text_eq) |te| {
+            const escaped = try escapeString(allocator, te);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"text_eq\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
+        if (cmd.text_neq) |tn| {
+            const escaped = try escapeString(allocator, tn);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"text_neq\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
+        if (cmd.text_contains_var) |tc| {
+            const escaped = try escapeString(allocator, tc);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"text_contains\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
+        if (cmd.value_eq) |ve| {
+            const escaped = try escapeString(allocator, ve);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"value_eq\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
+        if (cmd.value_neq) |vn| {
+            const escaped = try escapeString(allocator, vn);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"value_neq\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
         }
 
         try json_buf.appendSlice(allocator, "}");
@@ -462,6 +626,16 @@ pub fn loadCommandMacro(allocator: std.mem.Allocator, io: std.Io, path: []const 
                 if (obj.get("fallback")) |fb| {
                     if (fb == .string) cmd.fallback = try allocator.dupe(u8, fb.string);
                 }
+                // Count assertion fields
+                if (obj.get("count")) |c| {
+                    if (c == .integer) cmd.count = @intCast(c.integer);
+                }
+                if (obj.get("count_min")) |c| {
+                    if (c == .integer) cmd.count_min = @intCast(c.integer);
+                }
+                if (obj.get("count_max")) |c| {
+                    if (c == .integer) cmd.count_max = @intCast(c.integer);
+                }
                 // Extract-specific fields
                 if (obj.get("mode")) |m| {
                     if (m == .string) cmd.mode = try allocator.dupe(u8, m.string);
@@ -499,6 +673,47 @@ pub fn loadCommandMacro(allocator: std.mem.Allocator, io: std.Io, path: []const 
                             files_list.deinit(allocator);
                         }
                     }
+                }
+                // Capture-specific fields
+                if (obj.get("count_as")) |ca| {
+                    if (ca == .string) cmd.count_as = try allocator.dupe(u8, ca.string);
+                }
+                if (obj.get("text_as")) |ta| {
+                    if (ta == .string) cmd.text_as = try allocator.dupe(u8, ta.string);
+                }
+                if (obj.get("value_as")) |va| {
+                    if (va == .string) cmd.value_as = try allocator.dupe(u8, va.string);
+                }
+                if (obj.get("attr_as")) |aa| {
+                    if (aa == .string) cmd.attr_as = try allocator.dupe(u8, aa.string);
+                }
+                // Comparison assertion fields
+                if (obj.get("count_gt")) |cg| {
+                    if (cg == .string) cmd.count_gt = try allocator.dupe(u8, cg.string);
+                }
+                if (obj.get("count_lt")) |cl| {
+                    if (cl == .string) cmd.count_lt = try allocator.dupe(u8, cl.string);
+                }
+                if (obj.get("count_gte")) |cge| {
+                    if (cge == .string) cmd.count_gte = try allocator.dupe(u8, cge.string);
+                }
+                if (obj.get("count_lte")) |cle| {
+                    if (cle == .string) cmd.count_lte = try allocator.dupe(u8, cle.string);
+                }
+                if (obj.get("text_eq")) |te| {
+                    if (te == .string) cmd.text_eq = try allocator.dupe(u8, te.string);
+                }
+                if (obj.get("text_neq")) |tn| {
+                    if (tn == .string) cmd.text_neq = try allocator.dupe(u8, tn.string);
+                }
+                if (obj.get("text_contains")) |tc| {
+                    if (tc == .string) cmd.text_contains_var = try allocator.dupe(u8, tc.string);
+                }
+                if (obj.get("value_eq")) |ve| {
+                    if (ve == .string) cmd.value_eq = try allocator.dupe(u8, ve.string);
+                }
+                if (obj.get("value_neq")) |vn| {
+                    if (vn == .string) cmd.value_neq = try allocator.dupe(u8, vn.string);
                 }
 
                 try cmds_list.append(allocator, cmd);

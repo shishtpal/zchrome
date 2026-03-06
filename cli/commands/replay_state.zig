@@ -7,6 +7,26 @@ const std = @import("std");
 const json = @import("json");
 const session_mod = @import("../session.zig");
 
+/// Variable value - can be integer or string
+pub const VarValue = union(enum) {
+    int: i64,
+    string: []const u8,
+
+    pub fn deinit(self: *VarValue, allocator: std.mem.Allocator) void {
+        switch (self.*) {
+            .string => |s| allocator.free(s),
+            .int => {},
+        }
+    }
+
+    pub fn clone(self: VarValue, allocator: std.mem.Allocator) !VarValue {
+        return switch (self) {
+            .int => |i| .{ .int = i },
+            .string => |s| .{ .string = try allocator.dupe(u8, s) },
+        };
+    }
+};
+
 /// Replay state persisted between runs
 pub const ReplayState = struct {
     macro_file: ?[]const u8 = null,
@@ -16,6 +36,8 @@ pub const ReplayState = struct {
     failure_reason: ?[]const u8 = null,
     retry_count: u32 = 0,
     status: Status = .running,
+    // Captured variables (keyed by variable name)
+    variables: ?std.StringHashMap(VarValue) = null,
 
     pub const Status = enum {
         running,
@@ -45,6 +67,14 @@ pub const ReplayState = struct {
         if (self.macro_file) |m| allocator.free(m);
         if (self.failed_at) |f| allocator.free(f);
         if (self.failure_reason) |r| allocator.free(r);
+        if (self.variables) |*vars| {
+            var iter = vars.iterator();
+            while (iter.next()) |entry| {
+                allocator.free(entry.key_ptr.*);
+                entry.value_ptr.deinit(allocator);
+            }
+            vars.deinit();
+        }
         self.* = .{};
     }
 };
@@ -96,6 +126,42 @@ pub fn loadState(allocator: std.mem.Allocator, io: std.Io, session_ctx: ?*const 
         if (v == .string) {
             if (ReplayState.Status.fromString(v.string)) |s| {
                 state.status = s;
+            }
+        }
+    }
+    // Parse variables
+    if (parsed.get("variables")) |vars_obj| {
+        if (vars_obj == .object) {
+            var vars_map = std.StringHashMap(VarValue).init(allocator);
+            var iter = vars_obj.object.iterator();
+            while (iter.next()) |entry| {
+                const key = allocator.dupe(u8, entry.key_ptr.*) catch continue;
+                const val = entry.value_ptr.*;
+                const var_val: VarValue = switch (val) {
+                    .integer => |i| .{ .int = i },
+                    .string => |s| .{ .string = allocator.dupe(u8, s) catch {
+                        allocator.free(key);
+                        continue;
+                    } },
+                    .float => |f| .{ .int = @intFromFloat(f) },
+                    else => {
+                        allocator.free(key);
+                        continue;
+                    },
+                };
+                vars_map.put(key, var_val) catch {
+                    allocator.free(key);
+                    switch (var_val) {
+                        .string => |s| allocator.free(s),
+                        else => {},
+                    }
+                    continue;
+                };
+            }
+            if (vars_map.count() > 0) {
+                state.variables = vars_map;
+            } else {
+                vars_map.deinit();
             }
         }
     }
@@ -173,6 +239,35 @@ pub fn saveState(state: ReplayState, allocator: std.mem.Allocator, io: std.Io, s
     try json_buf.appendSlice(allocator, "  \"status\": \"");
     try json_buf.appendSlice(allocator, state.status.toString());
     try json_buf.appendSlice(allocator, "\"");
+
+    // Write variables if any
+    if (state.variables) |vars| {
+        if (vars.count() > 0) {
+            try json_buf.appendSlice(allocator, ",\n  \"variables\": {");
+            var vars_first = true;
+            var iter = vars.iterator();
+            while (iter.next()) |entry| {
+                if (!vars_first) try json_buf.appendSlice(allocator, ",");
+                vars_first = false;
+                try json_buf.appendSlice(allocator, "\n    \"");
+                try appendEscaped(&json_buf, allocator, entry.key_ptr.*);
+                try json_buf.appendSlice(allocator, "\": ");
+                switch (entry.value_ptr.*) {
+                    .int => |i| {
+                        const i_str = try std.fmt.allocPrint(allocator, "{}", .{i});
+                        defer allocator.free(i_str);
+                        try json_buf.appendSlice(allocator, i_str);
+                    },
+                    .string => |s| {
+                        try json_buf.appendSlice(allocator, "\"");
+                        try appendEscaped(&json_buf, allocator, s);
+                        try json_buf.appendSlice(allocator, "\"");
+                    },
+                }
+            }
+            try json_buf.appendSlice(allocator, "\n  }");
+        }
+    }
 
     try json_buf.appendSlice(allocator, "\n}\n");
 

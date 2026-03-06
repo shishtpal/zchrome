@@ -641,6 +641,39 @@ pub const ReplayOptions = struct {
     session_ctx: ?*const session_mod.SessionContext = null,
 };
 
+/// Resolve an integer value from a string that may be a literal or $variable reference
+fn resolveIntVar(val: []const u8, variables: *const std.StringHashMap(replay_state.VarValue)) ?i64 {
+    if (val.len > 0 and val[0] == '$') {
+        // Variable reference
+        const var_name = val[1..];
+        if (variables.get(var_name)) |v| {
+            return switch (v) {
+                .int => |i| i,
+                .string => |s| std.fmt.parseInt(i64, s, 10) catch null,
+            };
+        }
+        return null;
+    }
+    // Literal value
+    return std.fmt.parseInt(i64, val, 10) catch null;
+}
+
+/// Resolve a string value from a string that may be a literal or $variable reference
+fn resolveStringVar(val: []const u8, variables: *const std.StringHashMap(replay_state.VarValue)) []const u8 {
+    if (val.len > 0 and val[0] == '$') {
+        // Variable reference
+        const var_name = val[1..];
+        if (variables.get(var_name)) |v| {
+            return switch (v) {
+                .string => |s| s,
+                .int => val, // Return original if type mismatch
+            };
+        }
+        return val; // Return original if not found
+    }
+    return val;
+}
+
 /// Execute an assertion command, returns true on success, false on failure
 fn executeAssertion(
     session: *cdp.Session,
@@ -648,6 +681,7 @@ fn executeAssertion(
     io: std.Io,
     cmd: macro_mod.MacroCommand,
     _: ?*const session_mod.SessionContext,
+    variables: *const std.StringHashMap(replay_state.VarValue),
 ) !bool {
     const timeout_ms = cmd.timeout orelse 5000;
     var runtime = cdp.Runtime.init(session);
@@ -761,6 +795,169 @@ fn executeAssertion(
             return true;
         }
         return false;
+    }
+
+    // 3.5 Count-based assertions (uses querySelectorAll)
+    if (cmd.selector) |sel| {
+        if (cmd.count != null or cmd.count_min != null or cmd.count_max != null) {
+            const escaped_sel = try escapeForJs(allocator, sel);
+            defer allocator.free(escaped_sel);
+
+            // Build JavaScript to get count and compare
+            var conditions: std.ArrayList(u8) = .empty;
+            defer conditions.deinit(allocator);
+
+            try conditions.appendSlice(allocator, "(function(s){var c=document.querySelectorAll(s).length;return ");
+
+            var has_condition = false;
+            if (cmd.count) |expected| {
+                const cond = try std.fmt.allocPrint(allocator, "c==={}", .{expected});
+                defer allocator.free(cond);
+                try conditions.appendSlice(allocator, cond);
+                has_condition = true;
+            }
+            if (cmd.count_min) |min| {
+                if (has_condition) try conditions.appendSlice(allocator, "&&");
+                const cond = try std.fmt.allocPrint(allocator, "c>={}", .{min});
+                defer allocator.free(cond);
+                try conditions.appendSlice(allocator, cond);
+                has_condition = true;
+            }
+            if (cmd.count_max) |max| {
+                if (has_condition) try conditions.appendSlice(allocator, "&&");
+                const cond = try std.fmt.allocPrint(allocator, "c<={}", .{max});
+                defer allocator.free(cond);
+                try conditions.appendSlice(allocator, cond);
+                has_condition = true;
+            }
+
+            const js = try std.fmt.allocPrint(allocator, "{s}}})('{s}')", .{ conditions.items, escaped_sel });
+            defer allocator.free(js);
+
+            if (try pollUntilTrue(session, allocator, js, timeout_ms)) {
+                return true;
+            }
+            return false;
+        }
+    }
+
+    // 3.6 Variable-based count comparisons (count_gt, count_lt, count_gte, count_lte)
+    if (cmd.selector) |sel| {
+        if (cmd.count_gt != null or cmd.count_lt != null or cmd.count_gte != null or cmd.count_lte != null) {
+            const escaped_sel = try escapeForJs(allocator, sel);
+            defer allocator.free(escaped_sel);
+
+            // Get current count
+            const count_js = try std.fmt.allocPrint(allocator, "document.querySelectorAll('{s}').length", .{escaped_sel});
+            defer allocator.free(count_js);
+            var result = try runtime.evaluate(allocator, count_js, .{ .return_by_value = true });
+            defer result.deinit(allocator);
+
+            const current_count: i64 = if (result.asNumber()) |num| @intFromFloat(num) else 0;
+
+            // Check count_gt
+            if (cmd.count_gt) |expected| {
+                const target = resolveIntVar(expected, variables);
+                if (target) |t| {
+                    if (current_count <= t) return false;
+                } else {
+                    std.debug.print("    Error: cannot resolve count_gt value: {s}\n", .{expected});
+                    return false;
+                }
+            }
+            // Check count_lt
+            if (cmd.count_lt) |expected| {
+                const target = resolveIntVar(expected, variables);
+                if (target) |t| {
+                    if (current_count >= t) return false;
+                } else {
+                    std.debug.print("    Error: cannot resolve count_lt value: {s}\n", .{expected});
+                    return false;
+                }
+            }
+            // Check count_gte
+            if (cmd.count_gte) |expected| {
+                const target = resolveIntVar(expected, variables);
+                if (target) |t| {
+                    if (current_count < t) return false;
+                } else {
+                    std.debug.print("    Error: cannot resolve count_gte value: {s}\n", .{expected});
+                    return false;
+                }
+            }
+            // Check count_lte
+            if (cmd.count_lte) |expected| {
+                const target = resolveIntVar(expected, variables);
+                if (target) |t| {
+                    if (current_count > t) return false;
+                } else {
+                    std.debug.print("    Error: cannot resolve count_lte value: {s}\n", .{expected});
+                    return false;
+                }
+            }
+            return true;
+        }
+    }
+
+    // 3.7 Variable-based text comparisons (text_eq, text_neq, text_contains_var)
+    if (cmd.selector) |sel| {
+        if (cmd.text_eq != null or cmd.text_neq != null or cmd.text_contains_var != null) {
+            const escaped_sel = try escapeForJs(allocator, sel);
+            defer allocator.free(escaped_sel);
+
+            // Get current text
+            const text_js = try std.fmt.allocPrint(allocator, "document.querySelector('{s}')?.textContent?.trim()||''", .{escaped_sel});
+            defer allocator.free(text_js);
+            var result = try runtime.evaluate(allocator, text_js, .{ .return_by_value = true });
+            defer result.deinit(allocator);
+
+            const current_text = result.asString() orelse "";
+
+            // Check text_eq
+            if (cmd.text_eq) |expected| {
+                const target = resolveStringVar(expected, variables);
+                if (!std.mem.eql(u8, current_text, target)) return false;
+            }
+            // Check text_neq
+            if (cmd.text_neq) |expected| {
+                const target = resolveStringVar(expected, variables);
+                if (std.mem.eql(u8, current_text, target)) return false;
+            }
+            // Check text_contains_var
+            if (cmd.text_contains_var) |expected| {
+                const target = resolveStringVar(expected, variables);
+                if (std.mem.indexOf(u8, current_text, target) == null) return false;
+            }
+            return true;
+        }
+    }
+
+    // 3.8 Variable-based value comparisons (value_eq, value_neq)
+    if (cmd.selector) |sel| {
+        if (cmd.value_eq != null or cmd.value_neq != null) {
+            const escaped_sel = try escapeForJs(allocator, sel);
+            defer allocator.free(escaped_sel);
+
+            // Get current value
+            const val_js = try std.fmt.allocPrint(allocator, "document.querySelector('{s}')?.value||''", .{escaped_sel});
+            defer allocator.free(val_js);
+            var result = try runtime.evaluate(allocator, val_js, .{ .return_by_value = true });
+            defer result.deinit(allocator);
+
+            const current_val = result.asString() orelse "";
+
+            // Check value_eq
+            if (cmd.value_eq) |expected| {
+                const target = resolveStringVar(expected, variables);
+                if (!std.mem.eql(u8, current_val, target)) return false;
+            }
+            // Check value_neq
+            if (cmd.value_neq) |expected| {
+                const target = resolveStringVar(expected, variables);
+                if (std.mem.eql(u8, current_val, target)) return false;
+            }
+            return true;
+        }
     }
 
     // 4. Snapshot comparison
@@ -979,6 +1176,39 @@ fn replayCommandsWithOptions(session: *cdp.Session, allocator: std.mem.Allocator
     var total_retries: u32 = 0;
     var has_assertions = false;
 
+    // Variables map for capture action
+    var variables = std.StringHashMap(replay_state.VarValue).init(allocator);
+    defer {
+        var iter = variables.iterator();
+        while (iter.next()) |entry| {
+            allocator.free(entry.key_ptr.*);
+            entry.value_ptr.deinit(allocator);
+        }
+        variables.deinit();
+    }
+
+    // Load variables from state if resuming
+    if (options.resume_mode) {
+        if (replay_state.loadState(allocator, io, options.session_ctx)) |loaded| {
+            var loaded_state = loaded;
+            // Don't call deinit yet - we need to transfer variables
+            if (loaded_state.variables) |*vars| {
+                // Transfer ownership of variables to our map
+                var iter = vars.iterator();
+                while (iter.next()) |entry| {
+                    // Keys and values are already allocated, just move them
+                    variables.put(entry.key_ptr.*, entry.value_ptr.*) catch {};
+                }
+                // Clear the map but don't free - we transferred ownership
+                vars.clearAndFree();
+            }
+            // Now free the rest
+            if (loaded_state.macro_file) |m| allocator.free(m);
+            if (loaded_state.failed_at) |f| allocator.free(f);
+            if (loaded_state.failure_reason) |r| allocator.free(r);
+        }
+    }
+
     // Enable Page domain upfront so we can intercept dialogs triggered by any command.
     // This must happen BEFORE any action that might trigger a dialog, otherwise the
     // dialog gets auto-dismissed when Page.enable() is called later.
@@ -1018,7 +1248,7 @@ fn replayCommandsWithOptions(session: *cdp.Session, allocator: std.mem.Allocator
 
         // Handle assert command
         if (cmd.action == .assert) {
-            const assert_result = executeAssertion(session, allocator, io, cmd, options.session_ctx) catch false;
+            const assert_result = executeAssertion(session, allocator, io, cmd, options.session_ctx, &variables) catch false;
             if (assert_result) {
                 std.debug.print(" [OK]\n", .{});
                 retry_count = 0; // Reset retry count on success
@@ -1305,6 +1535,126 @@ fn replayCommandsWithOptions(session: *cdp.Session, allocator: std.mem.Allocator
                     continue;
                 }
                 tryWithFallbackSelectorsUpload(session, allocator, io, cmd, files);
+            },
+            .capture => {
+                // Capture action - store values into variables for later comparison
+                const selector = cmd.selector orelse {
+                    std.debug.print("    Error: capture requires selector\n", .{});
+                    continue;
+                };
+                const escaped_sel = escapeForJs(allocator, selector) catch |err| {
+                    std.debug.print("    Error escaping selector: {}\n", .{err});
+                    continue;
+                };
+                defer allocator.free(escaped_sel);
+
+                var runtime = cdp.Runtime.init(session);
+                runtime.enable() catch {};
+
+                // count_as: capture element count
+                if (cmd.count_as) |var_name| {
+                    const js = std.fmt.allocPrint(allocator, "document.querySelectorAll('{s}').length", .{escaped_sel}) catch continue;
+                    defer allocator.free(js);
+                    var result = runtime.evaluate(allocator, js, .{ .return_by_value = true }) catch continue;
+                    defer result.deinit(allocator);
+                    if (result.asNumber()) |num| {
+                        const int_val: i64 = @intFromFloat(num);
+                        // Store in variables map
+                        const key = allocator.dupe(u8, var_name) catch continue;
+                        // Remove old value if exists
+                        if (variables.fetchRemove(key)) |old| {
+                            allocator.free(old.key);
+                            var old_val = old.value;
+                            old_val.deinit(allocator);
+                        }
+                        variables.put(key, .{ .int = int_val }) catch {
+                            allocator.free(key);
+                            continue;
+                        };
+                        std.debug.print(" {s}={}\n", .{ var_name, int_val });
+                    }
+                }
+                // text_as: capture text content
+                if (cmd.text_as) |var_name| {
+                    const js = std.fmt.allocPrint(allocator, "document.querySelector('{s}')?.textContent?.trim()||''", .{escaped_sel}) catch continue;
+                    defer allocator.free(js);
+                    var result = runtime.evaluate(allocator, js, .{ .return_by_value = true }) catch continue;
+                    defer result.deinit(allocator);
+                    if (result.asString()) |str| {
+                        const key = allocator.dupe(u8, var_name) catch continue;
+                        const val_str = allocator.dupe(u8, str) catch {
+                            allocator.free(key);
+                            continue;
+                        };
+                        if (variables.fetchRemove(key)) |old| {
+                            allocator.free(old.key);
+                            var old_val = old.value;
+                            old_val.deinit(allocator);
+                        }
+                        variables.put(key, .{ .string = val_str }) catch {
+                            allocator.free(key);
+                            allocator.free(val_str);
+                            continue;
+                        };
+                        std.debug.print(" {s}=\"{s}\"\n", .{ var_name, str });
+                    }
+                }
+                // value_as: capture input value
+                if (cmd.value_as) |var_name| {
+                    const js = std.fmt.allocPrint(allocator, "document.querySelector('{s}')?.value||''", .{escaped_sel}) catch continue;
+                    defer allocator.free(js);
+                    var result = runtime.evaluate(allocator, js, .{ .return_by_value = true }) catch continue;
+                    defer result.deinit(allocator);
+                    if (result.asString()) |str| {
+                        const key = allocator.dupe(u8, var_name) catch continue;
+                        const val_str = allocator.dupe(u8, str) catch {
+                            allocator.free(key);
+                            continue;
+                        };
+                        if (variables.fetchRemove(key)) |old| {
+                            allocator.free(old.key);
+                            var old_val = old.value;
+                            old_val.deinit(allocator);
+                        }
+                        variables.put(key, .{ .string = val_str }) catch {
+                            allocator.free(key);
+                            allocator.free(val_str);
+                            continue;
+                        };
+                        std.debug.print(" {s}=\"{s}\"\n", .{ var_name, str });
+                    }
+                }
+                // attr_as: capture attribute value
+                if (cmd.attr_as) |var_name| {
+                    const attr = cmd.attribute orelse {
+                        std.debug.print("    Error: attr_as requires attribute field\n", .{});
+                        continue;
+                    };
+                    const escaped_attr = escapeForJs(allocator, attr) catch continue;
+                    defer allocator.free(escaped_attr);
+                    const js = std.fmt.allocPrint(allocator, "document.querySelector('{s}')?.getAttribute('{s}')||''", .{ escaped_sel, escaped_attr }) catch continue;
+                    defer allocator.free(js);
+                    var result = runtime.evaluate(allocator, js, .{ .return_by_value = true }) catch continue;
+                    defer result.deinit(allocator);
+                    if (result.asString()) |str| {
+                        const key = allocator.dupe(u8, var_name) catch continue;
+                        const val_str = allocator.dupe(u8, str) catch {
+                            allocator.free(key);
+                            continue;
+                        };
+                        if (variables.fetchRemove(key)) |old| {
+                            allocator.free(old.key);
+                            var old_val = old.value;
+                            old_val.deinit(allocator);
+                        }
+                        variables.put(key, .{ .string = val_str }) catch {
+                            allocator.free(key);
+                            allocator.free(val_str);
+                            continue;
+                        };
+                        std.debug.print(" {s}=\"{s}\"\n", .{ var_name, str });
+                    }
+                }
             },
         }
 

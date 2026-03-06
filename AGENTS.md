@@ -266,11 +266,21 @@ cli/actions/               Low-level element/keyboard actions
   upload.zig              File upload via CDP
   helpers.zig             JS string escaping, JS snippets
   types.zig               ResolvedElement, ElementPosition
-cli/commands/              Macro recording & replay
-  macro.zig               MacroCommand/ActionType types, JSON serialization
+cli/cursor/                Macro recording & replay module
+  mod.zig                 Public API (cursor, printCursorHelp, type exports)
+  macro/                  Macro types and serialization
+    mod.zig               Re-exports from submodules
+    command.zig           Version 2: MacroCommand, ActionType, save/load
+    event.zig             Version 1: MacroEvent, EventType (legacy)
+    js.zig                Recording JavaScript snippets
+  record.zig              Recording entry point
   record_server.zig       WebSocket-based event collection
-  replay_state.zig        ReplayState persistence for --resume
-  cursor.zig              Record/replay commands, assertion execution
+  replay.zig              Replay orchestration, command dispatch
+  assertions.zig          Assert execution, variable resolution
+  actions.zig             Fallback selector action handlers
+  state.zig               VarValue, ReplayState persistence for --resume
+  display.zig             cursorActive, cursorHover, printElementInfo
+  utils.zig               escapeForJs, pollUntilTrue, glob matching
 ```
 
 **`cli/commands/`** is the single source of truth for all session-level
@@ -345,10 +355,14 @@ The `cursor record` command uses a WebSocket-based architecture to capture event
 | File | Purpose |
 |------|---------|
 | `src/transport/ws_server.zig` | WebSocket server (accept, handshake, frame read/write) |
-| `cli/commands/record_server.zig` | Recording state, event parsing, JSON accumulation |
-| `cli/commands/macro.zig` | `MacroEvent`/`MacroCommand` types, `saveMacro`/`loadMacro`, `ActionType` enum |
-| `cli/commands/cursor.zig` | `cursorRecord`, `cursorReplay`, `executeAssertion`, retry logic |
-| `cli/commands/replay_state.zig` | `ReplayState` struct, state persistence for `--resume` |
+| `cli/cursor/mod.zig` | Public API, re-exports cursor/printCursorHelp |
+| `cli/cursor/record_server.zig` | Recording state, event parsing, JSON accumulation |
+| `cli/cursor/macro/command.zig` | `MacroCommand`/`ActionType` types, `save`/`load` for v2 |
+| `cli/cursor/macro/event.zig` | `MacroEvent`/`EventType` types for legacy v1 |
+| `cli/cursor/replay.zig` | `cursor` entry point, `cursorReplay`, command dispatch |
+| `cli/cursor/record.zig` | `cursorRecord` entry point |
+| `cli/cursor/assertions.zig` | `executeAssertion`, variable resolution |
+| `cli/cursor/state.zig` | `VarValue`, `ReplayState` persistence for `--resume` |
 
 ### Event Types
 

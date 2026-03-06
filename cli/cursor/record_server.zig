@@ -6,7 +6,7 @@
 const std = @import("std");
 const json = @import("json");
 const cdp = @import("cdp");
-const macro_mod = @import("macro.zig");
+const macro_mod = @import("macro/mod.zig");
 
 pub const DEFAULT_PORT: u16 = 4040;
 

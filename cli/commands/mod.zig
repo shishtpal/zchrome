@@ -21,7 +21,7 @@ const drag_mod = @import("drag.zig");
 const upload_mod = @import("upload.zig");
 const keyboard_mod = @import("keyboard.zig");
 const mouse_mod = @import("mouse.zig");
-const cursor_mod = @import("cursor.zig");
+const cursor_mod = @import("../cursor/mod.zig");
 const wait_mod = @import("wait.zig");
 const getters_mod = @import("getters.zig");
 const setters_mod = @import("setters.zig");
@@ -118,13 +118,12 @@ pub const printMouseHelp = mouse_mod.printMouseHelp;
 pub const cursor = cursor_mod.cursor;
 pub const printCursorHelp = cursor_mod.printCursorHelp;
 
-// ─── Macro Re-exports ────────────────────────────────────────────────────────
+// ─── Macro Re-exports (from cursor module) ───────────────────────────────────
 
-const macro_mod = @import("macro.zig");
-pub const Macro = macro_mod.Macro;
-pub const MacroEvent = macro_mod.MacroEvent;
-pub const loadMacro = macro_mod.loadMacro;
-pub const saveMacro = macro_mod.saveMacro;
+pub const Macro = cursor_mod.Macro;
+pub const MacroEvent = cursor_mod.MacroEvent;
+pub const loadMacro = cursor_mod.loadMacro;
+pub const saveMacro = cursor_mod.saveMacro;
 
 // ─── Wait Re-exports ─────────────────────────────────────────────────────────
 

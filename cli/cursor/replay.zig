@@ -146,6 +146,10 @@ pub fn printCursorHelp() void {
         \\  {{"action": "upload", "selector": "#file", "files": ["doc.pdf"]}}
         \\  {{"action": "upload", "selector": "#file", "files": ["a.pdf", "b.txt"]}}
         \\
+        \\Goto Action in JSON (chain to another macro file):
+        \\  {{"action": "goto", "file": "next-step.json"}}
+        \\  {{"action": "goto", "file": "checkout.json"}}
+        \\
         \\Examples:
         \\  zchrome cursor active
         \\  zchrome cursor hover
@@ -384,6 +388,8 @@ fn replayCommandsWithOptions(session: *cdp.Session, allocator: std.mem.Allocator
                 std.debug.print("  [{}/{}] {s} \"{s}\"", .{ i + 1, macro_data.commands.len, action_name, sel });
             } else if (cmd.key) |key| {
                 std.debug.print("  [{}/{}] {s} {s}", .{ i + 1, macro_data.commands.len, action_name, key });
+            } else if (cmd.file) |f| {
+                std.debug.print("  [{}/{}] {s} \"{s}\"", .{ i + 1, macro_data.commands.len, action_name, f });
             } else {
                 std.debug.print("  [{}/{}] {s}", .{ i + 1, macro_data.commands.len, action_name });
             }
@@ -450,7 +456,7 @@ fn replayCommandsWithOptions(session: *cdp.Session, allocator: std.mem.Allocator
         }
 
         // Execute the command based on action type
-        executeCommand(session, allocator, io, cmd, &variables, &page);
+        executeCommand(session, allocator, io, cmd, &variables, &page, filename);
 
         // Delay between commands
         const now_ns = std.Io.Timestamp.now(io, .real).nanoseconds;
@@ -482,6 +488,7 @@ fn executeCommand(
     cmd: macro.MacroCommand,
     variables: *std.StringHashMap(state.VarValue),
     page: *cdp.Page,
+    macro_file: []const u8,
 ) void {
     // Build context for command execution
     var pos_args: [2][]const u8 = .{ "", "" };
@@ -669,6 +676,41 @@ fn executeCommand(
                 return;
             }
             actions.tryWithFallbackSelectorsUpload(session, allocator, io, cmd, files);
+        },
+        .goto => {
+            const target_file = cmd.file orelse {
+                std.debug.print("    Error: goto requires file field\n", .{});
+                return;
+            };
+
+            // Resolve target file path relative to macro file's directory
+            const resolved_path = blk: {
+                const macro_dir = std.fs.path.dirname(macro_file);
+                if (macro_dir) |dir| {
+                    // Try joining with macro's directory first
+                    const joined = std.fs.path.join(allocator, &.{ dir, target_file }) catch break :blk target_file;
+
+                    // Check if the joined path exists by trying to read it
+                    const test_dir = std.Io.Dir.cwd();
+                    var test_buf: [1]u8 = undefined;
+                    if (test_dir.readFile(io, joined, &test_buf)) |_| {
+                        break :blk joined;
+                    } else |_| {
+                        // File not found relative to macro dir, try CWD
+                        allocator.free(joined);
+                        break :blk target_file;
+                    }
+                }
+                break :blk target_file;
+            };
+            defer if (resolved_path.ptr != target_file.ptr) allocator.free(resolved_path);
+
+            std.debug.print(" -> {s}\n", .{resolved_path});
+            replayCommandsWithOptions(session, allocator, io, resolved_path, .{
+                .interval = .{ .min_ms = 100, .max_ms = 100 },
+            }) catch |err| {
+                std.debug.print("    Error replaying {s}: {}\n", .{ resolved_path, err });
+            };
         },
         .capture => {
             const selector = cmd.selector orelse {

@@ -27,6 +27,7 @@ pub const ActionType = enum {
     dialog,
     upload,
     capture,
+    goto,
 
     pub fn toString(self: ActionType) []const u8 {
         return switch (self) {
@@ -47,6 +48,7 @@ pub const ActionType = enum {
             .dialog => "dialog",
             .upload => "upload",
             .capture => "capture",
+            .goto => "goto",
         };
     }
 
@@ -68,6 +70,7 @@ pub const ActionType = enum {
         if (std.mem.eql(u8, s, "dialog")) return .dialog;
         if (std.mem.eql(u8, s, "upload")) return .upload;
         if (std.mem.eql(u8, s, "capture")) return .capture;
+        if (std.mem.eql(u8, s, "goto")) return .goto;
         return null;
     }
 
@@ -76,7 +79,7 @@ pub const ActionType = enum {
     pub fn isActionCommand(self: ActionType) bool {
         return switch (self) {
             .click, .dblclick, .fill, .check, .uncheck, .select, .multiselect, .hover, .navigate, .upload => true,
-            .press, .scroll, .wait, .assert, .extract, .dialog, .capture => false,
+            .press, .scroll, .wait, .assert, .extract, .dialog, .capture, .goto => false,
         };
     }
 };
@@ -126,6 +129,8 @@ pub const MacroCommand = struct {
     text_contains_var: ?[]const u8 = null, // Text contains (value or $variable)
     value_eq: ?[]const u8 = null, // Input value equals
     value_neq: ?[]const u8 = null, // Input value not equals
+    // Goto-specific fields
+    file: ?[]const u8 = null, // Target macro JSON file for goto action
 
     pub fn deinit(self: *MacroCommand, allocator: std.mem.Allocator) void {
         if (self.selector) |s| allocator.free(s);
@@ -162,6 +167,8 @@ pub const MacroCommand = struct {
         if (self.text_contains_var) |tc| allocator.free(tc);
         if (self.value_eq) |ve| allocator.free(ve);
         if (self.value_neq) |vn| allocator.free(vn);
+        // Goto fields
+        if (self.file) |f2| allocator.free(f2);
     }
 
     pub fn clone(self: *const MacroCommand, allocator: std.mem.Allocator) !MacroCommand {
@@ -219,6 +226,7 @@ pub const MacroCommand = struct {
             .text_contains_var = if (self.text_contains_var) |tc| try allocator.dupe(u8, tc) else null,
             .value_eq = if (self.value_eq) |ve| try allocator.dupe(u8, ve) else null,
             .value_neq = if (self.value_neq) |vn| try allocator.dupe(u8, vn) else null,
+            .file = if (self.file) |f2| try allocator.dupe(u8, f2) else null,
         };
     }
 };
@@ -501,6 +509,13 @@ pub fn save(allocator: std.mem.Allocator, io: std.Io, path: []const u8, macro: *
             try json_buf.appendSlice(allocator, escaped);
             try json_buf.appendSlice(allocator, "\"");
         }
+        if (cmd.file) |f| {
+            const escaped = try escapeString(allocator, f);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"file\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
 
         try json_buf.appendSlice(allocator, "}");
     }
@@ -705,6 +720,10 @@ pub fn load(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !Command
                 }
                 if (obj.get("value_neq")) |vn| {
                     if (vn == .string) cmd.value_neq = try allocator.dupe(u8, vn.string);
+                }
+                // Goto-specific field
+                if (obj.get("file")) |f| {
+                    if (f == .string) cmd.file = try allocator.dupe(u8, f.string);
                 }
 
                 try cmds_list.append(allocator, cmd);

@@ -123,6 +123,10 @@
       "action": "dialog",
       "accept": true,
       "text": "Data has been successful saved. Record ID: *"
+    },
+    {
+      "action": "goto",
+      "file": "example-6.json"
     }
   ]
 }

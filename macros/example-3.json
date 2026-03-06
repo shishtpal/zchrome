@@ -113,6 +113,10 @@
     {
       "action": "click",
       "selector": "body > div > a"
+    },
+    {
+      "action": "goto",
+      "file": "example-4.json"
     }
   ]
 }

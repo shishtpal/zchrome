@@ -130,6 +130,10 @@
       "action": "assert",
       "text": "Data has been successful saved.",
       "timeout": 5000
+    },
+    {
+      "action": "goto",
+      "file": "example-2.json"
     }
   ]
 }

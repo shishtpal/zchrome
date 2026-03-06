@@ -109,6 +109,10 @@
       "action": "dialog",
       "accept": true,
       "text": "Data has been successful saved."
+    },
+    {
+      "action": "goto",
+      "file": "example-3.json"
     }
   ]
 }

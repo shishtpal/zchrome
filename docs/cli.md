@@ -1472,8 +1472,19 @@ Replaying 12 commands from macro.json (retries: 3, delay: 1000ms)...
   [3/12] assert "#email" ✓
   [4/12] press Enter
   [5/12] wait ".dashboard"
+  [6/12] goto "checkout.json" -> checkout.json
 Replay complete. All assertions passed.
 ```
+
+**Macro chaining with `goto`:**
+
+Use the `goto` action in your macro JSON to hand off replay to another file:
+
+```json
+{"action": "goto", "file": "next-step.json"}
+```
+
+This is useful for splitting multi-step flows (e.g., login → form → checkout) into reusable macro files.
 
 See the [Macro Recording](/examples/macros) guide for full documentation on the macro format, assertions, and supported actions.
 

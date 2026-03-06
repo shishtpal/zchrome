@@ -121,6 +121,7 @@ This makes macros more robust across different page states or minor UI changes.
 | `assert` | See below | Test conditions with retry on failure |
 | `extract` | `selector`, `mode`?, `output` | Extract DOM data as JSON |
 | `capture` | `selector`, capture fields | Capture values into variables for comparison |
+| `goto` | `file` | Chain to another macro JSON file |
 
 **Note:** `selectors` is an optional array of fallback CSS selectors tried if `selector` fails.
 
@@ -666,6 +667,60 @@ The macro replay system buffers CDP events, so when a click triggers a dialog:
 ::: tip
 Unlike the CLI `dialog` command, macro replay doesn't need to wait for dialogs because events are buffered during replay.
 :::
+
+### Macro Chaining (goto)
+
+Split complex flows across multiple macro files and chain them together using the `goto` action. When replay encounters a `goto`, it loads and replays the target file before continuing.
+
+**Goto Action Format:**
+
+```json
+{
+  "action": "goto",
+  "file": "next-step.json"    // Path to the next macro file
+}
+```
+
+**Example: Multi-step form flow**
+
+Break a long registration flow into separate files:
+
+`step1-account.json`:
+```json
+{
+  "version": 2,
+  "commands": [
+    {"action": "fill", "selector": "#email", "value": "user@example.com"},
+    {"action": "fill", "selector": "#password", "value": "secret123"},
+    {"action": "click", "selector": "#next"},
+    {"action": "assert", "url": "**/profile"},
+    {"action": "goto", "file": "step2-profile.json"}
+  ]
+}
+```
+
+`step2-profile.json`:
+```json
+{
+  "version": 2,
+  "commands": [
+    {"action": "fill", "selector": "#firstName", "value": "John"},
+    {"action": "fill", "selector": "#lastName", "value": "Doe"},
+    {"action": "click", "selector": "#submit"},
+    {"action": "assert", "text": "Registration complete"}
+  ]
+}
+```
+
+```bash
+# Replay the entire flow starting from step 1
+zchrome cursor replay step1-account.json
+```
+
+**Benefits:**
+- **Reusable steps** — share common flows (e.g., login) across test suites
+- **Easier maintenance** — edit one step without touching others
+- **Composable** — mix and match steps for different scenarios
 
 ### Modify Values
 

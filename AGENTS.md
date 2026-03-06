@@ -387,7 +387,8 @@ pub const EventType = enum {
     {"action": "fill", "selector": "#email", "value": "test@example.com"},
     {"action": "assert", "selector": "#email", "value": "test@example.com"},
     {"action": "click", "selector": "#submit"},
-    {"action": "assert", "url": "**/dashboard", "timeout": 10000}
+    {"action": "assert", "url": "**/dashboard", "timeout": 10000},
+    {"action": "goto", "file": "checkout-flow.json"}
   ]
 }
 ```

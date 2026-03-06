@@ -109,6 +109,10 @@
     {
       "action": "assert",
       "text": "Data has been successful saved."
+    },
+    {
+      "action": "goto",
+      "file": "example-7.json"
     }
   ]
 }

@@ -524,6 +524,69 @@ Use per-assertion fallbacks for conditional flows:
 }
 ```
 
+## Generating Macro Templates
+
+Instead of recording from scratch, you can generate a macro template from an existing DOM element using the `dom macro` command:
+
+```bash
+# Generate macro for a button
+zchrome dom "#add_record" macro --output macro.json
+
+# Generate macro for a form (auto-discovers inputs)
+zchrome dom "#login-form" macro --output login.json
+
+# Generate macro for a file upload
+zchrome dom "#file-input" macro --output upload.json
+```
+
+The generator inspects the element and creates context-aware commands:
+
+| Element Type | Generated Commands |
+|-------------|-------------------|
+| `<button>`, `<a>` | `wait` → `click` → `assert` |
+| `<input type="text/email/password">` | `wait` → `fill` → `assert` |
+| `<input type="checkbox">` | `wait` → `check` → `assert` |
+| `<input type="radio">` | `wait` → `check` → `assert` |
+| `<input type="file">` | `wait` → `upload` → `assert` |
+| `<select>` | `wait` → `select` → `assert` |
+| `<form>` (with inputs) | `wait` → commands for each input → `click` (submit) → `assert` |
+| `<table>` | `wait` → `extract` (table mode) |
+
+**Example: Generate macro for a login form**
+
+```bash
+zchrome dom "#login-form" macro --output login.json
+```
+
+Output (`login.json`):
+```json
+{
+  "version": 2,
+  "commands": [
+    {"action": "wait", "selector": "#login-form"},
+    {"action": "fill", "selector": "#username", "selectors": ["[name=\"username\"]", "input[type=\"text\"]"], "value": "TODO"},
+    {"action": "assert", "selector": "#username", "selectors": ["[name=\"username\"]", "input[type=\"text\"]"]},
+    {"action": "fill", "selector": "#password", "selectors": ["[name=\"password\"]", "input[type=\"password\"]"], "value": "TODO"},
+    {"action": "assert", "selector": "#password", "selectors": ["[name=\"password\"]", "input[type=\"password\"]"]},
+    {"action": "check", "selector": "#remember", "selectors": ["[name=\"remember\"]", "input[type=\"checkbox\"]"]},
+    {"action": "assert", "selector": "#remember", "selectors": ["[name=\"remember\"]", "input[type=\"checkbox\"]"]},
+    {"action": "click", "selector": "#submit-btn", "selectors": ["button[type=\"submit\"]"]},
+    {"action": "assert", "selector": "#login-form"}
+  ]
+}
+```
+
+The generated template includes:
+- **Multiple fallback selectors** for each element
+- **Assert after each input** to verify state
+- **TODO placeholders** for values to fill in
+
+Edit the `TODO` values, then replay:
+
+```bash
+zchrome cursor replay login.json
+```
+
 ## Editing Macros
 
 One of the key benefits of semantic macros is that they're **human-readable and editable**. You can:

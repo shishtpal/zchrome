@@ -1615,6 +1615,7 @@ zchrome dom <selector> [mode] [options]
 | `form` | Form field values as key-value pairs |
 | `links` | Extract all links (href, text, target, rel) |
 | `images` | Extract all images (src, alt, width, height, srcset) |
+| `macro` | Generate macro template JSON (requires `--output`) |
 
 **Options:**
 
@@ -1657,7 +1658,29 @@ zchrome dom "body" links --output links.json
 
 # Extract all images and save to file
 zchrome dom "body" images --output gallery.json
+
+# Generate macro template for a button
+zchrome dom "#add_record" macro --output macro.json
+
+# Generate macro template for a form (discovers all inputs)
+zchrome dom "#login-form" macro --output login.json
+
+# Replay the generated macro
+zchrome cursor replay macro.json
 ```
+
+**Macro Mode:**
+
+The `macro` mode generates a template macro JSON file based on the element type. It inspects the element and generates context-aware commands:
+
+- **Buttons/links**: `wait` → `click` → `assert`
+- **Text inputs**: `wait` → `fill` → `assert`  
+- **Checkboxes/radios**: `wait` → `check` → `assert`
+- **File inputs**: `wait` → `upload` → `assert`
+- **Select dropdowns**: `wait` → `select` → `assert`
+- **Forms**: Discovers all child inputs and generates commands for each
+
+The generated template includes multiple fallback selectors and TODO placeholders for values.
 
 **Output Format (links mode):**
 

@@ -323,3 +323,57 @@ const exists_js = try runtime.evaluateAs(
     "document.querySelector('#optional-element') !== null",
 );
 ```
+
+## Generate Macro Templates
+
+Generate a macro JSON template from a DOM element that can be edited and replayed with `cursor replay`.
+
+**CLI:**
+
+```bash
+# Generate macro for a button
+zchrome dom "#add_record" macro --output macro.json
+
+# Generate macro for a form (discovers all inputs)
+zchrome dom "#login-form" macro --output login.json
+
+# Replay the generated macro
+zchrome cursor replay macro.json
+```
+
+The `macro` mode inspects the element and generates context-aware commands:
+
+| Element Type | Generated Commands |
+|-------------|-------------------|
+| `<button>`, `<a>` | `wait` → `click` → `assert` |
+| `<input type="text">` | `wait` → `fill` → `assert` |
+| `<input type="checkbox">` | `wait` → `check` → `assert` |
+| `<input type="radio">` | `wait` → `check` → `assert` |
+| `<input type="file">` | `wait` → `upload` → `assert` |
+| `<select>` | `wait` → `select` → `assert` |
+| `<form>` | `wait` → commands for each input → `click` (submit) → `assert` |
+| `<table>` | `wait` → `extract` (table mode) |
+
+**Example output for a form:**
+
+```json
+{
+  "version": 2,
+  "commands": [
+    {"action": "wait", "selector": "#login-form"},
+    {"action": "fill", "selector": "#username", "selectors": ["[name=\"username\"]"], "value": "TODO"},
+    {"action": "assert", "selector": "#username", "selectors": ["[name=\"username\"]"]},
+    {"action": "fill", "selector": "#password", "selectors": ["[name=\"password\"]"], "value": "TODO"},
+    {"action": "assert", "selector": "#password", "selectors": ["[name=\"password\"]"]},
+    {"action": "check", "selector": "#remember", "selectors": ["[name=\"remember\"]"]},
+    {"action": "assert", "selector": "#remember", "selectors": ["[name=\"remember\"]"]},
+    {"action": "click", "selector": "#submit-btn", "selectors": ["button[type=\"submit\"]"]},
+    {"action": "assert", "selector": "#login-form"}
+  ]
+}
+```
+
+The generated template includes:
+- **Multiple fallback selectors** for robustness
+- **Assert after each input** to verify state
+- **TODO placeholders** for values you need to fill in

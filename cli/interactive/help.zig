@@ -32,22 +32,22 @@ pub fn print() void {
         \\    Options: -i (interactive only), -c (compact), -d <n> (depth)
         \\
         \\Inspection:
-        \\  evaluate <expr>       Evaluate JavaScript (aliases: eval, js)
-        \\  dom <selector>        Query DOM element
-        \\  cookies               List cookies (optional [domain])
-        \\  cookies get <n> [d]   Get cookie by name (optional [domain])
-        \\  cookies set <n> <v>   Set a cookie
+        \\  evaluate <expr>        Evaluate JavaScript (aliases: eval, js)
+        \\  dom <sel> [mode]       Extract DOM data (dom/text/html/attrs/table/form/links/images)
+        \\  cookies                List cookies (optional [domain])
+        \\  cookies get <n> [d]    Get cookie by name (optional [domain])
+        \\  cookies set <n> <v>    Set a cookie
         \\  cookies delete <n> [d] Delete cookie by name (optional [domain])
-        \\  cookies clear [d]     Clear all cookies (optional [domain])
+        \\  cookies clear [d]      Clear all cookies (optional [domain])
         \\  cookies export <p> [d] Export cookies to file (optional [domain])
         \\  cookies import <p> [d] Import cookies from file (optional [domain])
-        \\  storage local         Get all localStorage (JSON)
-        \\  storage local <key>   Get specific key
-        \\  storage local set <k> <v>  Set value
-        \\  storage local clear   Clear all localStorage
-        \\  storage local export <file>  Export to JSON/YAML file
-        \\  storage local import <file>  Import from JSON/YAML file
-        \\  storage session [..]  Same for sessionStorage
+        \\  storage local               Get all localStorage (JSON)
+        \\  storage local <key>         Get specific key
+        \\  storage local set <k> <v>   Set value
+        \\  storage local clear         Clear all localStorage
+        \\  storage local export <file> Export to JSON/YAML file
+        \\  storage local import <file> Import from JSON/YAML file
+        \\  storage session [..]        Same for sessionStorage
         \\
         \\Element Actions:
         \\  click <selector>      Click element

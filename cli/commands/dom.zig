@@ -15,6 +15,8 @@ pub const ExtractMode = enum {
     attrs, // Attributes only
     table, // Table to array of objects
     form, // Form field values
+    links, // Extract all links (<a href>)
+    images, // Extract all images (<img>)
 
     pub fn fromString(s: []const u8) ?ExtractMode {
         if (std.mem.eql(u8, s, "dom")) return .dom;
@@ -23,6 +25,8 @@ pub const ExtractMode = enum {
         if (std.mem.eql(u8, s, "attrs")) return .attrs;
         if (std.mem.eql(u8, s, "table")) return .table;
         if (std.mem.eql(u8, s, "form")) return .form;
+        if (std.mem.eql(u8, s, "links")) return .links;
+        if (std.mem.eql(u8, s, "images")) return .images;
         return null;
     }
 
@@ -34,6 +38,8 @@ pub const ExtractMode = enum {
             .attrs => "attrs",
             .table => "table",
             .form => "form",
+            .links => "links",
+            .images => "images",
         };
     }
 };
@@ -157,6 +163,42 @@ const extract_js =
     \\  }
     \\  
     \\  // ═══════════════════════════════════════════════════════════════════
+    \\  // Links extraction (<a href>)
+    \\  // ═══════════════════════════════════════════════════════════════════
+    \\  function linksToJson(root) {
+    \\    var anchors = root.querySelectorAll('a[href]');
+    \\    var result = [];
+    \\    for (var i = 0; i < anchors.length; i++) {
+    \\      var a = anchors[i];
+    \\      var entry = { href: a.href };
+    \\      var text = a.textContent.trim();
+    \\      if (text) entry.text = text;
+    \\      if (a.target) entry.target = a.target;
+    \\      if (a.rel) entry.rel = a.rel;
+    \\      result.push(entry);
+    \\    }
+    \\    return result;
+    \\  }
+    \\  
+    \\  // ═══════════════════════════════════════════════════════════════════
+    \\  // Images extraction (<img>)
+    \\  // ═══════════════════════════════════════════════════════════════════
+    \\  function imagesToJson(root) {
+    \\    var imgs = root.querySelectorAll('img');
+    \\    var result = [];
+    \\    for (var i = 0; i < imgs.length; i++) {
+    \\      var img = imgs[i];
+    \\      var entry = { src: img.src };
+    \\      if (img.alt) entry.alt = img.alt;
+    \\      if (img.naturalWidth) entry.width = img.naturalWidth;
+    \\      if (img.naturalHeight) entry.height = img.naturalHeight;
+    \\      if (img.srcset) entry.srcset = img.srcset;
+    \\      result.push(entry);
+    \\    }
+    \\    return result;
+    \\  }
+    \\  
+    \\  // ═══════════════════════════════════════════════════════════════════
     \\  // Unified extract function
     \\  // ═══════════════════════════════════════════════════════════════════
     \\  var els = all ? document.querySelectorAll(selector) : [document.querySelector(selector)];
@@ -187,6 +229,12 @@ const extract_js =
     \\      case 'form':
     \\        value = formToJson(el);
     \\        break;
+    \\      case 'links':
+    \\        value = linksToJson(el);
+    \\        break;
+    \\      case 'images':
+    \\        value = imagesToJson(el);
+    \\        break;
     \\      case 'dom':
     \\      default:
     \\        value = domToJson(el);
@@ -208,25 +256,30 @@ pub fn dom(session: *cdp.Session, ctx: CommandCtx) !void {
 
     const selector = ctx.positional[0];
 
-    // Parse mode from positional args (dom <selector> [mode])
-    var mode: ExtractMode = .dom;
-    if (ctx.positional.len > 1) {
-        if (ExtractMode.fromString(ctx.positional[1])) |m| {
-            mode = m;
+    // Scan all positional args: collect non-flag args for selector/mode,
+    // and detect --all / -a regardless of position.
+    var extract_all = false;
+    var non_flag_count: usize = 0;
+    var mode_str: ?[]const u8 = null;
+    for (ctx.positional) |arg| {
+        if (std.mem.eql(u8, arg, "--all") or std.mem.eql(u8, arg, "-a")) {
+            extract_all = true;
         } else {
-            std.debug.print("Unknown mode: {s}\n", .{ctx.positional[1]});
-            std.debug.print("Valid modes: dom, text, html, attrs, table, form\n", .{});
-            return;
+            non_flag_count += 1;
+            // Second non-flag arg (after selector) is the mode
+            if (non_flag_count == 2) mode_str = arg;
         }
     }
 
-    // Check for --all flag in remaining args
-    var extract_all = false;
-    if (ctx.positional.len > 2) {
-        for (ctx.positional[2..]) |arg| {
-            if (std.mem.eql(u8, arg, "--all") or std.mem.eql(u8, arg, "-a")) {
-                extract_all = true;
-            }
+    // Parse mode from the second non-flag positional arg
+    var mode: ExtractMode = .dom;
+    if (mode_str) |ms| {
+        if (ExtractMode.fromString(ms)) |m| {
+            mode = m;
+        } else {
+            std.debug.print("Unknown mode: {s}\n", .{ms});
+            std.debug.print("Valid modes: dom, text, html, attrs, table, form, links, images\n", .{});
+            return;
         }
     }
 
@@ -299,6 +352,8 @@ pub fn printDomHelp() void {
         \\  attrs    Attributes only
         \\  table    HTML table to array of objects
         \\  form     Form field values as key-value pairs
+        \\  links    Extract all links (href, text, target, rel)
+        \\  images   Extract all images (src, alt, width, height, srcset)
         \\
         \\Options:
         \\  --all, -a    Extract all matching elements (querySelectorAll)
@@ -310,6 +365,9 @@ pub fn printDomHelp() void {
         \\  dom "form#login" form           # Get form field values
         \\  dom ".item" text --all          # Get text from all .item elements
         \\  dom "#results" --output out.json
+        \\  dom "body" links --output links.json
+        \\  dom "body" images --output gallery.json
+        \\  dom "nav" links                 # Links from nav section only
         \\
     , .{});
 }

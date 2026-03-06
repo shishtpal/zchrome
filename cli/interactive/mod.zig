@@ -276,6 +276,8 @@ fn executeCommand(state: *InteractiveState, line: []const u8) !void {
         try commands.cmdDev(state, args);
     } else if (eql(cmd, "diff")) {
         try commands.cmdDiff(state, args);
+    } else if (eql(cmd, "dom")) {
+        try commands.cmdDom(state, args);
     } else {
         std.debug.print("Unknown command: {s}\nType 'help' for available commands.\n", .{cmd});
     }

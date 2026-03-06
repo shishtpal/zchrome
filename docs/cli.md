@@ -1598,6 +1598,8 @@ zchrome dom <selector> [mode] [options]
 | `attrs` | Attributes only |
 | `table` | HTML table to array of objects |
 | `form` | Form field values as key-value pairs |
+| `links` | Extract all links (href, text, target, rel) |
+| `images` | Extract all images (src, alt, width, height, srcset) |
 
 **Options:**
 
@@ -1630,6 +1632,34 @@ zchrome dom "#results" table --output data.json
 # Get attributes of an element
 zchrome dom "#header" attrs
 # Output: {"id": "header", "class": "main-header sticky"}
+
+# Extract all links from a section
+zchrome dom "nav" links
+# Output: [{"href": "https://example.com/about", "text": "About"}, ...]
+
+# Extract all links and save to file
+zchrome dom "body" links --output links.json
+
+# Extract all images and save to file
+zchrome dom "body" images --output gallery.json
+```
+
+**Output Format (links mode):**
+
+```json
+[
+  {"href": "https://example.com/about", "text": "About Us", "target": "_blank"},
+  {"href": "https://example.com/contact", "text": "Contact"}
+]
+```
+
+**Output Format (images mode):**
+
+```json
+[
+  {"src": "https://example.com/logo.png", "alt": "Logo", "width": 200, "height": 60},
+  {"src": "https://example.com/hero.jpg", "alt": "Hero image", "width": 1200, "height": 600, "srcset": "hero-2x.jpg 2x"}
+]
 ```
 
 **Output Format (dom mode):**

@@ -167,6 +167,29 @@ const first = try dom.querySelector(doc.node_id, "li:first-child");
 
 ### Extract All Links
 
+**CLI:**
+
+```bash
+# Extract links from the whole page
+zchrome dom "body" links
+
+# Extract links from a specific section
+zchrome dom "nav" links
+
+# Save to file
+zchrome dom "body" links --output links.json
+```
+
+Output:
+```json
+[
+  {"href": "https://example.com/about", "text": "About Us", "target": "_blank"},
+  {"href": "https://example.com/contact", "text": "Contact"}
+]
+```
+
+**Zig API:**
+
 ```zig
 const links = try dom.querySelectorAll(allocator, doc.node_id, "a[href]");
 defer allocator.free(links);
@@ -185,6 +208,26 @@ for (links) |link_id| {
     
     std.debug.print("Link: {s}\n", .{href});
 }
+```
+
+### Extract All Images
+
+**CLI:**
+
+```bash
+# Extract images from the whole page
+zchrome dom "body" images
+
+# Save to file
+zchrome dom "body" images --output gallery.json
+```
+
+Output:
+```json
+[
+  {"src": "https://example.com/logo.png", "alt": "Logo", "width": 200, "height": 60},
+  {"src": "https://example.com/hero.jpg", "alt": "Hero", "width": 1200, "height": 600}
+]
 ```
 
 ### Extract Table Data

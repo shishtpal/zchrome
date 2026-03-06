@@ -454,3 +454,28 @@ pub fn cmdDiff(state: *InteractiveState, args: []const []const u8) !void {
     const session = try requireSession(state);
     try impl.diff(session, buildCtx(state, args));
 }
+
+pub fn cmdDom(state: *InteractiveState, args: []const []const u8) !void {
+    const session = try requireSession(state);
+    // Parse --output / -o and --all / -a flags; pass remaining args as positional.
+    var positional: std.ArrayList([]const u8) = .empty;
+    defer positional.deinit(state.allocator);
+    var output: ?[]const u8 = null;
+    var extract_all = false;
+    var i: usize = 0;
+    while (i < args.len) : (i += 1) {
+        if (eql(args[i], "--output") or eql(args[i], "-o")) {
+            i += 1;
+            if (i < args.len) output = args[i];
+        } else if (eql(args[i], "--all") or eql(args[i], "-a")) {
+            extract_all = true;
+        } else {
+            try positional.append(state.allocator, args[i]);
+        }
+    }
+    // Re-append --all so dom() can detect it in positional (it scans for the flag).
+    if (extract_all) try positional.append(state.allocator, "--all");
+    var ctx = buildCtx(state, positional.items);
+    ctx.output = output;
+    try impl.dom(session, ctx);
+}

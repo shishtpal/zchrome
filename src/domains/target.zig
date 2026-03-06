@@ -14,11 +14,18 @@ pub const Target = struct {
 
     /// Get all targets
     pub fn getTargets(self: *Self, allocator: std.mem.Allocator) ![]TargetInfo {
-        const result = try self.connection.sendCommand("Target.getTargets", .{}, null);
+        var result = try self.connection.sendCommand("Target.getTargets", .{}, null);
+        defer result.deinit(allocator);
 
         const target_infos = try result.getArray("targetInfos");
         var targets: std.ArrayList(TargetInfo) = .empty;
-        errdefer targets.deinit(allocator);
+        errdefer {
+            for (targets.items) |*t| {
+                var ti = t.*;
+                ti.deinit(allocator);
+            }
+            targets.deinit(allocator);
+        }
 
         for (target_infos) |info| {
             try targets.append(allocator, .{

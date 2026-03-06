@@ -32,6 +32,7 @@ pub const ActionType = enum {
     wait,
     assert,
     extract,
+    dialog,
 
     pub fn toString(self: ActionType) []const u8 {
         return switch (self) {
@@ -49,6 +50,7 @@ pub const ActionType = enum {
             .wait => "wait",
             .assert => "assert",
             .extract => "extract",
+            .dialog => "dialog",
         };
     }
 
@@ -67,25 +69,26 @@ pub const ActionType = enum {
         if (std.mem.eql(u8, s, "wait")) return .wait;
         if (std.mem.eql(u8, s, "assert")) return .assert;
         if (std.mem.eql(u8, s, "extract")) return .extract;
+        if (std.mem.eql(u8, s, "dialog")) return .dialog;
         return null;
     }
 
-    /// Returns true if this action is a "real" action command (not press/scroll/wait/assert/extract)
+    /// Returns true if this action is a "real" action command (not press/scroll/wait/assert/extract/dialog)
     /// Used to determine where to retry from on assertion failure
     pub fn isActionCommand(self: ActionType) bool {
         return switch (self) {
             .click, .dblclick, .fill, .check, .uncheck, .select, .multiselect, .hover, .navigate => true,
-            .press, .scroll, .wait, .assert, .extract => false,
+            .press, .scroll, .wait, .assert, .extract, .dialog => false,
         };
     }
 };
 
-/// A semantic command (click, fill, press, assert, etc.)
+/// A semantic command (click, fill, press, assert, dialog, etc.)
 pub const MacroCommand = struct {
     action: ActionType,
     selector: ?[]const u8 = null, // CSS selector for element (primary)
     selectors: ?[][]const u8 = null, // Fallback selectors for dynamic pages
-    value: ?[]const u8 = null, // Text value for fill/select, URL for navigate
+    value: ?[]const u8 = null, // Text value for fill/select, URL for navigate, prompt text for dialog
     key: ?[]const u8 = null, // Key name for press
     scroll_x: ?i32 = null, // Scroll delta X
     scroll_y: ?i32 = null, // Scroll delta Y
@@ -93,8 +96,8 @@ pub const MacroCommand = struct {
     attribute: ?[]const u8 = null, // Attribute name to check (for assert)
     contains: ?[]const u8 = null, // Substring to find in attribute/text (for assert)
     url: ?[]const u8 = null, // URL pattern to match (for assert)
-    text: ?[]const u8 = null, // Text to find on page (for assert)
-    timeout: ?u32 = null, // Assertion timeout in ms (default: 5000)
+    text: ?[]const u8 = null, // Text to find on page (for assert), or expected dialog message (for dialog)
+    timeout: ?u32 = null, // Timeout in ms (default: 5000)
     fallback: ?[]const u8 = null, // Fallback JSON file on assertion failure
     // Extract-specific fields
     mode: ?[]const u8 = null, // Extraction mode: dom, text, html, attrs, table, form
@@ -102,6 +105,8 @@ pub const MacroCommand = struct {
     extract_all: ?bool = null, // Use querySelectorAll for extract
     // Snapshot assertion field
     snapshot: ?[]const u8 = null, // Expected JSON file for snapshot comparison
+    // Dialog-specific fields
+    accept: ?bool = null, // For dialog: true=accept (OK), false=dismiss (Cancel)
 
     pub fn deinit(self: *MacroCommand, allocator: std.mem.Allocator) void {
         if (self.selector) |s| allocator.free(s);
@@ -148,6 +153,7 @@ pub const MacroCommand = struct {
             .output = if (self.output) |o| try allocator.dupe(u8, o) else null,
             .extract_all = self.extract_all,
             .snapshot = if (self.snapshot) |sn| try allocator.dupe(u8, sn) else null,
+            .accept = self.accept,
         };
     }
 };
@@ -304,6 +310,10 @@ pub fn saveCommandMacro(allocator: std.mem.Allocator, io: std.Io, path: []const 
             try json_buf.appendSlice(allocator, escaped);
             try json_buf.appendSlice(allocator, "\"");
         }
+        // Dialog-specific field
+        if (cmd.accept) |ac| {
+            try json_buf.appendSlice(allocator, if (ac) ", \"accept\": true" else ", \"accept\": false");
+        }
 
         try json_buf.appendSlice(allocator, "}");
     }
@@ -434,6 +444,10 @@ pub fn loadCommandMacro(allocator: std.mem.Allocator, io: std.Io, path: []const 
                 // Snapshot assertion field
                 if (obj.get("snapshot")) |sn| {
                     if (sn == .string) cmd.snapshot = try allocator.dupe(u8, sn.string);
+                }
+                // Dialog-specific field
+                if (obj.get("accept")) |ac| {
+                    if (ac == .bool) cmd.accept = ac.bool;
                 }
 
                 try cmds_list.append(allocator, cmd);

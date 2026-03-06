@@ -14,8 +14,55 @@ pub const Connection = struct {
     last_error: ?protocol.ErrorPayload,
     receive_timeout_ms: u32,
     verbose: bool,
+    /// Buffer for events received during command execution (to avoid losing them)
+    event_buffer: std.ArrayList(BufferedEvent),
 
     const Self = @This();
+
+    const BufferedEvent = struct {
+        method: []const u8,
+        params: json.Value,
+        session_id: ?[]const u8,
+
+        fn deinit(self: *BufferedEvent, alloc: std.mem.Allocator) void {
+            alloc.free(self.method);
+            if (self.session_id) |sid| alloc.free(sid);
+            self.params.deinit(alloc);
+        }
+    };
+
+    fn bufferParsedEvent(self: *Self, parsed: json.Value) void {
+        if (parsed.get("method")) |method_val| {
+            if (method_val == .string) {
+                const method_copy = self.allocator.dupe(u8, method_val.string) catch return;
+                errdefer self.allocator.free(method_copy);
+
+                var params_clone = if (parsed.get("params")) |p|
+                    p.clone(self.allocator) catch {
+                        self.allocator.free(method_copy);
+                        return;
+                    }
+                else
+                    json.emptyObject();
+                errdefer params_clone.deinit(self.allocator);
+
+                const session_id_copy: ?[]const u8 = if (parsed.get("sessionId")) |sid|
+                    (if (sid == .string) self.allocator.dupe(u8, sid.string) catch null else null)
+                else
+                    null;
+
+                self.event_buffer.append(self.allocator, .{
+                    .method = method_copy,
+                    .params = params_clone,
+                    .session_id = session_id_copy,
+                }) catch {
+                    self.allocator.free(method_copy);
+                    params_clone.deinit(self.allocator);
+                    if (session_id_copy) |s| self.allocator.free(s);
+                };
+            }
+        }
+    }
 
     pub const Options = struct {
         allocator: std.mem.Allocator,
@@ -70,6 +117,7 @@ pub const Connection = struct {
             .last_error = null,
             .receive_timeout_ms = opts.receive_timeout_ms,
             .verbose = opts.verbose,
+            .event_buffer = std.ArrayList(BufferedEvent).empty,
         };
 
         return self;
@@ -77,6 +125,11 @@ pub const Connection = struct {
 
     /// Close the connection
     pub fn close(self: *Self) void {
+        // Clean up buffered events
+        for (self.event_buffer.items) |*evt| {
+            evt.deinit(self.allocator);
+        }
+        self.event_buffer.deinit(self.allocator);
         self.websocket.close();
     }
 
@@ -170,7 +223,8 @@ pub const Connection = struct {
                 }
             }
 
-            // Not our response, might be an event - continue reading
+            // Not our response, buffer events for later retrieval
+            self.bufferParsedEvent(parsed);
             parsed.deinit(self.allocator);
         }
 
@@ -192,6 +246,101 @@ pub const Connection = struct {
     ) !void {
         var result = try self.sendCommand(method, params, session_id);
         result.deinit(self.allocator);
+    }
+
+    /// Wait for a specific CDP event by method name.
+    /// Returns the event params as json.Value. Caller must call value.deinit(allocator) when done.
+    /// This will discard any command responses received while waiting.
+    pub fn waitForEvent(
+        self: *Self,
+        event_method: []const u8,
+        expected_session_id: ?[]const u8,
+        timeout_ms: u32,
+    ) !json.Value {
+        // First, check the event buffer for already-received events
+        var idx: usize = 0;
+        while (idx < self.event_buffer.items.len) {
+            const evt = self.event_buffer.items[idx];
+            const method_matches = std.mem.eql(u8, evt.method, event_method);
+            const session_matches = if (expected_session_id) |sid|
+                (evt.session_id != null and std.mem.eql(u8, evt.session_id.?, sid))
+            else
+                true;
+
+            if (method_matches and session_matches) {
+                // Found the event in buffer, remove and return it
+                var removed_evt = self.event_buffer.orderedRemove(idx);
+                self.allocator.free(removed_evt.method);
+                if (removed_evt.session_id) |sid| self.allocator.free(sid);
+                return removed_evt.params; // Caller owns params
+            }
+            idx += 1;
+        }
+
+        // Not in buffer, wait for it from websocket
+        const max_attempts: u32 = if (timeout_ms == 0) 1000 else timeout_ms / 10;
+        var attempts: u32 = 0;
+
+        while (attempts < max_attempts) : (attempts += 1) {
+            var msg = self.websocket.receiveMessage() catch |err| {
+                if (self.verbose) {
+                    std.debug.print("Receive error: {}\\n", .{err});
+                }
+                return error.ConnectionClosed;
+            };
+            defer msg.deinit(self.allocator);
+
+            if (self.verbose) {
+                std.debug.print("<- {s}\\n", .{msg.data});
+            }
+
+            // Parse JSON
+            var parsed = json.parse(self.allocator, msg.data, .{}) catch continue;
+            errdefer parsed.deinit(self.allocator);
+
+            if (parsed != .object) {
+                parsed.deinit(self.allocator);
+                continue;
+            }
+
+            // Check if this is the event we're waiting for
+            if (parsed.get("method")) |method_val| {
+                if (method_val == .string) {
+                    const parsed_session_id: ?[]const u8 = if (parsed.get("sessionId")) |sid|
+                        (if (sid == .string) sid.string else null)
+                    else
+                        null;
+
+                    const method_matches = std.mem.eql(u8, method_val.string, event_method);
+                    const session_matches = if (expected_session_id) |sid|
+                        (parsed_session_id != null and std.mem.eql(u8, parsed_session_id.?, sid))
+                    else
+                        true;
+
+                    if (method_matches and session_matches) {
+                        // Found the event, return the params
+                        if (parsed.object.get("params")) |params_val| {
+                            const result = params_val.clone(self.allocator) catch {
+                                parsed.deinit(self.allocator);
+                                return error.OutOfMemory;
+                            };
+                            parsed.deinit(self.allocator);
+                            return result;
+                        }
+                        // Event with no params - return empty object
+                        parsed.deinit(self.allocator);
+                        return json.emptyObject();
+                    } else {
+                        // Not the event we want, buffer it for later
+                        self.bufferParsedEvent(parsed);
+                    }
+                }
+            }
+
+            parsed.deinit(self.allocator);
+        }
+
+        return error.Timeout;
     }
 
     /// Create a session attached to a target

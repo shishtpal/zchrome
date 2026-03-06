@@ -1990,26 +1990,49 @@ zchrome set media light   # Enable light mode
 
 Handle JavaScript dialogs (alert, confirm, prompt) that appear on the page.
 
+::: warning Important
+Due to Chrome DevTools Protocol limitations, **you must run the dialog command BEFORE triggering the dialog** on the page. Chrome auto-dismisses dialogs when a DevTools session attaches to a page that already has a dialog showing.
+:::
+
 ### dialog accept
 
 Accept a dialog. For `prompt` dialogs, an optional text argument sets the input value.
 
 ```bash
-zchrome dialog accept
-zchrome dialog accept <text>
+zchrome dialog accept [text] [--timeout=<ms>]
+```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `<text>` | Optional text for prompt dialogs |
+| `--timeout=<ms>` | Timeout waiting for dialog (default: 30000) |
+
+**Usage Pattern:**
+
+```bash
+# 1. Run the dialog command FIRST (it will wait for a dialog)
+zchrome dialog accept --timeout=60000
+
+# 2. Then trigger the dialog on the page (click a button, etc.)
+# 3. The command handles it when it appears
 ```
 
 **Examples:**
 
 ```bash
-# Accept an alert or confirm dialog
+# Wait for and accept any dialog (alert, confirm, prompt)
 zchrome dialog accept
 
-# Accept a prompt dialog and supply input text
+# Wait with custom timeout
+zchrome dialog accept --timeout=10000
+
+# Accept a prompt dialog with input text
 zchrome dialog accept "my answer"
 
 # Multi-word prompt text (tokens are joined with spaces)
-zchrome dialog accept hello world
+zchrome dialog accept hello world --timeout=5000
 ```
 
 ### dialog dismiss
@@ -2017,31 +2040,53 @@ zchrome dialog accept hello world
 Dismiss (cancel) a dialog.
 
 ```bash
-zchrome dialog dismiss
+zchrome dialog dismiss [--timeout=<ms>]
 ```
 
 **Example:**
 
 ```bash
+# Wait for and dismiss a confirm dialog
 zchrome dialog dismiss
+
+# With custom timeout
+zchrome dialog dismiss --timeout=10000
 ```
 
-**Notes:**
+**How It Works:**
 
-- The Page domain is enabled automatically before handling the dialog.
-- `dialog accept` without text sends an empty string for prompt dialogs.
-- Extra tokens after `dismiss` are silently ignored.
-- If no subcommand is given, usage help is printed.
+1. If a dialog is currently showing, handles it immediately
+2. If no dialog is showing, waits for one to appear (up to timeout)
+3. When a dialog appears, accepts or dismisses it based on the command
 
-**REPL usage:**
+**Workflow Example:**
 
+```bash
+# Terminal: Start waiting for dialog
+zchrome dialog accept --timeout=60000
+# Output: Waiting for dialog (timeout: 60000ms)...
+#         Trigger a dialog on the page now.
+
+# Browser: User clicks a button that triggers alert("Hello!")
+
+# Terminal: Dialog handled automatically
+# Output: Dialog appeared: type=alert, message="Hello!"
+#         Dialog accepted
 ```
-> dialog accept
-Dialog accepted
-> dialog accept hello world
-Dialog accepted with text: hello world
-> dialog dismiss
-Dialog dismissed
+
+**Macro Replay:**
+
+In macro files, place the `dialog` action AFTER the action that triggers the dialog. The macro replay system buffers events and handles dialogs correctly:
+
+```json
+{
+  "version": 2,
+  "commands": [
+    {"action": "click", "selector": "#show-confirm"},
+    {"action": "dialog", "accept": true},
+    {"action": "assert", "text": "Confirmed!"}
+  ]
+}
 ```
 
 ## Developer Tools (dev)

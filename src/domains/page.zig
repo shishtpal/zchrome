@@ -289,6 +289,22 @@ pub const Page = struct {
             .html = html,
         });
     }
+
+    /// Wait for a JavaScript dialog to open (alert/confirm/prompt/beforeunload).
+    /// Returns the dialog information including the message.
+    /// Must call Page.enable() first to receive events.
+    pub fn waitForJavaScriptDialogOpening(self: *Self, allocator: std.mem.Allocator, timeout_ms: u32) !JavaScriptDialogOpening {
+        var event_params = try self.session.connection.waitForEvent("Page.javascriptDialogOpening", self.session.getId(), timeout_ms);
+        defer event_params.deinit(allocator);
+
+        return .{
+            .url = if (event_params.get("url")) |v| try allocator.dupe(u8, v.string) else try allocator.dupe(u8, ""),
+            .message = if (event_params.get("message")) |v| try allocator.dupe(u8, v.string) else try allocator.dupe(u8, ""),
+            .dialog_type = if (event_params.get("type")) |v| try allocator.dupe(u8, v.string) else try allocator.dupe(u8, "alert"),
+            .has_browser_handler = if (event_params.get("hasBrowserHandler")) |v| (if (v == .bool) v.bool else false) else false,
+            .default_prompt = if (event_params.get("defaultPrompt")) |v| (if (v == .string) try allocator.dupe(u8, v.string) else null) else null,
+        };
+    }
 };
 
 // ─── Event Types ────────────────────────────────────────────────────────────
@@ -330,4 +346,20 @@ pub const LifecycleEvent = struct {
     frame_id: FrameId,
     name: []const u8,
     timestamp: f64,
+};
+
+/// JavaScript dialog opening event data (alert/confirm/prompt/beforeunload)
+pub const JavaScriptDialogOpening = struct {
+    url: []const u8,
+    message: []const u8,
+    dialog_type: []const u8, // "alert", "confirm", "prompt", "beforeunload"
+    has_browser_handler: bool,
+    default_prompt: ?[]const u8 = null,
+
+    pub fn deinit(self: *JavaScriptDialogOpening, allocator: std.mem.Allocator) void {
+        allocator.free(self.url);
+        allocator.free(self.message);
+        allocator.free(self.dialog_type);
+        if (self.default_prompt) |p| allocator.free(p);
+    }
 };

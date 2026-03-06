@@ -871,6 +871,12 @@ fn replayCommandsWithOptions(session: *cdp.Session, allocator: std.mem.Allocator
     var total_retries: u32 = 0;
     var has_assertions = false;
 
+    // Enable Page domain upfront so we can intercept dialogs triggered by any command.
+    // This must happen BEFORE any action that might trigger a dialog, otherwise the
+    // dialog gets auto-dismissed when Page.enable() is called later.
+    var page = cdp.Page.init(session);
+    try page.enable();
+
     var i: usize = start_idx;
     while (i < macro.commands.len) {
         const cmd = macro.commands[i];
@@ -1124,6 +1130,50 @@ fn replayCommandsWithOptions(session: *cdp.Session, allocator: std.mem.Allocator
                     std.debug.print(" -> {s}\n", .{output_path});
                 } else {
                     std.debug.print("\n{s}\n", .{result});
+                }
+            },
+            .dialog => {
+                // Handle JavaScript dialog (alert/confirm/prompt)
+                // Note: Page domain is already enabled at start of replay
+
+                const should_accept = cmd.accept orelse true;
+                const timeout_ms = cmd.timeout orelse 5000;
+
+                // Wait for dialog event to capture message
+                var dialog_info = page.waitForJavaScriptDialogOpening(allocator, timeout_ms) catch |err| {
+                    std.debug.print("\n    Error waiting for dialog: {}\n", .{err});
+                    continue;
+                };
+                defer dialog_info.deinit(allocator);
+
+                // Assert dialog message if specified
+                if (cmd.text) |expected_text| {
+                    if (!std.mem.eql(u8, dialog_info.message, expected_text)) {
+                        std.debug.print("\n    Dialog message mismatch\n", .{});
+                        std.debug.print("      Expected: \"{s}\"\n", .{expected_text});
+                        std.debug.print("      Actual:   \"{s}\"\n", .{dialog_info.message});
+                        continue;
+                    }
+                    std.debug.print(" (message verified)", .{});
+                }
+
+                // Handle the dialog
+                page.handleJavaScriptDialog(.{
+                    .accept = should_accept,
+                    .prompt_text = if (should_accept) cmd.value else null,
+                }) catch |err| {
+                    std.debug.print("\n    Error handling dialog: {}\n", .{err});
+                    continue;
+                };
+
+                if (should_accept) {
+                    if (cmd.value) |v| {
+                        std.debug.print(" accepted with text: \"{s}\"\n", .{v});
+                    } else {
+                        std.debug.print(" accepted\n", .{});
+                    }
+                } else {
+                    std.debug.print(" dismissed\n", .{});
                 }
             },
         }

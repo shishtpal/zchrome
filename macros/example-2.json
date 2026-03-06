@@ -1,0 +1,114 @@
+{
+  "version": 2,
+  "commands": [
+    {
+      "action": "navigate",
+      "value": "https://formfiller.ctechhindi.in/example/example-2.php"
+    },
+    {
+      "action": "fill",
+      "selector": "#full_name",
+      "selectors": ["#full_name", "input[name=\"full_name\"]"],
+      "value": "Raju Kumar"
+    },
+    {
+      "action": "assert",
+      "selector": "#full_name",
+      "value": "Raju Kumar"
+    },
+    {
+      "action": "fill",
+      "selector": "#email",
+      "selectors": ["#email", "input[name=\"email\"]"],
+      "value": "raju@gmil.com"
+    },
+    {
+      "action": "assert",
+      "selector": "#email",
+      "value": "raju@gmil.com"
+    },
+    {
+      "action": "fill",
+      "selector": "#dob",
+      "selectors": ["#dob", "input[name=\"dob\"]"],
+      "value": "05/08/1992"
+    },
+    {
+      "action": "assert",
+      "selector": "#dob",
+      "value": "05/08/1992"
+    },
+    {
+      "action": "select",
+      "selector": "#select",
+      "selectors": [
+        "#select",
+        "select[name=\"select\"]",
+        "#add_record > div:nth-of-type(4) > select:nth-of-type(1)"
+      ],
+      "value": "7"
+    },
+    {
+      "action": "assert",
+      "selector": "#select",
+      "value": "7"
+    },
+    { "action": "scroll", "scrollY": 200 },
+    {
+      "action": "multiselect",
+      "selector": "#multi_select",
+      "selectors": ["#multi_select", "select[name=\"multi_select\"]"],
+      "value": "[\"2\",\"4\"]"
+    },
+    {
+      "action": "assert",
+      "selector": "#multi_select",
+      "value": "[\"2\",\"4\"]"
+    },
+    {
+      "action": "fill",
+      "selector": "#address",
+      "selectors": ["#address", "textarea[name=\"address\"]"],
+      "value": "Dilra Raipur"
+    },
+    {
+      "action": "assert",
+      "selector": "#address",
+      "value": "Dilra Raipur"
+    },
+    {
+      "action": "check",
+      "selector": "#habit_reading",
+      "selectors": ["#habit_reading", "input[name=\"habit_reading\"]"]
+    },
+    {
+      "action": "check",
+      "selector": "#habit_music",
+      "selectors": ["#habit_music", "input[name=\"habit_music\"]"]
+    },
+    {
+      "action": "check",
+      "selector": "input[name=\"marital_status\"][value=\"married\"]",
+      "selectors": [
+        "input[name=\"marital_status\"][value=\"married\"]",
+        "input[name=\"marital_status\"]"
+      ],
+      "value": "married"
+    },
+    {
+      "action": "check",
+      "selector": "#agree",
+      "selectors": ["#agree", "input[name=\"agree\"]"]
+    },
+    { "action": "scroll", "scrollY": 200 },
+    {
+      "action": "click",
+      "selector": "#add_record > button"
+    },
+    {
+      "action": "dialog",
+      "accept": true,
+      "text": "Data has been successful saved."
+    }
+  ]
+}

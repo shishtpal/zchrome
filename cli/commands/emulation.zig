@@ -55,7 +55,13 @@ pub fn applyMediaFeature(session: *cdp.Session, scheme: []const u8) !void {
 /// Call this after attaching to a target to ensure user agent and other settings persist.
 /// If session_ctx is provided, loads config from session-specific path.
 pub fn applyEmulationSettings(session: *cdp.Session, allocator: std.mem.Allocator, io: std.Io, session_ctx: ?*const session_mod.SessionContext) void {
-    var config = if (session_ctx) |ctx| ctx.loadConfig() orelse return else config_mod.loadConfig(allocator, io) orelse return;
+    // Always enable Page domain so we can intercept JavaScript dialogs.
+    // This must happen before any action that might trigger a dialog, otherwise
+    // Chrome auto-dismisses the dialog when Page.enable() is called later.
+    _ = session.sendCommand("Page.enable", .{}) catch {};
+
+    const config_opt = if (session_ctx) |ctx| ctx.loadConfig() else config_mod.loadConfig(allocator, io);
+    var config = config_opt orelse return;
     defer config.deinit(allocator);
 
     if (config.user_agent) |ua| {

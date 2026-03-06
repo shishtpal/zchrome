@@ -116,6 +116,7 @@ This makes macros more robust across different page states or minor UI changes.
 | `hover` | `selector`, `selectors`? | Hover over an element |
 | `navigate` | `value` | Navigate to URL |
 | `wait` | `selector` or `value` | Wait for element, time (ms), or text |
+| `dialog` | `accept`, `value`? | Handle JavaScript dialog (see below) |
 | `assert` | See below | Test conditions with retry on failure |
 | `extract` | `selector`, `mode`?, `output` | Extract DOM data as JSON |
 
@@ -468,6 +469,47 @@ Insert waits to make replay more reliable:
 // Wait for text to appear
 {"action": "wait", "value": "Welcome back"}
 ```
+
+### Dialog Handling
+
+Handle JavaScript dialogs (alert, confirm, prompt) during macro replay. Place the `dialog` action **after** the action that triggers the dialog:
+
+```json
+{
+  "version": 2,
+  "commands": [
+    {"action": "click", "selector": "#show-alert"},
+    {"action": "dialog", "accept": true},
+    {"action": "click", "selector": "#show-confirm"},
+    {"action": "dialog", "accept": false},
+    {"action": "click", "selector": "#show-prompt"},
+    {"action": "dialog", "accept": true, "value": "my input"}
+  ]
+}
+```
+
+**Dialog Action Format:**
+
+```json
+{
+  "action": "dialog",
+  "accept": true,           // true = accept, false = dismiss
+  "value": "prompt text"    // Optional: text for prompt dialogs
+}
+```
+
+**How It Works:**
+
+The macro replay system buffers CDP events, so when a click triggers a dialog:
+
+1. The click action executes
+2. Chrome fires `Page.javascriptDialogOpening` event (buffered)
+3. The dialog action retrieves the buffered event
+4. Dialog is handled immediately
+
+::: tip
+Unlike the CLI `dialog` command, macro replay doesn't need to wait for dialogs because events are buffered during replay.
+:::
 
 ### Modify Values
 

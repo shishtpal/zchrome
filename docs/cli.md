@@ -1410,12 +1410,16 @@ The macro file contains semantic commands:
 - `dblclick` - Double-click element
 - `fill` - Fill input field (selector + value)
 - `check` / `uncheck` - Toggle checkbox
-- `select` - Select dropdown option
+- `select` / `multiselect` - Select one or more dropdown options
 - `press` - Press key (e.g., "Enter", "Tab", "Control+a")
 - `scroll` - Scroll page (scrollY)
 - `hover` - Hover over element
 - `navigate` - Navigate to URL
 - `wait` - Wait for element (selector), time (ms), or text (value)
+- `upload` - Upload files to file input (selector + files array)
+- `dialog` - Handle JavaScript dialogs (alert, confirm, prompt)
+- `assert` - Verify page state with automatic retry support
+- `extract` - Extract DOM data to stdout or a file
 
 ### cursor replay
 

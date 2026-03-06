@@ -33,6 +33,7 @@ pub const ActionType = enum {
     assert,
     extract,
     dialog,
+    upload,
 
     pub fn toString(self: ActionType) []const u8 {
         return switch (self) {
@@ -51,6 +52,7 @@ pub const ActionType = enum {
             .assert => "assert",
             .extract => "extract",
             .dialog => "dialog",
+            .upload => "upload",
         };
     }
 
@@ -70,6 +72,7 @@ pub const ActionType = enum {
         if (std.mem.eql(u8, s, "assert")) return .assert;
         if (std.mem.eql(u8, s, "extract")) return .extract;
         if (std.mem.eql(u8, s, "dialog")) return .dialog;
+        if (std.mem.eql(u8, s, "upload")) return .upload;
         return null;
     }
 
@@ -77,7 +80,7 @@ pub const ActionType = enum {
     /// Used to determine where to retry from on assertion failure
     pub fn isActionCommand(self: ActionType) bool {
         return switch (self) {
-            .click, .dblclick, .fill, .check, .uncheck, .select, .multiselect, .hover, .navigate => true,
+            .click, .dblclick, .fill, .check, .uncheck, .select, .multiselect, .hover, .navigate, .upload => true,
             .press, .scroll, .wait, .assert, .extract, .dialog => false,
         };
     }
@@ -107,6 +110,8 @@ pub const MacroCommand = struct {
     snapshot: ?[]const u8 = null, // Expected JSON file for snapshot comparison
     // Dialog-specific fields
     accept: ?bool = null, // For dialog: true=accept (OK), false=dismiss (Cancel)
+    // Upload-specific fields
+    files: ?[][]const u8 = null, // File paths for upload action
 
     pub fn deinit(self: *MacroCommand, allocator: std.mem.Allocator) void {
         if (self.selector) |s| allocator.free(s);
@@ -124,6 +129,10 @@ pub const MacroCommand = struct {
         if (self.mode) |m| allocator.free(m);
         if (self.output) |o| allocator.free(o);
         if (self.snapshot) |sn| allocator.free(sn);
+        if (self.files) |f| {
+            for (f) |file| allocator.free(file);
+            allocator.free(f);
+        }
     }
 
     pub fn clone(self: *const MacroCommand, allocator: std.mem.Allocator) !MacroCommand {
@@ -134,6 +143,14 @@ pub const MacroCommand = struct {
                 new_sels[i] = try allocator.dupe(u8, sel);
             }
             cloned_selectors = new_sels;
+        }
+        var cloned_files: ?[][]const u8 = null;
+        if (self.files) |f| {
+            var new_files = try allocator.alloc([]const u8, f.len);
+            for (f, 0..) |file, i| {
+                new_files[i] = try allocator.dupe(u8, file);
+            }
+            cloned_files = new_files;
         }
         return .{
             .action = self.action,
@@ -154,6 +171,7 @@ pub const MacroCommand = struct {
             .extract_all = self.extract_all,
             .snapshot = if (self.snapshot) |sn| try allocator.dupe(u8, sn) else null,
             .accept = self.accept,
+            .files = cloned_files,
         };
     }
 };
@@ -314,6 +332,19 @@ pub fn saveCommandMacro(allocator: std.mem.Allocator, io: std.Io, path: []const 
         if (cmd.accept) |ac| {
             try json_buf.appendSlice(allocator, if (ac) ", \"accept\": true" else ", \"accept\": false");
         }
+        // Upload-specific field
+        if (cmd.files) |f| {
+            try json_buf.appendSlice(allocator, ", \"files\": [");
+            for (f, 0..) |file, j| {
+                if (j > 0) try json_buf.appendSlice(allocator, ", ");
+                const escaped = try escapeString(allocator, file);
+                defer allocator.free(escaped);
+                try json_buf.appendSlice(allocator, "\"");
+                try json_buf.appendSlice(allocator, escaped);
+                try json_buf.appendSlice(allocator, "\"");
+            }
+            try json_buf.appendSlice(allocator, "]");
+        }
 
         try json_buf.appendSlice(allocator, "}");
     }
@@ -448,6 +479,26 @@ pub fn loadCommandMacro(allocator: std.mem.Allocator, io: std.Io, path: []const 
                 // Dialog-specific field
                 if (obj.get("accept")) |ac| {
                     if (ac == .bool) cmd.accept = ac.bool;
+                }
+                // Upload-specific field
+                if (obj.get("files")) |files_val| {
+                    if (files_val == .array) {
+                        var files_list: std.ArrayList([]const u8) = .empty;
+                        errdefer {
+                            for (files_list.items) |f| allocator.free(f);
+                            files_list.deinit(allocator);
+                        }
+                        for (files_val.array.items) |f_val| {
+                            if (f_val == .string) {
+                                try files_list.append(allocator, try allocator.dupe(u8, f_val.string));
+                            }
+                        }
+                        if (files_list.items.len > 0) {
+                            cmd.files = try files_list.toOwnedSlice(allocator);
+                        } else {
+                            files_list.deinit(allocator);
+                        }
+                    }
                 }
 
                 try cmds_list.append(allocator, cmd);

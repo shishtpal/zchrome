@@ -589,6 +589,47 @@ fn tryWithFallbackSelectorsMultiselect(
     }
 }
 
+/// Try upload command with fallback selectors
+fn tryWithFallbackSelectorsUpload(
+    session: *cdp.Session,
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    cmd: macro_mod.MacroCommand,
+    files: [][]const u8,
+) void {
+    const actions_mod = @import("../actions/mod.zig");
+
+    const selectors = cmd.selectors orelse if (cmd.selector) |sel| blk: {
+        var single: [1][]const u8 = .{sel};
+        break :blk &single;
+    } else {
+        std.debug.print("    Error: upload requires selector\n", .{});
+        return;
+    };
+
+    for (selectors, 0..) |sel, idx| {
+        var resolved = actions_mod.resolveSelector(allocator, io, sel, null) catch {
+            if (idx + 1 < selectors.len) {
+                std.debug.print("    (trying fallback selector...)\n", .{});
+                continue;
+            }
+            std.debug.print("    Error: selector resolution failed\n", .{});
+            return;
+        };
+        defer resolved.deinit();
+
+        actions_mod.uploadFiles(session, allocator, io, &resolved, files) catch |err| {
+            if (idx + 1 < selectors.len) {
+                std.debug.print("    (trying fallback selector...)\n", .{});
+                continue;
+            }
+            std.debug.print("    Error: {}\n", .{err});
+            return;
+        };
+        return; // Success
+    }
+}
+
 /// Options for replay command
 pub const ReplayOptions = struct {
     interval: ReplayInterval = .{},
@@ -1253,6 +1294,18 @@ fn replayCommandsWithOptions(session: *cdp.Session, allocator: std.mem.Allocator
                     std.debug.print(" dismissed\n", .{});
                 }
             },
+            .upload => {
+                // Upload files to file input element
+                const files = cmd.files orelse {
+                    std.debug.print("    Error: upload requires files array\n", .{});
+                    continue;
+                };
+                if (files.len == 0) {
+                    std.debug.print("    Error: files array is empty\n", .{});
+                    continue;
+                }
+                tryWithFallbackSelectorsUpload(session, allocator, io, cmd, files);
+            },
         }
 
         // Delay between commands
@@ -1383,6 +1436,10 @@ pub fn printCursorHelp() void {
         \\  {{"action": "dialog", "accept": true}}              - Accept dialog
         \\  {{"action": "dialog", "accept": true, "text": "OK to delete?"}} - Verify message
         \\  {{"action": "dialog", "accept": true, "text": "ID: *"}}  - Wildcard match
+        \\
+        \\Upload Action in JSON:
+        \\  {{"action": "upload", "selector": "#file", "files": ["doc.pdf"]}}
+        \\  {{"action": "upload", "selector": "#file", "files": ["a.pdf", "b.txt"]}}
         \\
         \\Examples:
         \\  zchrome cursor active

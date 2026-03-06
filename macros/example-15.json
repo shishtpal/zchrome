@@ -1,0 +1,63 @@
+{
+  "version": 2,
+  "description": "Upload Single Files.",
+  "commands": [
+    {
+      "action": "navigate",
+      "value": "https://formfiller.ctechhindi.in/example/example-15.php"
+    },
+    {
+      "action": "fill",
+      "selector": "#full_name",
+      "selectors": ["#full_name", "input[name=\"full_name\"]"],
+      "value": "Raju Kumar"
+    },
+    {
+      "action": "assert",
+      "selector": "#full_name",
+      "value": "Raju Kumar"
+    },
+    {
+      "action": "fill",
+      "selector": "#email",
+      "selectors": ["#email", "input[name=\"email\"]"],
+      "value": "raju@gmil.com"
+    },
+    {
+      "action": "assert",
+      "selector": "#email",
+      "value": "raju@gmil.com"
+    },
+    {
+      "action": "upload",
+      "selector": "#file",
+      "selectors": ["#file", "input[name=\"photo\"]"],
+      "files": ["C:\\Users\\ssp\\Pictures\\new-kic-8th.jpeg"]
+    },
+    {
+      "action": "upload",
+      "selector": "#signature",
+      "selectors": ["#signature", "input[name=\"signature\"]"],
+      "files": ["C:\\Users\\ssp\\Pictures\\th.jpg"]
+    },
+    {
+      "action": "upload",
+      "selector": "#photo_id",
+      "selectors": ["#photo_id", "input[name=\"photo_id\"]"],
+      "files": ["C:\\Users\\ssp\\Pictures\\download.png"]
+    },
+    {
+      "action": "check",
+      "selector": "#agree",
+      "selectors": ["#agree", "input[name=\"agree\"]"]
+    },
+    {
+      "action": "click",
+      "selector": "#add_record > button"
+    },
+    {
+      "action": "assert",
+      "text": "Data has been successful saved."
+    }
+  ]
+}

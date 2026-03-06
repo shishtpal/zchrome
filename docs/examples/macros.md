@@ -116,6 +116,7 @@ This makes macros more robust across different page states or minor UI changes.
 | `hover` | `selector`, `selectors`? | Hover over an element |
 | `navigate` | `value` | Navigate to URL |
 | `wait` | `selector` or `value` | Wait for element, time (ms), or text |
+| `upload` | `selector`, `selectors`?, `files` | Upload files to a file input element |
 | `dialog` | `accept`, `value`? | Handle JavaScript dialog (see below) |
 | `assert` | See below | Test conditions with retry on failure |
 | `extract` | `selector`, `mode`?, `output` | Extract DOM data as JSON |
@@ -480,6 +481,61 @@ Insert waits to make replay more reliable:
 // Wait for text to appear
 {"action": "wait", "value": "Welcome back"}
 ```
+
+### File Upload
+
+Upload files to `<input type="file">` elements during macro replay:
+
+```json
+{
+  "version": 2,
+  "commands": [
+    {"action": "click", "selector": "#upload-btn"},
+    {"action": "upload", "selector": "#file-input", "files": ["document.pdf"]},
+    {"action": "click", "selector": "#submit"}
+  ]
+}
+```
+
+**Upload Action Format:**
+
+```json
+{
+  "action": "upload",
+  "selector": "#file-input",           // CSS selector for file input
+  "selectors": ["input[type=file]"],   // Optional: fallback selectors
+  "files": ["file1.pdf", "file2.txt"]  // Array of file paths
+}
+```
+
+**Features:**
+- Supports multiple files in a single upload
+- Accepts both relative and absolute file paths (relative paths are resolved from current working directory)
+- Works with fallback selectors for dynamic pages
+- Uses the same underlying mechanism as the CLI `upload` command
+
+**Examples:**
+
+```json
+// Single file upload
+{"action": "upload", "selector": "#photo", "files": ["profile.jpg"]}
+
+// Multiple files
+{"action": "upload", "selector": "#attachments", "files": ["doc1.pdf", "doc2.pdf", "image.png"]}
+
+// With fallback selectors
+{
+  "action": "upload",
+  "selector": "#file-upload",
+  "selectors": ["input[name='file']", "input[type='file']"],
+  "files": ["report.xlsx"]
+}
+
+// Absolute path
+{"action": "upload", "selector": "#import", "files": ["C:\\Users\\name\\data.csv"]}
+```
+
+**Note:** The upload action only selects the files on the input element. Use a subsequent `click` action on the submit button if you need to submit the form.
 
 ### Dialog Handling
 

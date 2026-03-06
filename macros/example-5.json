@@ -34,12 +34,12 @@
       "action": "fill",
       "selector": "#email",
       "selectors": ["#email", "input[name=\"email\"]"],
-      "value": "raju@gmil.com"
+      "value": "raju@gmail.com"
     },
     {
       "action": "assert",
       "selector": "#email",
-      "value": "raju@gmil.com"
+      "value": "raju@gmail.com"
     },
     {
       "action": "fill",

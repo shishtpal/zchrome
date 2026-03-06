@@ -155,13 +155,16 @@ pub const SnapshotProcessor = struct {
         const key = try self.getRoleNameKey(role, name);
         errdefer self.allocator.free(key);
 
-        if (self.role_name_counts.get(key)) |count| {
+        const gop = try self.role_name_counts.getOrPut(key);
+        if (gop.found_existing) {
+            // Key already exists - free the new key we allocated, update count in place
             self.allocator.free(key);
-            const new_key = try self.getRoleNameKey(role, name);
-            try self.role_name_counts.put(new_key, count + 1);
+            const count = gop.value_ptr.*;
+            gop.value_ptr.* = count + 1;
             return count;
         } else {
-            try self.role_name_counts.put(key, 1);
+            // New entry - key is now owned by the map
+            gop.value_ptr.* = 1;
             return 0;
         }
     }
@@ -313,6 +316,7 @@ pub const SnapshotProcessor = struct {
                 defer self.allocator.free(ref_id); // Free after duping for ElementRef and refs map
 
                 const selector = try self.buildSelector(parsed.role, parsed.name);
+                errdefer self.allocator.free(selector);
 
                 const nth = try self.getNextIndex(parsed.role, parsed.name);
 
@@ -343,15 +347,27 @@ pub const SnapshotProcessor = struct {
                     }
                 }
 
-                // Store ref
+                // Store ref - allocate fields with errdefer cleanup
+                const ref_id_dupe = try self.allocator.dupe(u8, ref_id);
+                errdefer self.allocator.free(ref_id_dupe);
+
+                const role_dupe = try self.allocator.dupe(u8, parsed.role);
+                errdefer self.allocator.free(role_dupe);
+
+                const name_dupe = if (parsed.name) |n| try self.allocator.dupe(u8, n) else null;
+                errdefer if (name_dupe) |n| self.allocator.free(n);
+
+                const ref_key = try self.allocator.dupe(u8, ref_id);
+                errdefer self.allocator.free(ref_key);
+
                 const ref = ElementRef{
-                    .ref_id = try self.allocator.dupe(u8, ref_id),
+                    .ref_id = ref_id_dupe,
                     .selector = selector,
-                    .role = try self.allocator.dupe(u8, parsed.role),
-                    .name = if (parsed.name) |n| try self.allocator.dupe(u8, n) else null,
+                    .role = role_dupe,
+                    .name = name_dupe,
                     .nth = if (nth > 0) nth else null,
                 };
-                try refs.put(try self.allocator.dupe(u8, ref_id), ref);
+                try refs.put(ref_key, ref);
             } else {
                 // Keep line as-is
                 try result_lines.appendSlice(self.allocator, line);

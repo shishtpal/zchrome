@@ -1,10 +1,18 @@
 {
   "version": 2,
-  "description": "After saving the entry, a success message is shown on another page and in the site itself.",
+  "description": "The form is shown in the popup modal and the success message is shown in the same page only.",
   "commands": [
     {
       "action": "navigate",
-      "value": "https://formfiller.ctechhindi.in/example/example-3.php"
+      "value": "https://formfiller.ctechhindi.in/example/example-4.php"
+    },
+    {
+      "action": "assert",
+      "text": "Insert Entry"
+    },
+    {
+      "action": "click",
+      "selector": "body > section > button"
     },
     {
       "action": "fill",
@@ -108,11 +116,7 @@
     },
     {
       "action": "assert",
-      "text": "Data Saved."
-    },
-    {
-      "action": "click",
-      "selector": "body > div > a"
+      "text": "Data has been successful saved."
     }
   ]
 }

@@ -1,0 +1,68 @@
+{
+  "version": 2,
+  "description": "Fill two forms but url same.",
+  "commands": [
+    {
+      "action": "navigate",
+      "value": "https://formfiller.ctechhindi.in/example/example-16.php"
+    },
+    {
+      "action": "fill",
+      "selector": "#full_name",
+      "selectors": ["#full_name", "input[name=\"full_name\"]"],
+      "value": "Raju Kumar"
+    },
+    {
+      "action": "assert",
+      "selector": "#full_name",
+      "value": "Raju Kumar"
+    },
+    {
+      "action": "click",
+      "selector": ".btn",
+      "description": "Click on Search Record",
+      "selectors": [".btn", ".btn-info", "#search > button:nth-of-type(1)"]
+    },
+    {
+      "action": "assert",
+      "text": "Result Found: *"
+    },
+    {
+      "action": "fill",
+      "selector": "#email",
+      "selectors": ["#email", "input[name=\"email\"]"],
+      "value": "raju@gmail.com"
+    },
+    {
+      "action": "fill",
+      "selector": "#dob",
+      "selectors": ["#dob", "input[name=\"dob\"]"],
+      "value": "05/08/1992"
+    },
+    {
+      "action": "assert",
+      "selector": "#dob",
+      "value": "05/08/1992"
+    },
+    {
+      "action": "fill",
+      "selector": "#address",
+      "selectors": ["#address", "textarea[name=\"address\"]"],
+      "value": "MY ADDRESS"
+    },
+    {
+      "action": "assert",
+      "selector": "#email",
+      "value": "raju@gmail.com"
+    },
+    {
+      "action": "click",
+      "selector": ".btn-success",
+      "selectors": [".btn-success", "#search > button:nth-of-type(1)"]
+    },
+    {
+      "action": "assert",
+      "text": "Data has been successful saved."
+    }
+  ]
+}

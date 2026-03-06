@@ -266,6 +266,8 @@ The `assert` action allows you to verify application state during replay. When a
 
 ### Retry Behavior
 
+![Assertion Retry Flow](/replay-flow-with-assertions.png)
+
 When an assertion fails:
 
 1. zchrome waits `--retry-delay` ms (default: 1000)

@@ -139,7 +139,8 @@ pub const Page = struct {
 
     /// Navigate back in history. Returns true if navigation occurred.
     pub fn goBack(self: *Self) !bool {
-        const result = try self.session.sendCommand("Page.getNavigationHistory", .{});
+        var result = try self.session.sendCommand("Page.getNavigationHistory", .{});
+        defer result.deinit(self.session.allocator);
         const current_index_val = result.get("currentIndex") orelse return error.MissingField;
         const current_index = switch (current_index_val) {
             .integer => |i| i,
@@ -165,7 +166,8 @@ pub const Page = struct {
 
     /// Navigate forward in history. Returns true if navigation occurred.
     pub fn goForward(self: *Self) !bool {
-        const result = try self.session.sendCommand("Page.getNavigationHistory", .{});
+        var result = try self.session.sendCommand("Page.getNavigationHistory", .{});
+        defer result.deinit(self.session.allocator);
         const current_index_val = result.get("currentIndex") orelse return error.MissingField;
         const current_index = switch (current_index_val) {
             .integer => |i| i,

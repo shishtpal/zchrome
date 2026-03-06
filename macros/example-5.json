@@ -15,6 +15,11 @@
       "selector": "body > section > button"
     },
     {
+      "action": "assert",
+      "selector": "#exampleModalLabel",
+      "value": "Modal"
+    },
+    {
       "action": "fill",
       "selector": "#full_name",
       "selectors": ["#full_name", "input[name=\"full_name\"]"],
@@ -112,12 +117,12 @@
     { "action": "scroll", "scrollY": 200 },
     {
       "action": "click",
-      "selector": "#add_record > button"
+      "selector": "#exampleModal > div > div > div.modal-body > form > button"
     },
     {
       "action": "dialog",
       "accept": true,
-      "text": "Data has been successful saved."
+      "text": "Data has been successful saved. Record ID: *"
     }
   ]
 }

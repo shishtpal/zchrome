@@ -254,6 +254,15 @@ The `assert` action allows you to verify application state during replay. When a
 {"action": "assert", "text": "Login successful"}
 ```
 
+**Text with glob pattern (for dynamic content):**
+```json
+{"action": "assert", "text": "Record ID: *"}
+{"action": "assert", "text": "Welcome, * to the dashboard"}
+{"action": "assert", "text": "Order #* has been placed"}
+```
+
+Use `*` as a wildcard to match any characters. This is useful for asserting text that contains dynamic values like IDs, timestamps, or usernames.
+
 **With custom timeout:**
 ```json
 {"action": "assert", "selector": ".slow-element", "timeout": 10000}
@@ -496,9 +505,30 @@ Handle JavaScript dialogs (alert, confirm, prompt) during macro replay. Place th
 {
   "action": "dialog",
   "accept": true,           // true = accept, false = dismiss
-  "value": "prompt text"    // Optional: text for prompt dialogs
+  "value": "prompt text",   // Optional: text for prompt dialogs
+  "text": "Expected message"  // Optional: verify dialog message
 }
 ```
+
+**Asserting Dialog Messages:**
+
+You can verify the dialog message matches an expected value:
+
+```json
+{"action": "dialog", "accept": true, "text": "Are you sure you want to delete?"}
+```
+
+**Pattern Matching for Dynamic Dialog Messages:**
+
+Use `*` as a wildcard to match dynamic content in dialog messages:
+
+```json
+{"action": "dialog", "accept": true, "text": "Data saved. Record ID: *"}
+{"action": "dialog", "accept": true, "text": "Order #* confirmed"}
+{"action": "dialog", "accept": true, "text": "Welcome, *!"}
+```
+
+This is useful when the dialog contains dynamic values like record IDs, timestamps, or usernames that change between runs.
 
 **How It Works:**
 

@@ -626,16 +626,31 @@ fn executeAssertion(
         return false;
     }
 
-    // 2. Check text on page if specified
+    // 2. Check text on page if specified (supports glob patterns with *)
     if (cmd.text) |text| {
-        const escaped = try escapeForJs(allocator, text);
-        defer allocator.free(escaped);
+        const has_wildcard = std.mem.indexOf(u8, text, "*") != null;
 
-        const js = try std.fmt.allocPrint(allocator, "document.body.innerText.includes('{s}')", .{escaped});
-        defer allocator.free(js);
+        if (has_wildcard) {
+            // Use glob pattern matching via JavaScript regex
+            const regex_pattern = try globToRegex(allocator, text);
+            defer allocator.free(regex_pattern);
 
-        if (try pollUntilTrue(session, allocator, js, timeout_ms)) {
-            return true;
+            const js = try std.fmt.allocPrint(allocator, "new RegExp('{s}').test(document.body.innerText)", .{regex_pattern});
+            defer allocator.free(js);
+
+            if (try pollUntilTrue(session, allocator, js, timeout_ms)) {
+                return true;
+            }
+        } else {
+            const escaped = try escapeForJs(allocator, text);
+            defer allocator.free(escaped);
+
+            const js = try std.fmt.allocPrint(allocator, "document.body.innerText.includes('{s}')", .{escaped});
+            defer allocator.free(js);
+
+            if (try pollUntilTrue(session, allocator, js, timeout_ms)) {
+                return true;
+            }
         }
         return false;
     }
@@ -738,6 +753,58 @@ fn executeAssertion(
     }
 
     // No assertion conditions specified - pass by default
+    return true;
+}
+
+/// Match a string against a glob pattern with * wildcards.
+/// The * matches any sequence of characters (including empty).
+fn matchesGlobPattern(text: []const u8, pattern: []const u8) bool {
+    // Handle edge cases
+    if (pattern.len == 0) return text.len == 0;
+    if (std.mem.eql(u8, pattern, "*")) return true;
+
+    // Check if pattern has wildcards
+    const has_wildcard = std.mem.indexOf(u8, pattern, "*") != null;
+    if (!has_wildcard) return std.mem.eql(u8, text, pattern);
+
+    // Split pattern by '*' and match each part in sequence
+    var text_pos: usize = 0;
+    var part_index: usize = 0;
+    var iter = std.mem.splitSequence(u8, pattern, "*");
+
+    // Count parts for detecting first/last
+    var parts_count: usize = 0;
+    var count_iter = std.mem.splitSequence(u8, pattern, "*");
+    while (count_iter.next()) |_| parts_count += 1;
+
+    while (iter.next()) |part| {
+        defer part_index += 1;
+
+        if (part.len == 0) continue;
+
+        const is_first = (part_index == 0);
+        const is_last = (part_index == parts_count - 1);
+
+        if (is_first and pattern[0] != '*') {
+            // First part must match at start
+            if (!std.mem.startsWith(u8, text, part)) return false;
+            text_pos = part.len;
+        } else if (is_last and pattern[pattern.len - 1] != '*') {
+            // Last part must match at end
+            if (!std.mem.endsWith(u8, text, part)) return false;
+            // Ensure the part doesn't overlap with already matched content
+            if (text.len < text_pos + part.len) return false;
+        } else {
+            // Middle parts: find anywhere in remaining text
+            const remaining = text[text_pos..];
+            if (std.mem.indexOf(u8, remaining, part)) |pos| {
+                text_pos += pos + part.len;
+            } else {
+                return false;
+            }
+        }
+    }
+
     return true;
 }
 
@@ -1146,12 +1213,22 @@ fn replayCommandsWithOptions(session: *cdp.Session, allocator: std.mem.Allocator
                 };
                 defer dialog_info.deinit(allocator);
 
-                // Assert dialog message if specified
+                // Assert dialog message if specified (supports glob patterns with *)
                 if (cmd.text) |expected_text| {
-                    if (!std.mem.eql(u8, dialog_info.message, expected_text)) {
+                    const has_wildcard = std.mem.indexOf(u8, expected_text, "*") != null;
+                    const matches = if (has_wildcard)
+                        matchesGlobPattern(dialog_info.message, expected_text)
+                    else
+                        std.mem.eql(u8, dialog_info.message, expected_text);
+
+                    if (!matches) {
                         std.debug.print("\n    Dialog message mismatch\n", .{});
-                        std.debug.print("      Expected: \"{s}\"\n", .{expected_text});
-                        std.debug.print("      Actual:   \"{s}\"\n", .{dialog_info.message});
+                        if (has_wildcard) {
+                            std.debug.print("      Pattern: \"{s}\"\n", .{expected_text});
+                        } else {
+                            std.debug.print("      Expected: \"{s}\"\n", .{expected_text});
+                        }
+                        std.debug.print("      Actual:  \"{s}\"\n", .{dialog_info.message});
                         continue;
                     }
                     std.debug.print(" (message verified)", .{});
@@ -1297,9 +1374,15 @@ pub fn printCursorHelp() void {
         \\Assert Action in JSON:
         \\  {{"action": "assert", "selector": "#el"}}           - Element exists
         \\  {{"action": "assert", "text": "Welcome"}}           - Text on page
+        \\  {{"action": "assert", "text": "Record ID: *"}}      - Text with wildcard
         \\  {{"action": "assert", "url": "**/dashboard"}}       - URL matches
         \\  {{"action": "assert", "selector": "#el", "value": "expected"}}
         \\  {{"action": "assert", ..., "fallback": "error.json"}}
+        \\
+        \\Dialog Action in JSON:
+        \\  {{"action": "dialog", "accept": true}}              - Accept dialog
+        \\  {{"action": "dialog", "accept": true, "text": "OK to delete?"}} - Verify message
+        \\  {{"action": "dialog", "accept": true, "text": "ID: *"}}  - Wildcard match
         \\
         \\Examples:
         \\  zchrome cursor active

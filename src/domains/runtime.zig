@@ -307,7 +307,10 @@ fn parsePropertyDescriptor(allocator: std.mem.Allocator, obj: json.Value) !Prope
             try parseRemoteObject(allocator, v)
         else
             null,
-        .writable = if (obj.get("writable")) |v| switch (v) { .bool => |b| b, else => null } else null,
+        .writable = if (obj.get("writable")) |v| switch (v) {
+            .bool => |b| b,
+            else => null,
+        } else null,
         .get = if (obj.get("get")) |v|
             try parseRemoteObject(allocator, v)
         else
@@ -316,8 +319,14 @@ fn parsePropertyDescriptor(allocator: std.mem.Allocator, obj: json.Value) !Prope
             try parseRemoteObject(allocator, v)
         else
             null,
-        .configurable = if (obj.get("configurable")) |v| switch (v) { .bool => |b| b, else => null } else null,
-        .enumerable = if (obj.get("enumerable")) |v| switch (v) { .bool => |b| b, else => null } else null,
+        .configurable = if (obj.get("configurable")) |v| switch (v) {
+            .bool => |b| b,
+            else => null,
+        } else null,
+        .enumerable = if (obj.get("enumerable")) |v| switch (v) {
+            .bool => |b| b,
+            else => null,
+        } else null,
         .symbol = if (obj.get("symbol")) |v|
             try parseRemoteObject(allocator, v)
         else

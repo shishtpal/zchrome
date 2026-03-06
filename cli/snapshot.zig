@@ -268,6 +268,7 @@ pub const SnapshotProcessor = struct {
         errdefer {
             var iter = refs.iterator();
             while (iter.next()) |entry| {
+                self.allocator.free(entry.key_ptr.*);
                 var ref = entry.value_ptr.*;
                 ref.deinit(self.allocator);
             }

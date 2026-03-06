@@ -881,9 +881,9 @@ fn cmdInteractive(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocato
             try interactive_mod.run(&state);
             return;
         };
+        defer allocator.free(session_id);
         state.session = cdp.Session.init(session_id, browser.connection, allocator) catch |err| {
             std.debug.print("Warning: Could not create session: {}\n", .{err});
-            allocator.free(session_id);
             try interactive_mod.run(&state);
             return;
         };
@@ -922,6 +922,7 @@ fn cmdSnapshot(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) 
         }
         var target = cdp.Target.init(browser.connection);
         const session_id = try target.attachToTarget(allocator, target_id, true);
+        defer allocator.free(session_id);
         session = try cdp.Session.init(session_id, browser.connection, allocator);
     } else {
         // Create new page only if no pages exist

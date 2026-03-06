@@ -912,11 +912,11 @@ fn replayCommandsWithOptions(session: *cdp.Session, allocator: std.mem.Allocator
         if (cmd.action == .assert) {
             const assert_result = executeAssertion(session, allocator, io, cmd, options.session_ctx) catch false;
             if (assert_result) {
-                std.debug.print(" ✓\n", .{});
+                std.debug.print(" [OK]\n", .{});
                 retry_count = 0; // Reset retry count on success
             } else {
                 const timeout_val = cmd.timeout orelse 5000;
-                std.debug.print("\n    ✗ Assertion failed (timeout {}ms)\n", .{timeout_val});
+                std.debug.print("\n    [FAIL] Assertion failed (timeout {}ms)\n", .{timeout_val});
 
                 retry_count += 1;
                 if (retry_count <= options.max_retries) {

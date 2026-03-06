@@ -924,13 +924,14 @@ fn replayCommandsWithOptions(session: *cdp.Session, allocator: std.mem.Allocator
                     });
 
                     // Save state before retry
-                    const state = replay_state.ReplayState{
+                    var state = replay_state.ReplayState{
                         .macro_file = allocator.dupe(u8, filename) catch null,
                         .last_action_index = last_action_index,
                         .last_attempted_index = i,
                         .retry_count = retry_count,
                         .status = .running,
                     };
+                    defer state.deinit(allocator);
                     replay_state.saveState(state, allocator, io, options.session_ctx) catch {};
 
                     // Jump back to last action command
@@ -942,7 +943,7 @@ fn replayCommandsWithOptions(session: *cdp.Session, allocator: std.mem.Allocator
                     std.debug.print("    ✗ Assertion failed after {} retries\n", .{options.max_retries});
 
                     // Save failed state
-                    const state = replay_state.ReplayState{
+                    var state = replay_state.ReplayState{
                         .macro_file = allocator.dupe(u8, filename) catch null,
                         .last_action_index = last_action_index,
                         .last_attempted_index = i,
@@ -950,6 +951,7 @@ fn replayCommandsWithOptions(session: *cdp.Session, allocator: std.mem.Allocator
                         .retry_count = retry_count,
                         .status = .failed,
                     };
+                    defer state.deinit(allocator);
                     replay_state.saveState(state, allocator, io, options.session_ctx) catch {};
                     std.debug.print("    State saved: last_action={}, status=failed\n", .{last_action_index + 1});
 

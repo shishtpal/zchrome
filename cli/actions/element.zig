@@ -20,7 +20,9 @@ pub fn getElementPosition(
 
     if (resolved.css_selector) |css| {
         // CSS selector path
-        js = try std.fmt.allocPrint(allocator, "{s}({s})", .{ helpers.FIND_BY_CSS_JS, try helpers.escapeJsString(allocator, css) });
+        const escaped_css = try helpers.escapeJsString(allocator, css);
+        defer allocator.free(escaped_css);
+        js = try std.fmt.allocPrint(allocator, "{s}({s})", .{ helpers.FIND_BY_CSS_JS, escaped_css });
     } else {
         // Role-based path
         const role = resolved.role orelse return error.InvalidSelector;
@@ -134,7 +136,8 @@ pub fn clickElement(
             js = try std.fmt.allocPrint(allocator, "{s}('{s}', {s}, {s})", .{ helpers.FIND_AND_CLICK_JS, role, name_arg, nth_arg });
         }
 
-        _ = try runtime.evaluate(allocator, js, .{ .return_by_value = true });
+        var eval_result = try runtime.evaluate(allocator, js, .{ .return_by_value = true });
+        eval_result.deinit(allocator);
     } else {
         // Real CDP mouse event path: isTrusted: true, works with all frameworks.
         const center = try getElementCenter(session, allocator, resolved);
@@ -169,7 +172,8 @@ pub fn focusElement(
         js = try std.fmt.allocPrint(allocator, "{s}('{s}',{s},{});", .{ helpers.FIND_AND_FOCUS_JS, role, name_arg, nth });
     }
 
-    _ = try runtime.evaluate(allocator, js, .{});
+    var eval_result = try runtime.evaluate(allocator, js, .{});
+    eval_result.deinit(allocator);
 }
 
 /// Type text into the focused element
@@ -222,7 +226,8 @@ pub fn fillElement(
         js = try std.fmt.allocPrint(allocator, "{s}('{s}',{s},{},{s});", .{ helpers.FIND_AND_FILL_JS, role, name_arg, nth, escaped_text });
     }
 
-    _ = try runtime.evaluate(allocator, js, .{});
+    var eval_result = try runtime.evaluate(allocator, js, .{});
+    eval_result.deinit(allocator);
 }
 
 /// Hover over an element
@@ -423,7 +428,8 @@ pub fn scrollIntoView(
         js = try std.fmt.allocPrint(allocator, "{s}('{s}',{s},{});", .{ helpers.FIND_AND_SCROLL_JS, role, name_arg, nth });
     }
 
-    _ = try runtime.evaluate(allocator, js, .{});
+    var eval_result = try runtime.evaluate(allocator, js, .{});
+    eval_result.deinit(allocator);
 }
 
 // ─── Keyboard Functions ─────────────────────────────────────────────────────

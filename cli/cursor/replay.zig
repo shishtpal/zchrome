@@ -14,6 +14,7 @@ const assertions = @import("assertions.zig");
 const actions = @import("actions.zig");
 const display = @import("display.zig");
 const record = @import("record.zig");
+const video = @import("video/mod.zig");
 
 // Command imports
 const types = @import("../commands/types.zig");
@@ -48,6 +49,9 @@ pub const ReplayOptions = struct {
     resume_mode: bool = false,
     start_index: ?usize = null,
     session_ctx: ?*const session_mod.SessionContext = null,
+    video_mode: video.OutputMode = .{},
+    /// Existing video orchestrator (passed to nested goto calls)
+    video_orch: ?*video.Orchestrator = null,
 };
 
 /// Main cursor command entry point
@@ -129,6 +133,14 @@ pub fn printCursorHelp() void {
         \\  --resume                   Resume from last successful action
         \\  --from <n>                 Start from command index n
         \\
+        \\Video Recording & Streaming:
+        \\  --record=<path>            Record replay to video file (mp4/webm/gif)
+        \\  --fps=<n>                  Frames per second for recording (default: 10)
+        \\  --quality=<0-100>          Video quality (default: 80)
+        \\  --stream                   Enable live streaming
+        \\  --port=<n>                 Stream server port (default: 8080)
+        \\  --interactive              Allow viewers to interact
+        \\
         \\Assert Action in JSON:
         \\  {{"action": "assert", "selector": "#el"}}           - Element exists
         \\  {{"action": "assert", "text": "Welcome"}}           - Text on page
@@ -158,6 +170,13 @@ pub fn printCursorHelp() void {
         \\  zchrome cursor replay form.json --retries 5
         \\  zchrome cursor replay form.json --fallback error.json
         \\  zchrome cursor replay form.json --resume
+        \\
+        \\Video Recording & Streaming Examples:
+        \\  zchrome cursor replay demo.json --record=demo.mp4
+        \\  zchrome cursor replay demo.json --record=demo.webm --fps=15 --quality=90
+        \\  zchrome cursor replay demo.json --stream --port=8080
+        \\  zchrome cursor replay demo.json --stream --interactive
+        \\  zchrome cursor replay demo.json --record=demo.mp4 --stream
         \\
     , .{});
 }
@@ -229,6 +248,9 @@ fn cursorReplay(session: *cdp.Session, ctx: CommandCtx, args: []const []const u8
 
     // Version 2: Command-based replay with assert/retry support
     if (version == 2) {
+        // Parse video options from args
+        const video_mode = video.orchestrator.parseVideoOptions(args);
+
         const options = ReplayOptions{
             .interval = interval,
             .max_retries = ctx.replay_retries,
@@ -237,6 +259,7 @@ fn cursorReplay(session: *cdp.Session, ctx: CommandCtx, args: []const []const u8
             .resume_mode = ctx.replay_resume,
             .start_index = ctx.replay_from,
             .session_ctx = ctx.session,
+            .video_mode = video_mode,
         };
         return replayCommandsWithOptions(session, allocator, io, filename, options);
     }
@@ -323,6 +346,36 @@ fn replayCommandsWithOptions(session: *cdp.Session, allocator: std.mem.Allocator
     }
 
     const interval = options.interval;
+
+    // Use existing video orchestrator if provided, otherwise create new one
+    var video_orch: ?*video.Orchestrator = options.video_orch;
+    var owns_video_orch = false;
+
+    if (video_orch == null and (options.video_mode.record != null or options.video_mode.stream != null)) {
+        video_orch = video.Orchestrator.init(allocator, io, session, options.video_mode) catch |err| {
+            std.debug.print("Failed to initialize video: {}\n", .{err});
+            return;
+        };
+        owns_video_orch = true;
+
+        // Print stream URL if streaming
+        if (video_orch.?.getStreamUrl()) |url| {
+            std.debug.print("Streaming at: {s}\n", .{url});
+        }
+
+        // Start capture
+        video_orch.?.startCapture() catch |err| {
+            std.debug.print("Failed to start video capture: {}\n", .{err});
+            video_orch.?.deinit();
+            return;
+        };
+    }
+    defer if (owns_video_orch) {
+        if (video_orch) |orch| {
+            orch.stopCapture() catch {};
+            orch.deinit();
+        }
+    };
 
     // Check for resume mode
     var start_idx: usize = options.start_index orelse 0;
@@ -456,7 +509,12 @@ fn replayCommandsWithOptions(session: *cdp.Session, allocator: std.mem.Allocator
         }
 
         // Execute the command based on action type
-        executeCommand(session, allocator, io, cmd, &variables, &page, filename);
+        executeCommand(session, allocator, io, cmd, &variables, &page, filename, options, video_orch);
+
+        // Capture video frame after command (if video mode is enabled)
+        if (video_orch) |orch| {
+            _ = orch.captureFrame();
+        }
 
         // Delay between commands
         const now_ns = std.Io.Timestamp.now(io, .real).nanoseconds;
@@ -489,6 +547,8 @@ fn executeCommand(
     variables: *std.StringHashMap(state.VarValue),
     page: *cdp.Page,
     macro_file: []const u8,
+    options: ReplayOptions,
+    video_orch: ?*video.Orchestrator,
 ) void {
     // Build context for command execution
     var pos_args: [2][]const u8 = .{ "", "" };
@@ -706,9 +766,12 @@ fn executeCommand(
             defer if (resolved_path.ptr != target_file.ptr) allocator.free(resolved_path);
 
             std.debug.print(" -> {s}\n", .{resolved_path});
-            replayCommandsWithOptions(session, allocator, io, resolved_path, .{
-                .interval = .{ .min_ms = 100, .max_ms = 100 },
-            }) catch |err| {
+            // Pass full options to nested call (preserves interval, retries, video, etc.)
+            var nested_options = options;
+            nested_options.video_orch = video_orch; // Ensure orchestrator is passed
+            nested_options.resume_mode = false; // Don't resume nested calls
+            nested_options.start_index = null;
+            replayCommandsWithOptions(session, allocator, io, resolved_path, nested_options) catch |err| {
                 std.debug.print("    Error replaying {s}: {}\n", .{ resolved_path, err });
             };
         },

@@ -34,103 +34,36 @@ zchrome [options] <command> [command-args]
 
 ## Sessions
 
-zchrome supports **named sessions** to manage multiple isolated Chrome configurations. Each session stores its own `zchrome.json` config file in a separate directory.
-
-### Why Use Sessions?
-
-- **Multiple Chrome profiles**: Work with different Chrome data directories for different projects
-- **Isolated settings**: Each session can have its own viewport, user agent, geolocation, etc.
-- **Easy switching**: Switch between configurations with a single flag
-
-### Session Storage
-
-Sessions are stored in a `sessions/` directory alongside the executable:
-
-```
-zchrome.exe
-sessions/
-├── default/
-│   ├── zchrome.json       # Config
-│   ├── chrome-profile/    # Chrome data (cookies, history)
-│   └── states/            # Auth state files
-├── work/
-│   ├── zchrome.json
-│   └── chrome-profile/
-└── testing/
-    └── zchrome.json
-```
-
-Each session gets its own Chrome profile by default, ensuring complete browser isolation.
-
-### Using Sessions
+zchrome supports **named sessions** to manage multiple isolated Chrome configurations. Each session stores its own config file and Chrome profile in a separate directory.
 
 ```bash
-# Use the default session (implicit)
-zchrome navigate https://example.com
-
 # Use a named session
 zchrome --session work connect
 
-# Create and use a new session
-zchrome --session testing session create testing
+# Create a new session
+zchrome session create testing
 
-# Set environment variable for default session
-set ZCHROME_SESSION=work
-zchrome navigate https://example.com
+# List all sessions
+zchrome session list
 ```
 
-### Precedence
+See the [Sessions](/cli/sessions) page for full documentation on session management, storage, and use cases.
 
-Session name is resolved in this order:
-1. `--session` flag (highest priority)
-2. `ZCHROME_SESSION` environment variable
-3. `"default"` (fallback)
+## Config File
 
-See the [session command](#session) for managing sessions, the [Sessions Guide](/guide/cli-sessions) for detailed documentation, or [Environment Variables](/guide/environment) for all supported environment variables.
-
-## Config File (zchrome.json)
-
-zchrome stores session information in `zchrome.json` alongside the executable. This makes the tool portable and allows subsequent commands to reuse connection information and session settings.
+zchrome stores session information in `zchrome.json` within each session directory. This makes the tool portable and allows subsequent commands to reuse connection information.
 
 ```json
 {
   "chrome_path": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-  "data_dir": "D:\\tmp\\chrome-dev-profile",
   "port": 9222,
   "ws_url": "ws://127.0.0.1:9222/devtools/browser/...",
-  "last_target": "DC6E72F7B31F6A70C4C2B7A2D5A9ED74",
-  "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Firefox/121.0",
   "viewport_width": 1920,
-  "viewport_height": 1080,
-  "device_name": "Desktop",
-  "geo_lat": 40.7128,
-  "geo_lng": -74.0060,
-  "offline": false,
-  "media_feature": "dark"
+  "viewport_height": 1080
 }
 ```
 
-**Configuration fields:**
-
-| Field | Description |
-|-------|-------------|
-| `chrome_path` | Path to Chrome executable |
-| `data_dir` | User data directory for Chrome profile |
-| `port` | Debug port (default: 9222) |
-| `ws_url` | WebSocket URL for browser connection |
-| `last_target` | Last used target ID (for `--use` flag) |
-| `user_agent` | Custom user agent string |
-| `viewport_width` | Viewport width in pixels |
-| `viewport_height` | Viewport height in pixels |
-| `device_name` | Emulated device name |
-| `geo_lat` | Geolocation latitude |
-| `geo_lng` | Geolocation longitude |
-| `offline` | Offline mode enabled |
-| `media_feature` | Preferred color scheme (dark/light) |
-
-**Note:** Session settings (user_agent, viewport, geo, offline, media_feature) are automatically re-applied when connecting to a page.
-
-Options from command line override config file values.
+See the [Config File](/cli/config) page for full documentation on configuration fields and auto-applied settings.
 
 ## Commands
 
@@ -332,68 +265,25 @@ zchrome --url $url --use 75E5402CE67C63D19659EEFDC1CF292D evaluate "document.tit
 # Output: Result: Example Domain
 ```
 
-### network
+### Network
 
 Intercept, block, or mock network requests using the CDP Fetch domain.
 
-#### network route
-
-Intercept requests matching a URL pattern. Uses wildcard matching (`*`).
-
 ```bash
-# Log intercepted requests (continue them after logging)
+# Log intercepted requests
 zchrome network route "*api/v1*"
 
-# Block matching requests entirely
+# Block matching requests
 zchrome network route "*.png" --abort
 
-# Mock response with custom JSON body
-zchrome network route "*api/user*" --body '{"name":"test","id":1}'
-```
+# Mock response
+zchrome network route "*api/user*" --body '{"name":"test"}'
 
-The `route` command enables the Fetch domain and enters an intercept loop that processes matching requests in real-time. Press `Ctrl+C` to stop.
-
-**Options:**
-- `--abort` — Block matching requests (responds with `BlockedByClient`)
-- `--body <json>` — Mock response with the given JSON body (HTTP 200, `application/json`)
-
-#### network unroute
-
-Remove all active routes by disabling the Fetch domain.
-
-```bash
-zchrome network unroute
-```
-
-#### network requests
-
-View tracked network requests using the Performance Resource Timing API.
-
-```bash
-# List all tracked requests
+# View tracked requests
 zchrome network requests
-
-# Filter by URL substring
-zchrome network requests --filter "api"
-
-# Clear request log (re-enables network tracking)
-zchrome network requests --clear
 ```
 
-**Options:**
-- `--filter <pattern>` — Only show requests whose URL contains the pattern
-- `--clear` — Clear the request log
-
-**Example output:**
-
-```
-METHOD   URL                                                          STATUS
---------------------------------------------------------------------------------
-fetch    https://api.example.com/v1/users                             45ms 1234B
-script   https://cdn.example.com/app.js                               120ms 45678B
-
-Total: 2 request(s)
-```
+See the [Network Commands](/cli/network) page for full documentation on request interception, mocking, and debugging.
 
 ### cookies
 
@@ -1274,219 +1164,42 @@ zchrome mouse up
 
 ## Cursor Commands
 
-Show information about elements at the cursor position or with focus.
-
-### cursor active
-
-Show the currently focused element (the element that would receive keyboard input).
+The `cursor` command provides tools for inspecting elements, recording browser interactions, and replaying macros with video recording support.
 
 ```bash
+zchrome cursor <subcommand> [options]
+```
+
+| Subcommand | Description |
+|------------|-------------|
+| `active` | Show the currently focused element |
+| `hover` | Show element under mouse cursor |
+| `record` | Record interactions to a macro file |
+| `replay` | Replay a macro with optional video recording/streaming |
+
+**Quick Examples:**
+
+```bash
+# Inspect focused element
 zchrome cursor active
+
+# Record a macro
+zchrome cursor record login-flow.json
+
+# Replay with video recording
+zchrome cursor replay login-flow.json --record=demo.mp4 --fps=15
+
+# Live stream replay
+zchrome cursor replay demo.json --stream --port=8080
 ```
 
-**Output:**
-
-```
-Active element:
-  type: html
-  tag: input
-  role: textbox
-  name: "Search"
-  id: search-box
-  selector: input#search-box
-  position: (100, 200)
-```
-
-**Element Types:**
-
-| Type | Description |
-|------|-------------|
-| `html` | Standard HTML element |
-| `img` | Image element |
-| `svg` | SVG element |
-| `canvas` | Canvas element |
-| `iframe` | Iframe element |
-| `shadow` | Element in shadow DOM |
-| `placeholder` | Input with placeholder text |
-
-**Example:**
-
-```bash
-# Focus an element and check what's active
-zchrome focus "#email"
-zchrome cursor active
-# Output shows the email input element
-
-# After clicking a button
-zchrome click "#submit"
-zchrome cursor active
-# Output shows the submit button (it received focus from the click)
-```
-
-### cursor hover
-
-Show the element under the last known mouse cursor position. Requires `mouse move` to be called first to set the position.
-
-```bash
-zchrome cursor hover
-```
-
-**Output:**
-
-```
-Element at cursor (150, 300):
-  type: html
-  tag: button
-  role: button
-  name: "Submit"
-  selector: button.submit-btn
-```
-
-**Example:**
-
-```bash
-# Move mouse and check what's under it
-zchrome mouse move 300 400
-zchrome cursor hover
-# Output shows the element at coordinates (300, 400)
-
-# Useful for debugging hover states
-zchrome mouse move 100 200
-zchrome cursor hover
-```
-
-**Note:** The `cursor hover` command uses the last saved mouse position from `zchrome.json`. You must use `mouse move` first to set the position.
-
-### cursor record
-
-Record mouse and keyboard events to a JSON macro file using WebSocket streaming. Events are captured in real-time and survive page reloads.
-
-```bash
-zchrome cursor record <filename.json>
-```
-
-**How it works:**
-
-1. Starts a WebSocket server on port 4040
-2. Injects JavaScript into the page that connects to the server
-3. Events stream in real-time to zchrome
-4. Script auto-injects on page navigation (survives reloads)
-5. Press Enter to stop recording and save
-
-**Example:**
-
-```bash
-# Start recording
-zchrome cursor record macro.json
-# Recording on port 4040... Press Enter to stop.
-# (Events stream in real-time, survives page reloads)
-#   (browser connected)
-# (interact with the page, navigate, reload - all captured)
-# Recorded 12 commands to macro.json
-```
-
-**Note:** The recording survives page reloads because the JavaScript is injected via `Page.addScriptToEvaluateOnNewDocument`, which automatically runs on every new page load.
-
-**Output Format (v2):**
-
-The macro file contains semantic commands:
-
-```json
-{
-  "version": 2,
-  "commands": [
-    {"action": "click", "selector": "#login-btn"},
-    {"action": "fill", "selector": "#email", "value": "user@example.com"},
-    {"action": "fill", "selector": "#password", "value": "secret"},
-    {"action": "press", "key": "Enter"},
-    {"action": "wait", "value": 2000},
-    {"action": "click", "selector": ".dashboard"}
-  ]
-}
-```
-
-**Supported Actions:**
-- `click` - Click element
-- `dblclick` - Double-click element
-- `fill` - Fill input field (selector + value)
-- `check` / `uncheck` - Toggle checkbox
-- `select` / `multiselect` - Select one or more dropdown options
-- `press` - Press key (e.g., "Enter", "Tab", "Control+a")
-- `scroll` - Scroll page (scrollY)
-- `hover` - Hover over element
-- `navigate` - Navigate to URL
-- `wait` - Wait for element (selector), time (ms), or text (value)
-- `upload` - Upload files to file input (selector + files array)
-- `dialog` - Handle JavaScript dialogs (alert, confirm, prompt)
-- `assert` - Verify page state with automatic retry support
-- `extract` - Extract DOM data to stdout or a file
-
-### cursor replay
-
-Replay commands from a macro file with support for assertions and automatic retry on failure.
-
-```bash
-zchrome cursor replay <filename.json> [options]
-```
-
-**Options:**
-
-| Option | Description |
-|--------|-------------|
-| `--interval=<ms>` | Fixed delay between commands (default: 100ms) |
-| `--interval=<min-max>` | Random delay range (e.g., 200-500ms) |
-| `--retries <n>` | Number of retries on assertion failure (default: 3) |
-| `--retry-delay <ms>` | Wait time before retrying (default: 1000ms) |
-| `--fallback <file.json>` | JSON file to execute on permanent failure |
-| `--resume` | Resume from last successful action |
-| `--from <n>` | Start replay from command index n |
-
-**Example:**
-
-```bash
-# Replay with default 100ms interval
-zchrome cursor replay macro.json
-
-# Fixed 500ms between commands
-zchrome cursor replay macro.json --interval=500
-
-# Random 200-500ms between commands
-zchrome cursor replay macro.json --interval=200-500
-
-# With custom retry settings for assertions
-zchrome cursor replay form.json --retries 5 --retry-delay 2000
-
-# With fallback on permanent failure
-zchrome cursor replay form.json --fallback error-handler.json
-
-# Resume from last successful action
-zchrome cursor replay form.json --resume
-```
-
-**Output:**
-
-```
-Replaying 12 commands from macro.json (retries: 3, delay: 1000ms)...
-  [1/12] click "#login-btn"
-  [2/12] fill "#email" "user@example.com"
-  [3/12] assert "#email" ✓
-  [4/12] press Enter
-  [5/12] wait ".dashboard"
-  [6/12] goto "checkout.json" -> checkout.json
-Replay complete. All assertions passed.
-```
-
-**Macro chaining with `goto`:**
-
-Use the `goto` action in your macro JSON to hand off replay to another file:
-
-```json
-{"action": "goto", "file": "next-step.json"}
-```
-
-This is useful for splitting multi-step flows (e.g., login → form → checkout) into reusable macro files.
-
-See the [Macro Recording](/examples/macros) guide for full documentation on the macro format, assertions, and supported actions.
+See the [Cursor Commands](/cli/cursor) page for full documentation including:
+- Element inspection (`active`, `hover`)
+- Macro recording and replay
+- Video recording (MP4/WebM/GIF)
+- Live streaming with interactive mode
+- Assertions and retry logic
+- Macro chaining with `goto`
 
 ## Wait Commands
 
@@ -1674,7 +1387,7 @@ zchrome cursor replay macro.json
 The `macro` mode generates a template macro JSON file based on the element type. It inspects the element and generates context-aware commands:
 
 - **Buttons/links**: `wait` → `click` → `assert`
-- **Text inputs**: `wait` → `fill` → `assert`  
+- **Text inputs**: `wait` → `fill` → `assert`
 - **Checkboxes/radios**: `wait` → `check` → `assert`
 - **File inputs**: `wait` → `upload` → `assert`
 - **Select dropdowns**: `wait` → `select` → `assert`

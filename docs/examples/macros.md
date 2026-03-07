@@ -873,6 +873,103 @@ zchrome cursor record demo.json
 zchrome cursor replay demo.json --interval=1000-1500
 ```
 
+## Video Recording & Live Streaming
+
+Record replay sessions as video files or stream them live for collaboration and review.
+
+### Recording to Video
+
+Capture replay sessions as video files (MP4, WebM, or GIF):
+
+```bash
+# Record to MP4 (most compatible)
+zchrome cursor replay demo.json --record=demo.mp4
+
+# Record with custom settings
+zchrome cursor replay demo.json --record=demo.webm --fps=15 --quality=90
+
+# Record as GIF (for quick sharing)
+zchrome cursor replay demo.json --record=demo.gif
+```
+
+**Recording Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--record=<path>` | Output file path (format detected from extension) |
+| `--fps=<n>` | Frames per second (default: 10, max ~15 due to screenshot overhead) |
+| `--quality=<0-100>` | Video quality (default: 80) |
+
+**Supported Formats:**
+
+| Format | Extension | Use Case |
+|--------|-----------|----------|
+| MP4 | `.mp4` | Best compatibility, recommended for sharing |
+| WebM | `.webm` | Web-optimized, smaller files |
+| GIF | `.gif` | Quick previews, embeddable anywhere |
+
+**Requirements:** FFmpeg must be installed and in your PATH.
+
+### Live Streaming
+
+Stream replay sessions in real-time for collaboration or remote viewing:
+
+```bash
+# Start streaming on default port 8080
+zchrome cursor replay demo.json --stream
+
+# Stream on custom port
+zchrome cursor replay demo.json --stream --port=9000
+```
+
+Open `http://localhost:8080/` in any browser to watch the stream.
+
+**Stream Features:**
+- **MJPEG over HTTP** - Works in any browser via `<img>` tag
+- **WebSocket support** - Lower latency for interactive mode
+- **Multiple viewers** - Share the URL with team members
+
+### Interactive Mode
+
+Allow remote viewers to interact with the page during replay:
+
+```bash
+zchrome cursor replay demo.json --stream --interactive
+```
+
+In interactive mode, viewers can:
+- Click on elements (coordinates are scaled to match the original viewport)
+- Type keys (forwarded to the browser)
+
+This is useful for:
+- Remote pair programming
+- QA team collaboration
+- Live demos with audience participation
+
+### Combined Recording & Streaming
+
+Record and stream simultaneously:
+
+```bash
+zchrome cursor replay demo.json --record=demo.mp4 --stream --port=8080
+```
+
+### Example: Demo Video Workflow
+
+```bash
+# 1. Record your interaction
+zchrome cursor record workflow.json
+
+# 2. Edit the macro to add waits and polish timing
+# (edit workflow.json)
+
+# 3. Record to video with slow, presentable timing
+zchrome cursor replay workflow.json --record=demo.mp4 --interval=800 --fps=15
+
+# 4. Or live stream for team review
+zchrome cursor replay workflow.json --stream --interval=500
+```
+
 ## Tips
 
 ### Reliable Recordings

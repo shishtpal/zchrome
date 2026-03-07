@@ -11,9 +11,8 @@ This section contains practical examples demonstrating common use cases for zchr
 | [DOM Manipulation](/examples/dom) | Query and modify the DOM |
 | [JavaScript Evaluation](/examples/javascript) | Execute JavaScript and get results |
 | [Network Interception](/examples/network) | Monitor and modify network traffic (Zig API) |
-| [Network Commands](/examples/network-commands) | Route, block, mock, and inspect requests (CLI) |
 | [Browser Interactions](/examples/interactions) | Click, type, fill forms using CLI |
-| [Macro Recording](/examples/macros) | Record and replay browser interactions |
+| [Macro Recording](/examples/macros) | Record and replay browser interactions, video recording & streaming |
 
 ## Basic Pattern
 

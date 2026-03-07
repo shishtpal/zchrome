@@ -1,17 +1,41 @@
 # Network Commands
 
-Intercept, block, mock, and inspect network requests from the CLI or interactive REPL.
+Intercept, block, mock, and inspect network requests using the CDP Fetch domain.
 
-## Route — Intercept Requests
+## Overview
 
-Use `network route` to intercept requests matching a URL pattern. The command enters a live intercept loop and prints each matched request in real-time.
+```bash
+zchrome network <subcommand> [options]
+```
+
+| Subcommand | Description |
+|------------|-------------|
+| `route` | Intercept requests matching a URL pattern |
+| `unroute` | Remove all active routes |
+| `requests` | View tracked network requests |
+
+## network route
+
+Intercept requests matching a URL pattern. Uses wildcard matching (`*`).
+
+```bash
+zchrome network route <pattern> [options]
+```
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--abort` | Block matching requests (responds with `BlockedByClient`) |
+| `--body <json>` | Mock response with the given JSON body (HTTP 200, `application/json`) |
+| `--file <path>` | Mock response from a file (reads file contents as response body) |
+| `--redirect <url>` | Redirect matching requests to a different host |
 
 ### Log Intercepted Requests
 
 ```bash
 zchrome connect
-
-zchrome navigate https://copilot.microsoft.com/
+zchrome navigate https://example.com
 
 # Intercept and log all API calls (continue them normally)
 zchrome network route "*api/*"
@@ -22,8 +46,8 @@ zchrome network route "*api/*"
 ```
 Route added: *api/* (continue/log)
 Waiting for requests... (Ctrl+C to stop)
-  INTERCEPTED: https://copilot.microsoft.com/c/api/start
-  ...
+  INTERCEPTED: https://example.com/api/users
+  INTERCEPTED: https://example.com/api/config
 ```
 
 ### Block Requests
@@ -56,10 +80,10 @@ Return custom JSON instead of making real network requests — useful for testin
 
 ```bash
 # Mock a user API endpoint
-zchrome network route "*api/user*" --body "{\"name\":\"Test User\",\"id\":42}"
+zchrome network route "*api/user*" --body '{"name":"Test User","id":42}'
 
 # Mock a config endpoint
-zchrome network route "*api/config*" --body "{\"feature_flag\":true}"
+zchrome network route "*api/config*" --body '{"feature_flag":true}'
 
 # Mock from a file (reads file contents as response body)
 zchrome network route "*api/config*" --file mock.json
@@ -97,7 +121,7 @@ Waiting for requests... (Ctrl+C to stop)
 
 The original URL's path and query string are preserved; only the origin (and optional base path) is replaced.
 
-## Unroute — Remove Routes
+## network unroute
 
 Remove all active intercept routes by disabling the Fetch domain.
 
@@ -111,9 +135,22 @@ zchrome network unroute
 All routes removed
 ```
 
-## Requests — View Tracked Requests
+This stops all request interception and returns the browser to normal operation.
 
-List network requests that have already completed on the current page. Uses the browser's Performance Resource Timing API.
+## network requests
+
+View tracked network requests using the Performance Resource Timing API.
+
+```bash
+zchrome network requests [options]
+```
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--filter <pattern>` | Only show requests whose URL contains the pattern |
+| `--clear` | Clear the request log |
 
 ### List All Requests
 
@@ -135,8 +172,6 @@ Total: 3 request(s)
 
 ### Filter by URL Pattern
 
-Show only requests whose URL contains a substring.
-
 ```bash
 # Show only API requests
 zchrome network requests --filter "api"
@@ -147,11 +182,21 @@ zchrome network requests --filter ".png"
 
 ### Clear Request Log
 
-Re-enable network tracking to clear the accumulated data.
-
 ```bash
 zchrome network requests --clear
 ```
+
+## URL Pattern Syntax
+
+URL patterns use wildcard matching:
+
+| Pattern | Matches |
+|---------|---------|
+| `*api*` | Any URL containing "api" |
+| `*.png` | URLs ending in ".png" |
+| `*example.com/api/*` | API paths on example.com |
+| `*google-analytics*` | Google Analytics requests |
+| `*/v1/users*` | Specific API endpoint path |
 
 ## Interactive REPL
 
@@ -196,7 +241,7 @@ zchrome network unroute
 
 ```bash
 # Mock an error response
-zchrome network route "*api/checkout*" --body "{\"error\":\"payment_failed\"}"
+zchrome network route "*api/checkout*" --body '{"error":"payment_failed"}'
 
 # Navigate and observe the UI error handling
 zchrome navigate https://shop.example.com/checkout
@@ -228,23 +273,21 @@ zchrome navigate https://example.com
 
 ```bash
 # Mock feature flag endpoint
-zchrome network route "*api/features*" --body "{\"new_checkout\":true,\"dark_mode\":false}"
+zchrome network route "*api/features*" --body '{"new_checkout":true,"dark_mode":false}'
 
 # Navigate to see the app with different flags
 zchrome navigate https://app.example.com
 ```
 
-## URL Pattern Syntax
+### Local Development Redirect
 
-URL patterns use wildcard matching:
+```bash
+# Redirect production API to local dev server
+zchrome network route "*api/*" --redirect "http://localhost:3000"
 
-| Pattern | Matches |
-|---------|---------|
-| `*api*` | Any URL containing "api" |
-| `*.png` | URLs ending in ".png" |
-| `*example.com/api/*` | API paths on example.com |
-| `*google-analytics*` | Google Analytics requests |
-| `*/v1/users*` | Specific API endpoint path |
+# Navigate to production site, but API calls go to local server
+zchrome navigate https://app.example.com
+```
 
 ## Tips
 
@@ -253,3 +296,9 @@ URL patterns use wildcard matching:
 3. **Requests shows completed resources** — it uses `performance.getEntriesByType('resource')`, so it only shows requests that already finished loading.
 4. **Mock body is raw JSON** — no base64 encoding needed. The body is sent directly as the response.
 5. **Use in scripts** — combine with `navigate`, `wait`, and `get` commands for automated testing workflows.
+
+## See Also
+
+- [Network Interception](/examples/network) - Zig API examples for programmatic network interception
+- [Cookies](/cli#cookies) - Cookie management
+- [Storage](/cli#storage) - localStorage/sessionStorage management

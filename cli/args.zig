@@ -22,6 +22,7 @@ pub const Args = struct {
     snap_compact: bool = false,
     snap_depth: ?usize = null,
     snap_selector: ?[]const u8 = null,
+    snap_mark: bool = false,
     wait_text: ?[]const u8 = null,
     wait_url: ?[]const u8 = null,
     wait_load: ?[]const u8 = null,
@@ -126,6 +127,7 @@ pub fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
     var snap_compact: bool = false;
     var snap_depth: ?usize = null;
     var snap_selector: ?[]const u8 = null;
+    var snap_mark: bool = false;
     var wait_text: ?[]const u8 = null;
     var wait_url: ?[]const u8 = null;
     var wait_load: ?[]const u8 = null;
@@ -153,6 +155,8 @@ pub fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
             } else if (std.mem.eql(u8, arg, "-s")) {
                 const val = iter.next() orelse return error.MissingArgument;
                 snap_selector = try allocator.dupe(u8, val);
+            } else if (std.mem.eql(u8, arg, "-m")) {
+                snap_mark = true;
             }
         } else if (std.mem.startsWith(u8, arg, "--")) {
             if (std.mem.eql(u8, arg, "--url")) {
@@ -207,6 +211,8 @@ pub fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
             } else if (std.mem.eql(u8, arg, "--selector")) {
                 const val = iter.next() orelse return error.MissingArgument;
                 snap_selector = try allocator.dupe(u8, val);
+            } else if (std.mem.eql(u8, arg, "--mark")) {
+                snap_mark = true;
             } else if (std.mem.eql(u8, arg, "--text")) {
                 const val = iter.next() orelse return error.MissingArgument;
                 wait_text = try allocator.dupe(u8, val);
@@ -272,6 +278,7 @@ pub fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
         .snap_compact = snap_compact,
         .snap_depth = snap_depth,
         .snap_selector = snap_selector,
+        .snap_mark = snap_mark,
         .wait_text = wait_text,
         .wait_url = wait_url,
         .wait_load = wait_load,

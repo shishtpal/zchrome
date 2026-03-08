@@ -571,6 +571,7 @@ zchrome snapshot [options]
 | `-c, --compact` | Skip empty structural elements |
 | `-d, --depth <n>` | Limit tree depth |
 | `-s, --selector <sel>` | Scope snapshot to a CSS selector |
+| `-m, --mark` | Inject unique IDs (`zc-1`, `zc-2`, ...) into interactive elements |
 
 **Example:**
 
@@ -586,6 +587,9 @@ zchrome snapshot -c -d 3
 
 # Scope to specific container
 zchrome snapshot -s "#main-content"
+
+# Inject IDs into interactive elements (useful for stable selectors)
+zchrome snapshot --mark
 ```
 
 **Output:**
@@ -604,6 +608,33 @@ zchrome snapshot -s "#main-content"
 Snapshot saved to: zsnap.json
 Use @e<N> refs in subsequent commands
 ```
+
+**With `--mark` flag:**
+
+```bash
+zchrome snapshot --mark
+```
+
+```
+- navigation
+  - link "Home" [ref=e1] [id=zc-1]
+  - link "Products" [ref=e2] [id=zc-2]
+- main
+  - heading "Welcome" [ref=e3]
+  - textbox "Email" [ref=e4] [id=zc-3]
+  - button "Submit" [ref=e5] [id=zc-4]
+
+--- 5 element(s) with refs ---
+--- 4 element(s) marked with IDs (prefix: zc-) ---
+
+Snapshot saved to: zsnap.json
+Use @e<N> refs or #zc-<N> IDs in subsequent commands
+```
+
+The `--mark` flag injects unique `id` attributes into interactive DOM elements that don't already have IDs. This is useful when:
+- Dynamic content updates the page data but not the structure
+- You want stable CSS selectors (`#zc-1`) instead of transient snapshot refs (`@e1`)
+- You need to reference elements without re-taking snapshots after data changes
 
 ### diff
 

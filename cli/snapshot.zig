@@ -23,6 +23,7 @@ pub const SnapshotOptions = struct {
     compact: bool = false,
     max_depth: ?usize = null,
     selector: ?[]const u8 = null,
+    mark: bool = false, // Inject unique IDs (zc-1, zc-2, ...) into interactive elements
 };
 
 /// Snapshot result with tree and refs
@@ -392,7 +393,7 @@ pub const SnapshotProcessor = struct {
 pub const SNAPSHOT_JS = @embedFile("js/snapshot.js");
 
 /// Build the JavaScript code with arguments
-pub fn buildSnapshotJs(allocator: std.mem.Allocator, selector: ?[]const u8, max_depth: ?usize) ![]const u8 {
+pub fn buildSnapshotJs(allocator: std.mem.Allocator, selector: ?[]const u8, max_depth: ?usize, mark: bool) ![]const u8 {
     const selector_arg = if (selector) |s|
         try std.fmt.allocPrint(allocator, "'{s}'", .{s})
     else
@@ -405,13 +406,18 @@ pub fn buildSnapshotJs(allocator: std.mem.Allocator, selector: ?[]const u8, max_
         try allocator.dupe(u8, "null");
     defer allocator.free(depth_arg);
 
-    // Replace SEL_ARG and DEPTH_ARG placeholders
+    const mark_arg = if (mark) "true" else "false";
+
+    // Replace SEL_ARG, DEPTH_ARG, and MARK_ARG placeholders
     const with_selector = try std.mem.replaceOwned(u8, allocator, SNAPSHOT_JS, "SEL_ARG", selector_arg);
     defer allocator.free(with_selector);
 
     const with_depth = try std.mem.replaceOwned(u8, allocator, with_selector, "DEPTH_ARG", depth_arg);
+    defer allocator.free(with_depth);
 
-    return with_depth;
+    const with_mark = try std.mem.replaceOwned(u8, allocator, with_depth, "MARK_ARG", mark_arg);
+
+    return with_mark;
 }
 
 /// Save snapshot to JSON file

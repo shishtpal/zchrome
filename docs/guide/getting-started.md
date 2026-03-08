@@ -291,6 +291,15 @@ zchrome fill "#email" "user@example.com"
 zchrome click "button.login"
 ```
 
+**Tip:** Use `--mark` to inject stable IDs into interactive elements:
+
+```bash
+zchrome snapshot --mark
+# Elements now have injected IDs: zc-1, zc-2, etc.
+# Use them as CSS selectors that persist across data updates
+zchrome click "#zc-3"
+```
+
 **Available element actions:**
 
 | Command | Description |

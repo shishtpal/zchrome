@@ -250,10 +250,11 @@ pub fn cmdSnapshot(state: *InteractiveState, args: []const []const u8) !void {
     var snap_compact = false;
     var snap_depth: ?usize = null;
     var snap_selector: ?[]const u8 = null;
+    var snap_mark = false;
     var i: usize = 0;
     while (i < args.len) : (i += 1) {
         const arg = args[i];
-        if (eql(arg, "-i") or eql(arg, "--interactive-only")) snap_interactive = true else if (eql(arg, "-c") or eql(arg, "--compact")) snap_compact = true else if (eql(arg, "-d") or eql(arg, "--depth")) {
+        if (eql(arg, "-i") or eql(arg, "--interactive-only")) snap_interactive = true else if (eql(arg, "-c") or eql(arg, "--compact")) snap_compact = true else if (eql(arg, "-m") or eql(arg, "--mark")) snap_mark = true else if (eql(arg, "-d") or eql(arg, "--depth")) {
             i += 1;
             if (i < args.len) snap_depth = std.fmt.parseInt(usize, args[i], 10) catch null;
         } else if (eql(arg, "-s") or eql(arg, "--selector")) {
@@ -268,6 +269,7 @@ pub fn cmdSnapshot(state: *InteractiveState, args: []const []const u8) !void {
     ctx.snap_compact = snap_compact;
     ctx.snap_depth = snap_depth;
     ctx.snap_selector = snap_selector;
+    ctx.snap_mark = snap_mark;
     try impl.snapshot(session, ctx);
 }
 

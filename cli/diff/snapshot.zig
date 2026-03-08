@@ -162,7 +162,7 @@ pub fn diffSnapshotCommand(session: *cdp.Session, ctx: CommandCtx) !void {
     var runtime = cdp.Runtime.init(session);
     try runtime.enable();
 
-    const js = try snapshot_mod.buildSnapshotJs(allocator, ctx.snap_selector, ctx.snap_depth);
+    const js = try snapshot_mod.buildSnapshotJs(allocator, ctx.snap_selector, ctx.snap_depth, false);
     defer allocator.free(js);
 
     var eval_result = try runtime.evaluate(allocator, js, .{ .return_by_value = true });

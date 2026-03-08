@@ -96,10 +96,33 @@ zchrome snapshot -s "#main-content"
 zchrome snapshot -s ".form-container"
 ```
 
+### Mark Elements (`-m`)
+
+Inject unique IDs (`zc-1`, `zc-2`, ...) into interactive elements that don't have IDs:
+
+```bash
+zchrome snapshot --mark
+zchrome snapshot -m
+```
+
+This is useful when:
+- Dynamic content changes data but not page structure
+- You want stable CSS selectors (`#zc-1`) instead of transient refs (`@e1`)
+- You need to reference elements without re-taking snapshots
+
+After marking, you can use either `@e<N>` refs or `#zc-<N>` CSS selectors:
+
+```bash
+zchrome snapshot --mark
+zchrome click "#zc-3"          # Use injected ID
+zchrome fill "#zc-4" "text"    # Stable even after data updates
+```
+
 ### Combine Options
 
 ```bash
 zchrome snapshot -i -c -d 5 -s "#app"
+zchrome snapshot -i -m -s "#form"    # Interactive + mark + scoped
 ```
 
 ## Element Actions Reference

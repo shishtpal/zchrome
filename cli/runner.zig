@@ -52,6 +52,7 @@ fn buildCtx(args: Args, allocator: std.mem.Allocator) impl.CommandCtx {
         .snap_compact = args.snap_compact,
         .snap_depth = args.snap_depth,
         .snap_selector = args.snap_selector,
+        .snap_mark = args.snap_mark,
         .wait_text = args.wait_text,
         .wait_url = args.wait_url,
         .wait_load = args.wait_load,

@@ -29,7 +29,7 @@ pub fn print() void {
         \\  screenshot [path]     Take screenshot (aliases: ss)
         \\  pdf [path]            Generate PDF
         \\  snapshot [opts]       Capture accessibility tree (aliases: snap)
-        \\    Options: -i (interactive only), -c (compact), -d <n> (depth)
+        \\    Options: -i (interactive only), -c (compact), -d <n> (depth), -m (mark)
         \\
         \\Inspection:
         \\  evaluate <expr>        Evaluate JavaScript (aliases: eval, js)

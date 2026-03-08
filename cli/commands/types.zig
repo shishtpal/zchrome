@@ -18,6 +18,7 @@ pub const CommandCtx = struct {
     snap_compact: bool = false,
     snap_depth: ?usize = null,
     snap_selector: ?[]const u8 = null,
+    snap_mark: bool = false,
     // Wait options
     wait_text: ?[]const u8 = null,
     wait_url: ?[]const u8 = null,

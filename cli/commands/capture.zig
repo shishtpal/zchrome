@@ -64,13 +64,24 @@ pub fn snapshot(session: *cdp.Session, ctx: CommandCtx) !void {
     var runtime = cdp.Runtime.init(session);
     try runtime.enable();
 
-    const js = try snapshot_mod.buildSnapshotJs(ctx.allocator, ctx.snap_selector, ctx.snap_depth);
+    const js = try snapshot_mod.buildSnapshotJs(ctx.allocator, ctx.snap_selector, ctx.snap_depth, ctx.snap_mark);
     defer ctx.allocator.free(js);
 
     var result = try runtime.evaluate(ctx.allocator, js, .{ .return_by_value = true });
     defer result.deinit(ctx.allocator);
 
-    const aria_tree = result.asString() orelse "(empty)";
+    const aria_tree_raw = result.asString() orelse "(empty)";
+
+    // Parse marked count metadata if present (format: "[marked=N]" at end)
+    var marked_count: ?usize = null;
+    var aria_tree = aria_tree_raw;
+    if (std.mem.indexOf(u8, aria_tree_raw, "\n[marked=")) |marker_pos| {
+        const marker_start = marker_pos + 9; // skip "\n[marked="
+        if (std.mem.indexOfScalar(u8, aria_tree_raw[marker_start..], ']')) |end_pos| {
+            marked_count = std.fmt.parseInt(usize, aria_tree_raw[marker_start .. marker_start + end_pos], 10) catch null;
+            aria_tree = aria_tree_raw[0..marker_pos];
+        }
+    }
 
     var processor = snapshot_mod.SnapshotProcessor.init(ctx.allocator);
     defer processor.deinit();
@@ -80,6 +91,7 @@ pub fn snapshot(session: *cdp.Session, ctx: CommandCtx) !void {
         .compact = ctx.snap_compact,
         .max_depth = ctx.snap_depth,
         .selector = ctx.snap_selector,
+        .mark = ctx.snap_mark,
     };
 
     var snap = try processor.processAriaTree(aria_tree, options);
@@ -87,6 +99,11 @@ pub fn snapshot(session: *cdp.Session, ctx: CommandCtx) !void {
 
     std.debug.print("{s}\n", .{snap.tree});
     std.debug.print("\n--- {} element(s) with refs ---\n", .{snap.refs.count()});
+
+    // Print marked count if elements were marked
+    if (marked_count) |count| {
+        std.debug.print("--- {} element(s) marked with IDs (prefix: zc-) ---\n", .{count});
+    }
 
     const output_path = ctx.output orelse blk: {
         if (ctx.session) |s| {
@@ -100,7 +117,11 @@ pub fn snapshot(session: *cdp.Session, ctx: CommandCtx) !void {
 
     std.debug.print("\nSnapshot saved to: {s}\n", .{output_path});
     if (snap.refs.count() > 0) {
-        std.debug.print("Use @e<N> refs in subsequent commands\n", .{});
+        if (marked_count != null) {
+            std.debug.print("Use @e<N> refs or #zc-<N> IDs in subsequent commands\n", .{});
+        } else {
+            std.debug.print("Use @e<N> refs in subsequent commands\n", .{});
+        }
     }
 }
 
@@ -113,6 +134,7 @@ pub fn printSnapshotHelp() void {
         \\  -c, --compact            Compact output (skip empty structural elements)
         \\  -d, --depth <n>          Limit tree depth
         \\  -s, --selector <sel>     Scope snapshot to CSS selector
+        \\  -m, --mark               Inject unique IDs (zc-1, zc-2, ...) into interactive elements
         \\  --output <path>          Output file path (default: zsnap.json)
         \\
         \\Examples:
@@ -120,6 +142,7 @@ pub fn printSnapshotHelp() void {
         \\  snapshot -i                    # Interactive elements only
         \\  snapshot -c -d 3               # Compact mode, depth 3
         \\  snapshot -s "#main-content"    # Scope to selector
+        \\  snapshot --mark                # Inject IDs, use #zc-<N> in commands
         \\
     , .{});
 }

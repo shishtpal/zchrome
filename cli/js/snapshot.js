@@ -102,6 +102,25 @@
     return ['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE', 'SVG'].indexOf(e.tagName) === -1;
   }
 
+  // Inject unique IDs into interactive elements that don't have them
+  function markInteractive(root, prefix) {
+    var counter = 1;
+    // Interactive element selectors (matches INTERACTIVE_ROLES from snapshot.zig)
+    var interactive = 'a, button, input:not([type=hidden]), select, textarea, ' +
+      '[role=button], [role=link], [role=textbox], [role=checkbox], [role=radio], ' +
+      '[role=combobox], [role=listbox], [role=menuitem], [role=menuitemcheckbox], ' +
+      '[role=menuitemradio], [role=option], [role=searchbox], [role=slider], ' +
+      '[role=spinbutton], [role=switch], [role=tab], [role=treeitem]';
+    
+    root.querySelectorAll(interactive).forEach(function(el) {
+      if (!el.id && isVisible(el)) {
+        el.id = prefix + counter++;
+      }
+    });
+    
+    return counter - 1;
+  }
+
   // Build accessibility tree recursively
   function build(e, depth, maxDepth) {
     if (maxDepth !== null && depth > maxDepth) return '';
@@ -142,8 +161,23 @@
   // Main execution
   var selector = SEL_ARG;
   var maxDepth = DEPTH_ARG;
+  var mark = MARK_ARG;
   var root = selector ? document.querySelector(selector) : document.body;
   
   if (selector && !root) return '(not found)';
-  return build(root, 0, maxDepth) || '(empty)';
+  
+  // Inject IDs if mark flag is set
+  var markedCount = 0;
+  if (mark && root) {
+    markedCount = markInteractive(root, 'zc-');
+  }
+  
+  var tree = build(root, 0, maxDepth) || '(empty)';
+  
+  // Append marked count as metadata if any were marked
+  if (markedCount > 0) {
+    tree += '\n[marked=' + markedCount + ']';
+  }
+  
+  return tree;
 })()

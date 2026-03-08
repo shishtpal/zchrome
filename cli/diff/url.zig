@@ -219,7 +219,7 @@ fn waitForPage(strategy: WaitStrategy) !void {
 }
 
 fn captureSnapshot(allocator: Allocator, runtime: *cdp.Runtime, ctx: CommandCtx) ![]u8 {
-    const js = try snapshot_mod.buildSnapshotJs(allocator, ctx.snap_selector, ctx.snap_depth);
+    const js = try snapshot_mod.buildSnapshotJs(allocator, ctx.snap_selector, ctx.snap_depth, false);
     defer allocator.free(js);
 
     var result = try runtime.evaluate(allocator, js, .{ .return_by_value = true });

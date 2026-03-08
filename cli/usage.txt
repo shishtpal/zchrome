@@ -158,6 +158,7 @@ SNAPSHOT OPTIONS:
   -c, --compact            Compact output (skip empty structural elements)
   -d, --depth <n>          Limit tree depth
   -s, --selector <sel>     Scope snapshot to CSS selector
+  -m, --mark               Inject unique IDs (zc-1, zc-2, ...) into interactive elements
 
 CONFIG FILE:
   zchrome.json is stored alongside the executable for portability.
@@ -184,6 +185,7 @@ EXAMPLES:
   zchrome snapshot -i                    # Interactive elements only
   zchrome snapshot -c -d 3               # Compact mode, depth 3
   zchrome snapshot -s "#main-content"    # Scope to selector
+  zchrome snapshot --mark                # Inject IDs, then use #zc-<N>
 
   # Interact with elements (use CSS selectors or @refs from snapshot)
   zchrome click "#login-btn"             # Click by CSS selector

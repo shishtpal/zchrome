@@ -550,25 +550,6 @@ fn executeCommand(
     options: ReplayOptions,
     video_orch: ?*video.Orchestrator,
 ) void {
-    // Build context for command execution
-    var pos_args: [2][]const u8 = .{ "", "" };
-    var pos_len: usize = 0;
-
-    if (cmd.selector) |s| {
-        pos_args[pos_len] = s;
-        pos_len += 1;
-    }
-    if (cmd.value) |v| {
-        pos_args[pos_len] = v;
-        pos_len += 1;
-    }
-
-    const ctx = types.CommandCtx{
-        .allocator = allocator,
-        .io = io,
-        .positional = pos_args[0..pos_len],
-    };
-
     switch (cmd.action) {
         .click => actions.tryWithFallbackSelectors(session, allocator, io, cmd, elements.click),
         .dblclick => actions.tryWithFallbackSelectors(session, allocator, io, cmd, elements.dblclick),
@@ -578,8 +559,18 @@ fn executeCommand(
         .uncheck => actions.tryWithFallbackSelectors(session, allocator, io, cmd, elements.uncheck),
         .select => actions.tryWithFallbackSelectorsSelect(session, allocator, io, cmd),
         .multiselect => actions.tryWithFallbackSelectorsMultiselect(session, allocator, io, cmd),
-        .press => keyboard.press(session, ctx) catch |err| {
-            std.debug.print("    Error: {}\n", .{err});
+        .press => {
+            if (cmd.key) |key| {
+                var key_args: [1][]const u8 = .{key};
+                const key_ctx = types.CommandCtx{
+                    .allocator = allocator,
+                    .io = io,
+                    .positional = &key_args,
+                };
+                keyboard.press(session, key_ctx) catch |err| {
+                    std.debug.print("    Error: {}\n", .{err});
+                };
+            }
         },
         .hover => actions.tryWithFallbackSelectors(session, allocator, io, cmd, elements.hover),
         .scroll => {

@@ -198,7 +198,8 @@ test:
     - apt-get update && apt-get install -y chromium
   script:
     - zchrome open
-    - zchrome screenshot https://example.com --output screenshot.png
+    - zchrome navigate https://example.com
+    - zchrome screenshot --output screenshot.png
 ```
 
 ## Combining with CLI Flags

@@ -178,7 +178,8 @@ EXAMPLES:
   # Launch headless and take screenshot
   zchrome open --headless
   zchrome connect
-  zchrome screenshot https://example.com --output page.png
+  zchrome navigate https://example.com
+  zchrome screenshot --output page.png
 
   # Element screenshot (CSS selector or @ref)
   zchrome screenshot -s "#login-form" --output form.png

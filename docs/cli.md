@@ -189,14 +189,11 @@ zchrome navigate https://example.com
 
 ### screenshot
 
-Capture a PNG screenshot.
+Capture a PNG screenshot of the current page.
 
 ```bash
-# Create new page and navigate
-zchrome screenshot <url> [--output <path>] [--full]
-
-# Or use existing page (no URL needed)
-zchrome --use <target-id> screenshot [--output <path>] [--full]
+# Viewport screenshot
+zchrome screenshot [--output <path>] [--full]
 
 # Element screenshot (CSS selector or snapshot ref)
 zchrome screenshot -s <selector> [--output <path>]
@@ -210,23 +207,18 @@ zchrome screenshot -s <selector> [--output <path>]
 **Example:**
 
 ```bash
-# Viewport screenshot
-zchrome screenshot https://example.com --output page.png
+# Navigate first, then take screenshot
+zchrome navigate https://example.com
+zchrome screenshot --output page.png
 
 # Full page screenshot (captures entire scrollable content)
-zchrome screenshot https://example.com --output full.png --full
-
-# Use existing page
-zchrome --use 75E5402CE67C63D19659EEFDC1CF292D screenshot --output page.png --full
+zchrome screenshot --output full.png --full
 
 # Element screenshot by CSS selector
 zchrome screenshot -s "#login-form" --output form.png
 
 # Element screenshot by snapshot ref
 zchrome screenshot -s @e5 --output element.png
-
-# Element screenshot with URL navigation first
-zchrome screenshot https://example.com -s "#main-content" --output main.png
 ```
 
 ### pdf
@@ -529,8 +521,8 @@ zchrome --url <ws-url> --use <target-id> <command> [command-args...]
 ```
 
 **Key Difference:**
-- **Without `--use`**: Commands like `screenshot <url>` create a new page, navigate to the URL, then execute
-- **With `--use`**: Commands like `screenshot` operate directly on the existing page (no URL parameter needed)
+- **Without `--use`**: Commands operate on the first available page
+- **With `--use`**: Commands operate on the specified target page
 
 **Parameters:**
 - `--use <target-id>` - Target ID from the `pages` command
@@ -2194,7 +2186,8 @@ zchrome help
 ### Basic Screenshot
 
 ```bash
-zchrome screenshot https://news.ycombinator.com --output hn.png
+zchrome navigate https://news.ycombinator.com
+zchrome screenshot --output hn.png
 ```
 
 ### Non-Headless Mode
@@ -2249,7 +2242,8 @@ zchrome --url ws://127.0.0.1:9222/devtools/browser/... navigate https://example.
 For slow pages:
 
 ```bash
-zchrome --timeout 60000 screenshot https://slow-site.com --output slow.png
+zchrome --timeout 60000 navigate https://slow-site.com
+zchrome screenshot --output slow.png
 ```
 
 ### Multiple Commands
@@ -2259,10 +2253,11 @@ zchrome --timeout 60000 screenshot https://slow-site.com --output slow.png
 zchrome version
 
 # Navigate and get title
-zchrome evaluate https://example.com "document.title"
+zchrome navigate https://example.com
+zchrome evaluate "document.title"
 
 # Capture screenshot
-zchrome screenshot https://example.com --output example.png
+zchrome screenshot --output example.png
 
 # Generate PDF
 zchrome pdf https://example.com --output example.pdf

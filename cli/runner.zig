@@ -223,38 +223,31 @@ pub fn cmdNavigate(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocat
 }
 
 pub fn cmdScreenshot(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
-    var session = try browser.newPage();
-    defer session.detach() catch {};
+    const pages = try browser.pages();
+    defer {
+        for (pages) |*p| {
+            var page_info = p.*;
+            page_info.deinit(allocator);
+        }
+        allocator.free(pages);
+    }
+
+    const page_target = findFirstRealPage(pages) orelse {
+        std.debug.print("Error: No pages open. Screenshots require an existing page.\n", .{});
+        std.debug.print("Hint: Use 'zchrome navigate <url>' first, then 'zchrome screenshot'\n", .{});
+        return error.NoPages;
+    };
+
+    var target = cdp.Target.init(browser.connection);
+    const session_id = try target.attachToTarget(allocator, page_target.target_id, true);
+    defer allocator.free(session_id);
+    var session = try cdp.Session.init(session_id, browser.connection, allocator);
+    defer session.deinit();
 
     impl.applyEmulationSettings(session, allocator, args.io, args.session_ctx);
 
-    var page = cdp.Page.init(session);
-    try page.enable();
-
-    if (args.positional.len > 0) {
-        _ = try page.navigate(allocator, args.positional[0]);
-        var j: u32 = 0;
-        while (j < 1000000) : (j += 1) {
-            std.atomic.spinLoopHint();
-        }
-    }
-
-    const screenshot_data = try page.captureScreenshot(allocator, .{
-        .format = .png,
-        .capture_beyond_viewport = if (args.full_page) true else null,
-    });
-    defer allocator.free(screenshot_data);
-
-    const decoded = try cdp.base64.decodeAlloc(allocator, screenshot_data);
-    defer allocator.free(decoded);
-
-    const output_path = args.output orelse "screenshot.png";
-    try writeFile(args.io, output_path, decoded);
-    std.debug.print("Screenshot saved to {s} ({} bytes){s}\n", .{
-        output_path,
-        decoded.len,
-        if (args.full_page) " (full page)" else "",
-    });
+    const ctx = buildCtx(args, allocator);
+    try impl.screenshot(session, ctx);
 }
 
 pub fn cmdPdf(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {

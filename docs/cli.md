@@ -197,11 +197,15 @@ zchrome screenshot <url> [--output <path>] [--full]
 
 # Or use existing page (no URL needed)
 zchrome --use <target-id> screenshot [--output <path>] [--full]
+
+# Element screenshot (CSS selector or snapshot ref)
+zchrome screenshot -s <selector> [--output <path>]
 ```
 
 **Options:**
 - `--output <path>` - Output file path (default: screenshot.png)
 - `--full` - Capture full page screenshot (not just viewport)
+- `-s, --selector <sel>` - Capture screenshot of a specific element
 
 **Example:**
 
@@ -214,6 +218,15 @@ zchrome screenshot https://example.com --output full.png --full
 
 # Use existing page
 zchrome --use 75E5402CE67C63D19659EEFDC1CF292D screenshot --output page.png --full
+
+# Element screenshot by CSS selector
+zchrome screenshot -s "#login-form" --output form.png
+
+# Element screenshot by snapshot ref
+zchrome screenshot -s @e5 --output element.png
+
+# Element screenshot with URL navigation first
+zchrome screenshot https://example.com -s "#main-content" --output main.png
 ```
 
 ### pdf

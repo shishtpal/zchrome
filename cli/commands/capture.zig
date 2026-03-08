@@ -6,6 +6,8 @@ const types = @import("types.zig");
 const helpers = @import("helpers.zig");
 const snapshot_mod = @import("../snapshot.zig");
 const config_mod = @import("../config.zig");
+const selector_mod = @import("../actions/selector.zig");
+const element = @import("../actions/element.zig");
 
 pub const CommandCtx = types.CommandCtx;
 
@@ -16,6 +18,48 @@ pub fn screenshot(session: *cdp.Session, ctx: CommandCtx) !void {
     var j: u32 = 0;
     while (j < 500000) : (j += 1) std.atomic.spinLoopHint();
 
+    // Element screenshot mode
+    if (ctx.snap_selector) |selector| {
+        var resolved = try selector_mod.resolveSelector(ctx.allocator, ctx.io, selector, ctx.session);
+        defer resolved.deinit();
+
+        // Scroll element into view first
+        try element.scrollIntoView(session, ctx.allocator, &resolved);
+
+        // Small delay for scroll animation to complete
+        j = 0;
+        while (j < 500000) : (j += 1) std.atomic.spinLoopHint();
+
+        // Get element bounding box
+        const pos = try element.getElementPosition(session, ctx.allocator, &resolved);
+
+        // Capture screenshot with clip region
+        const screenshot_data = try page.captureScreenshot(ctx.allocator, .{
+            .format = .png,
+            .clip = .{
+                .x = pos.x,
+                .y = pos.y,
+                .width = pos.width,
+                .height = pos.height,
+                .scale = 1.0,
+            },
+        });
+        defer ctx.allocator.free(screenshot_data);
+
+        const decoded = try cdp.base64.decodeAlloc(ctx.allocator, screenshot_data);
+        defer ctx.allocator.free(decoded);
+
+        const output_path = ctx.output orelse "screenshot.png";
+        try helpers.writeFile(ctx.io, output_path, decoded);
+        std.debug.print("Screenshot saved to {s} ({} bytes) (element: {s})\n", .{
+            output_path,
+            decoded.len,
+            selector,
+        });
+        return;
+    }
+
+    // Viewport/full page screenshot mode
     const screenshot_data = try page.captureScreenshot(ctx.allocator, .{
         .format = .png,
         .capture_beyond_viewport = if (ctx.full_page) true else null,

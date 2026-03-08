@@ -15,7 +15,7 @@ GLOBAL OPTIONS:
 COMMANDS:
   open                     Launch Chrome with remote debugging
   connect                  Connect to running Chrome, get WebSocket URL
-  screenshot [url]         Capture PNG screenshot
+  screenshot [url]         Capture PNG screenshot (use -s for element)
   pdf [url]                Generate PDF
   evaluate [url] <expr>    Evaluate JS expression
   snapshot                 Capture accessibility tree of active page, save to zsnap.json
@@ -179,6 +179,10 @@ EXAMPLES:
   zchrome open --headless
   zchrome connect
   zchrome screenshot https://example.com --output page.png
+
+  # Element screenshot (CSS selector or @ref)
+  zchrome screenshot -s "#login-form" --output form.png
+  zchrome screenshot -s @e5 --output element.png
 
   # Take snapshot of active page's accessibility tree
   zchrome snapshot                       # Snapshot current page

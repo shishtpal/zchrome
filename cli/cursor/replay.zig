@@ -573,6 +573,7 @@ fn executeCommand(
         .click => actions.tryWithFallbackSelectors(session, allocator, io, cmd, elements.click),
         .dblclick => actions.tryWithFallbackSelectors(session, allocator, io, cmd, elements.dblclick),
         .fill => actions.tryWithFallbackSelectorsFill(session, allocator, io, cmd),
+        .@"type" => actions.tryWithFallbackSelectorsType(session, allocator, io, cmd),
         .check => actions.tryWithFallbackSelectors(session, allocator, io, cmd, elements.check),
         .uncheck => actions.tryWithFallbackSelectors(session, allocator, io, cmd, elements.uncheck),
         .select => actions.tryWithFallbackSelectorsSelect(session, allocator, io, cmd),

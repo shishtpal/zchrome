@@ -71,6 +71,38 @@ pub fn tryWithFallbackSelectorsFill(
     }
 }
 
+/// Try type command with fallback selectors
+pub fn tryWithFallbackSelectorsType(
+    session: *cdp.Session,
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    cmd: macro.MacroCommand,
+) void {
+    const value = cmd.value orelse return;
+    const selectors = cmd.selectors orelse if (cmd.selector) |sel| blk: {
+        var single: [1][]const u8 = .{sel};
+        break :blk &single;
+    } else return;
+
+    for (selectors, 0..) |sel, idx| {
+        var pos_args: [2][]const u8 = .{ sel, value };
+        const ctx = types.CommandCtx{
+            .allocator = allocator,
+            .io = io,
+            .positional = &pos_args,
+        };
+        elements.typeText(session, ctx) catch |err| {
+            if (idx + 1 < selectors.len) {
+                std.debug.print("    (trying fallback selector...)\n", .{});
+                continue;
+            }
+            std.debug.print("    Error: {}\n", .{err});
+            return;
+        };
+        return; // Success
+    }
+}
+
 /// Try select command with fallback selectors
 pub fn tryWithFallbackSelectorsSelect(
     session: *cdp.Session,

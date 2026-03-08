@@ -13,6 +13,7 @@ pub const ActionType = enum {
     click,
     dblclick,
     fill,
+    @"type",
     check,
     uncheck,
     select,
@@ -34,6 +35,7 @@ pub const ActionType = enum {
             .click => "click",
             .dblclick => "dblclick",
             .fill => "fill",
+            .@"type" => "type",
             .check => "check",
             .uncheck => "uncheck",
             .select => "select",
@@ -56,6 +58,7 @@ pub const ActionType = enum {
         if (std.mem.eql(u8, s, "click")) return .click;
         if (std.mem.eql(u8, s, "dblclick")) return .dblclick;
         if (std.mem.eql(u8, s, "fill")) return .fill;
+        if (std.mem.eql(u8, s, "type")) return .@"type";
         if (std.mem.eql(u8, s, "check")) return .check;
         if (std.mem.eql(u8, s, "uncheck")) return .uncheck;
         if (std.mem.eql(u8, s, "select")) return .select;
@@ -78,7 +81,7 @@ pub const ActionType = enum {
     /// Used to determine where to retry from on assertion failure
     pub fn isActionCommand(self: ActionType) bool {
         return switch (self) {
-            .click, .dblclick, .fill, .check, .uncheck, .select, .multiselect, .hover, .navigate, .upload => true,
+            .click, .dblclick, .fill, .@"type", .check, .uncheck, .select, .multiselect, .hover, .navigate, .upload => true,
             .press, .scroll, .wait, .assert, .extract, .dialog, .capture, .goto => false,
         };
     }

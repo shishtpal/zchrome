@@ -1,8 +1,9 @@
 const std = @import("std");
 const json = @import("json");
 const protocol = @import("protocol.zig");
-const WebSocket = @import("../transport/websocket.zig").WebSocket;
-const WebSocketError = @import("../transport/websocket.zig").WebSocketError;
+const wss = @import("wss");
+const WebSocket = wss.Client;
+const WebSocketError = wss.Error;
 const Session = @import("session.zig").Session;
 
 /// CDP Connection - synchronous version for Zig 0.16

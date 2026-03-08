@@ -18,5 +18,8 @@
         .zlib_png = .{
             .path = "../zlib-png",
         },
+        .zlib_wss = .{
+            .path = "../zlib-wss",
+        },
     },
 }

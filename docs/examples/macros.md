@@ -36,6 +36,8 @@ zchrome cursor record <filename.json>
 
 **How it works:**
 
+![Record/Replay Architecture](/replay-record-architecture.png)
+
 1. Starts a WebSocket server on port 4040
 2. Injects JavaScript into the page via CDP
 3. Events stream in real-time as you interact

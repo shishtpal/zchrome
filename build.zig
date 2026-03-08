@@ -18,6 +18,13 @@ pub fn build(b: *std.Build) void {
     });
     const png_mod = png_dep.module("png");
 
+    // ─── WebSocket Module (from zlib-wss) ──────────────────────
+    const wss_dep = b.dependency("zlib_wss", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const wss_mod = wss_dep.module("zlib_wss");
+
     // ─── Library Module ──────────────────────────────────────
     const cdp_mod = b.createModule(.{
         .root_source_file = b.path("src/root.zig"),
@@ -25,6 +32,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     cdp_mod.addImport("json", json_mod);
+    cdp_mod.addImport("wss", wss_mod);
 
     // ─── CLI Executable ──────────────────────────────────────
     const cli_mod = b.createModule(.{
@@ -35,6 +43,7 @@ pub fn build(b: *std.Build) void {
     cli_mod.addImport("cdp", cdp_mod);
     cli_mod.addImport("json", json_mod);
     cli_mod.addImport("png", png_mod);
+    cli_mod.addImport("wss", wss_mod);
 
     const cli = b.addExecutable(.{
         .name = "zchrome",

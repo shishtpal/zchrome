@@ -23,12 +23,12 @@ pub const Message = @import("core/protocol.zig").Message;
 pub const types = @import("core/types.zig");
 
 // Transport
-pub const WebSocket = @import("transport/websocket.zig").WebSocket;
+pub const wss = @import("wss");
+pub const WebSocket = wss.Client;
 pub const PipeTransport = @import("transport/pipe.zig").PipeTransport;
-pub const ws_server = @import("transport/ws_server.zig");
-pub const WsServer = ws_server.Server;
-pub const WsServerClient = ws_server.Client;
-pub const WsServerError = ws_server.ServerError;
+pub const WsServer = wss.Server;
+pub const WsServerClient = wss.Connection;
+pub const WsServerError = wss.Error;
 
 // Domain clients
 pub const Page = @import("domains/page.zig").Page;

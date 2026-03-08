@@ -110,10 +110,10 @@ pub const RecordServer = struct {
                 defer self.allocator.free(frame.data);
 
                 // Handle close frame
-                if (frame.opcode == 0x8) break;
+                if (frame.opcode == .close) break;
 
                 // Handle text frame (command data)
-                if (frame.opcode == 0x1) {
+                if (frame.opcode == .text) {
                     self.parseAndStoreCommand(frame.data);
                 }
             }

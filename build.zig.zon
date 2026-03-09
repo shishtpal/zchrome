@@ -21,5 +21,8 @@
         .zlib_wss = .{
             .path = "../zlib-wss",
         },
+        .zlib_http = .{
+            .path = "../zlib-http",
+        },
     },
 }

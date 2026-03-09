@@ -1,46 +1,139 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
-  <!-- Background circle -->
-  <circle cx="64" cy="64" r="60" fill="#1a1a2e" stroke="#4a9eff" stroke-width="4"/>
-
-  <!-- Chrome-like browser circle -->
-  <circle cx="64" cy="58" r="32" fill="#2d2d44" stroke="#6b7280" stroke-width="2"/>
-
-  <!-- Chrome colors segments -->
-  <path d="M 64 26 A 32 32 0 0 1 92 50 L 64 58 Z" fill="#ef4444" opacity="0.8"/>
-  <path d="M 92 50 A 32 32 0 0 1 80 84 L 64 58 Z" fill="#22c55e" opacity="0.8"/>
-  <path d="M 80 84 A 32 32 0 0 1 48 84 L 64 58 Z" fill="#f59e0b" opacity="0.8"/>
-  <path d="M 48 84 A 32 32 0 0 1 36 50 L 64 58 Z" fill="#3b82f6" opacity="0.8"/>
-  <path d="M 36 50 A 32 32 0 0 1 64 26 L 64 58 Z" fill="#ef4444" opacity="0.8"/>
-
-  <!-- Center circle (DevTools) -->
-  <circle cx="64" cy="58" r="14" fill="#1a1a2e" stroke="#4a9eff" stroke-width="2"/>
-  <circle cx="64" cy="58" r="8" fill="#4a9eff"/>
-
-  <!-- WebSocket connection lines -->
-  <line x1="64" y1="90" x2="64" y2="100" stroke="#4a9eff" stroke-width="2" stroke-dasharray="2,2"/>
-  <line x1="56" y1="95" x2="72" y2="95" stroke="#4a9eff" stroke-width="2"/>
-
-  <!-- Terminal/code indicator -->
-  <rect x="20" y="100" width="88" height="20" rx="3" fill="#2d2d44" stroke="#6b7280" stroke-width="1"/>
-  <text x="26" y="114" font-family="monospace" font-size="10" fill="#22c55e">cdp</text>
-  <text x="43" y="114" font-family="monospace" font-size="10" fill="#f7b93e">.zig</text>
-  <text x="72" y="114" font-family="monospace" font-size="10" fill="#6b7280">--url</text>
-
-  <!-- Zig zigzag (top right) -->
-  <path d="M 95 18 L 105 12 L 100 12 L 110 6 L 105 6 L 115 0"
-        stroke="#f7b93e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-
-  <!-- Connection dots -->
-  <circle cx="64" cy="58" r="3" fill="#ffffff"/>
-
-  <!-- Protocol arrows -->
-  <path d="M 30 40 L 40 40 L 37 37 M 40 40 L 37 43" stroke="#4a9eff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-  <path d="M 98 40 L 88 40 L 91 37 M 88 40 L 91 43" stroke="#4a9eff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
   <defs>
-    <linearGradient id="chromeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#4a9eff;stop-opacity:0.3"/>
-      <stop offset="100%" style="stop-color:#1a1a2e;stop-opacity:0"/>
+    <!-- Background Shadow Filter -->
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="16" stdDeviation="24" flood-color="#000" flood-opacity="0.6" />
+    </filter>
+
+    <!-- Chrome & Zig Gradient Definitions -->
+    <linearGradient id="gradRed" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF8A80" />
+      <stop offset="100%" stop-color="#E53935" />
+    </linearGradient>
+    
+    <linearGradient id="gradGreen" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#69F0AE" />
+      <stop offset="100%" stop-color="#2E7D32" />
+    </linearGradient>
+    
+    <linearGradient id="gradYellow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFE57F" />
+      <stop offset="100%" stop-color="#F57F17" />
+    </linearGradient>
+    
+    <linearGradient id="gradBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#82B1FF" />
+      <stop offset="100%" stop-color="#1E88E5" />
+    </linearGradient>
+    
+    <linearGradient id="gradOrange" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFD54F" />
+      <stop offset="100%" stop-color="#F59E0B" />
     </linearGradient>
   </defs>
+
+  <!-- Dark Space Background (Optional context, making the window pop) -->
+  <rect width="512" height="512" fill="#010409" />
+
+  <!-- Main Browser/Terminal Window -->
+  <g filter="url(#shadow)">
+    <!-- Window Body -->
+    <rect x="32" y="48" width="448" height="416" rx="16" fill="#0D1117" stroke="#30363D" stroke-width="2" />
+    
+    <!-- Window Header -->
+    <path d="M 32 64 A 16 16 0 0 1 48 48 L 464 48 A 16 16 0 0 1 480 64 L 480 96 L 32 96 Z" fill="#161B22" />
+    <line x1="32" y1="96" x2="480" y2="96" stroke="#30363D" stroke-width="2" />
+    
+    <!-- Window Controls (Chrome colored) -->
+    <circle cx="64" cy="72" r="6" fill="#FF5F56" />
+    <circle cx="84" cy="72" r="6" fill="#FFBD2E" />
+    <circle cx="104" cy="72" r="6" fill="#27C93F" />
+    
+    <!-- Address Bar -->
+    <rect x="160" y="60" width="192" height="24" rx="12" fill="#010409" stroke="#30363D" stroke-width="1" />
+    
+    <!-- Lock Icon -->
+    <path d="M 194 72 V 68 A 4 4 0 0 1 202 68 V 72 M 192 72 H 204 V 80 H 192 Z" fill="none" stroke="#8B949E" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+    <text x="212" y="76" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="12" fill="#8B949E">cdp://zchrome</text>
+  </g>
+
+  <!-- Background Tech Grid / Automation Web -->
+  <g opacity="0.4">
+    <line x1="256" y1="96" x2="256" y2="464" stroke="#1E293B" stroke-width="1" stroke-dasharray="4 4" />
+    <line x1="32" y1="260" x2="480" y2="260" stroke="#1E293B" stroke-width="1" stroke-dasharray="4 4" />
+    <circle cx="256" cy="260" r="140" stroke="#1E293B" stroke-width="1" fill="none" />
+    <circle cx="256" cy="260" r="180" stroke="#1E293B" stroke-width="1" fill="none" stroke-dasharray="2 8" />
+    <path d="M 256 190 A 70 70 0 0 1 326 260" fill="none" stroke="#30363D" stroke-width="4" stroke-linecap="round" />
+    <path d="M 256 330 A 70 70 0 0 1 186 260" fill="none" stroke="#30363D" stroke-width="4" stroke-linecap="round" />
+  </g>
+
+  <!-- CDP Network Lines -->
+  <line x1="336" y1="180" x2="400" y2="116" stroke="#30363D" stroke-width="2" stroke-dasharray="4 4" />
+  <line x1="176" y1="340" x2="112" y2="404" stroke="#30363D" stroke-width="2" stroke-dasharray="4 4" />
+  <circle cx="400" cy="116" r="4" fill="#30363D" />
+  <circle cx="112" cy="404" r="4" fill="#30363D" />
+
+  <!-- ZChrome Main Emblem -->
+  <g>
+    <!-- Outer Chrome Aperture Rings (Dasharray calculation for perfect 3-segment gaps) -->
+    <!-- Red Blade (Top) -->
+    <circle cx="256" cy="260" r="96" fill="none" stroke="url(#gradRed)" stroke-width="32" stroke-dasharray="160 443.2" transform="rotate(-137.7 256 260)" stroke-linecap="round" />
+    <!-- Green Blade (Bottom Right) -->
+    <circle cx="256" cy="260" r="96" fill="none" stroke="url(#gradGreen)" stroke-width="32" stroke-dasharray="160 443.2" transform="rotate(-17.7 256 260)" stroke-linecap="round" />
+    <!-- Yellow Blade (Bottom Left) -->
+    <circle cx="256" cy="260" r="96" fill="none" stroke="url(#gradYellow)" stroke-width="32" stroke-dasharray="160 443.2" transform="rotate(102.3 256 260)" stroke-linecap="round" />
+
+    <!-- Central Chrome/CDP Lens -->
+    <circle cx="256" cy="260" r="36" fill="url(#gradBlue)" />
+    <circle cx="256" cy="260" r="28" fill="#0D1117" opacity="0.6" />
+    <circle cx="256" cy="260" r="16" fill="url(#gradBlue)" />
+    <circle cx="256" cy="260" r="48" fill="none" stroke="#4285F4" stroke-width="2" stroke-dasharray="4 8" opacity="0.5" />
+  </g>
+
+  <!-- The Zig "Z" / Data Stream -->
+  <g>
+    <!-- Z Tube Glowing Shadow -->
+    <path d="M 156 160 L 356 160 L 156 360 L 356 360" fill="none" stroke="#FF8F00" stroke-width="32" stroke-linejoin="round" stroke-linecap="round" opacity="0.25" />
+    
+    <!-- Z Tube Main Body -->
+    <path d="M 156 160 L 356 160 L 156 360 L 356 360" fill="none" stroke="url(#gradOrange)" stroke-width="16" stroke-linejoin="round" stroke-linecap="round" />
+    
+    <!-- Z Tube Bright Core -->
+    <path d="M 156 160 L 356 160 L 156 360 L 356 360" fill="none" stroke="#FFF3E0" stroke-width="6" stroke-linejoin="round" stroke-linecap="round" />
+
+    <!-- Z Nodes (CDP Endpoints & Corners) -->
+    <g stroke="url(#gradOrange)" stroke-width="3">
+      <circle cx="156" cy="160" r="12" fill="#0D1117" />
+      <circle cx="356" cy="360" r="12" fill="#0D1117" />
+    </g>
+
+    <!-- Glowing Data Packets along the Z stream -->
+    <circle cx="156" cy="160" r="4" fill="#FFF" />
+    <circle cx="356" cy="160" r="4" fill="#FFF" />
+    <circle cx="156" cy="360" r="4" fill="#FFF" />
+    <circle cx="356" cy="360" r="4" fill="#FFF" />
+    <circle cx="306" cy="210" r="5" fill="#FFF" />
+    <circle cx="256" cy="260" r="6" fill="#FFF" /> <!-- Intersects perfect center -->
+    <circle cx="206" cy="310" r="5" fill="#FFF" />
+  </g>
+
+  <!-- Small Protocol Tags -->
+  <text x="136" y="146" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="10" font-weight="bold" fill="#A0AEC0">CDP</text>
+  <text x="360" y="380" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="10" font-weight="bold" fill="#A0AEC0">WSS</text>
+
+  <!-- Bottom Terminal Command Area -->
+  <g transform="translate(56, 440)">
+    <text font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="15" font-weight="bold">
+      <tspan fill="#F59E0B">❯ </tspan>
+      <tspan fill="#60A5FA">zchrome</tspan>
+      <tspan fill="#A0AEC0">.</tspan>
+      <tspan fill="#69F0AE">launch</tspan>
+      <tspan fill="#A0AEC0">({ </tspan>
+      <tspan fill="#FF8A80">url</tspan>
+      <tspan fill="#A0AEC0">: </tspan>
+      <tspan fill="#FFE57F">"cdp://ws"</tspan>
+      <tspan fill="#A0AEC0"> })</tspan>
+      <tspan fill="#E53935">_</tspan>
+    </text>
+  </g>
 </svg>

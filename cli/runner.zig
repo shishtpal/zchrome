@@ -26,10 +26,7 @@ fn saveTargetToConfig(target_id: []const u8, args: Args) void {
         std.debug.print("Warning: Could not save target to config: {}\n", .{err});
     };
 
-    if (config.chrome_path) |p| allocator.free(p);
-    if (config.data_dir) |d| allocator.free(d);
-    if (config.ws_url) |u| allocator.free(u);
-    if (config.last_target) |t| allocator.free(t);
+    config.deinit(allocator);
 }
 
 fn writeFile(io: std.Io, path: []const u8, data: []const u8) !void {

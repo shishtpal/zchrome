@@ -18,6 +18,10 @@ pub const Args = struct {
     positional: []const []const u8,
     session_arg: ?[]const u8 = null,
     session_ctx: ?*const session_mod.SessionContext = null,
+    /// Cloud browser provider name (local, kernel, notte, browserbase)
+    provider: ?[]const u8 = null,
+    /// Cleanup cloud session on exit
+    cleanup_session: bool = false,
     snap_interactive: bool = false,
     snap_compact: bool = false,
     snap_depth: ?usize = null,
@@ -81,6 +85,7 @@ pub const Args = struct {
         session,
         diff,
         dom,
+        provider,
         help,
     };
 
@@ -99,6 +104,7 @@ pub const Args = struct {
         if (self.wait_fn) |w| allocator.free(w);
         if (self.session_arg) |s| allocator.free(s);
         if (self.replay_fallback) |f| allocator.free(f);
+        if (self.provider) |p| allocator.free(p);
     }
 };
 
@@ -139,6 +145,8 @@ pub fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
     var replay_fallback: ?[]const u8 = null;
     var replay_resume: bool = false;
     var replay_from: ?usize = null;
+    var provider_arg: ?[]const u8 = null;
+    var cleanup_session: bool = false;
 
     _ = iter.skip();
 
@@ -241,6 +249,11 @@ pub fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
             } else if (std.mem.eql(u8, arg, "--from")) {
                 const val = iter.next() orelse return error.MissingArgument;
                 replay_from = try std.fmt.parseInt(usize, val, 10);
+            } else if (std.mem.eql(u8, arg, "--provider")) {
+                const val = iter.next() orelse return error.MissingArgument;
+                provider_arg = try allocator.dupe(u8, val);
+            } else if (std.mem.eql(u8, arg, "--cleanup")) {
+                cleanup_session = true;
             } else {
                 try positional.append(allocator, try allocator.dupe(u8, arg));
             }
@@ -290,6 +303,8 @@ pub fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
         .replay_fallback = replay_fallback,
         .replay_resume = replay_resume,
         .replay_from = replay_from,
+        .provider = provider_arg,
+        .cleanup_session = cleanup_session,
     };
 }
 

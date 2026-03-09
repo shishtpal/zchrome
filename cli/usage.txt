@@ -11,6 +11,8 @@ GLOBAL OPTIONS:
   --verbose                Print CDP messages
   --output <path>          Output file path (for screenshot/pdf)
   --full                   Capture full page screenshot (not just viewport)
+  --provider <name>        Use cloud provider (kernel, notte, browserbase)
+  --cleanup                Close cloud session when command exits
 
 COMMANDS:
   open                     Launch Chrome with remote debugging
@@ -160,6 +162,27 @@ SNAPSHOT OPTIONS:
   -s, --selector <sel>     Scope snapshot to CSS selector
   -m, --mark               Inject unique IDs (zc-1, zc-2, ...) into interactive elements
 
+CLOUD BROWSER PROVIDERS:
+  zchrome provider list    List available providers and their status
+  zchrome provider set <n> Set default provider for this session
+  zchrome provider status  Show current provider and session info
+  zchrome provider close   Close active cloud session
+
+  Once a provider is set, all subsequent commands use the cloud browser.
+  Sessions persist between commands for faster execution.
+
+ENVIRONMENT VARIABLES:
+  ZCHROME_PROVIDER             Default provider (local, kernel, notte, browserbase)
+  ZCHROME_KERNEL_API_KEY       Kernel.sh API key
+  ZCHROME_NOTTE_API_KEY        Notte.cc API key
+  ZCHROME_BROWSERBASE_API_KEY  Browserbase API key
+  ZCHROME_BROWSER              Chrome binary path
+  ZCHROME_PORT                 Debug port
+  ZCHROME_DATA_DIR             User data directory
+  ZCHROME_VERBOSE              Enable verbose mode (1 or true)
+  ZCHROME_HEADLESS             Headless mode (new or old)
+  ZCHROME_SESSION              Default session name
+
 CONFIG FILE:
   zchrome.json is stored alongside the executable for portability.
   It stores chrome_path, data_dir, port, ws_url, last_target, and mouse position.
@@ -260,3 +283,39 @@ EXAMPLES:
   zchrome diff screenshot -b before.png -t 0.05  # Stricter threshold
   zchrome diff url https://v1.com https://v2.com # Compare two URLs
   zchrome diff url https://v1.com https://v2.com --screenshot  # With visual diff
+
+  # Cloud browser providers
+  # Set your API key first (PowerShell)
+  # $env:ZCHROME_KERNEL_API_KEY = "your-api-key"
+
+  zchrome provider list                          # List available providers
+  zchrome provider set kernel                    # Set Kernel.sh as default
+
+  # Create a cloud browser session (like 'open' for local Chrome)
+  zchrome open                                   # Creates cloud session
+  # Output: Session ID, WebSocket URL, Live view URL
+
+  # Now run commands - they use the cloud browser
+  zchrome navigate https://example.com           # Uses cloud session
+  zchrome screenshot --output page.png           # Same session
+  zchrome snapshot                               # Same session
+
+  # Session persists between commands (reuses same browser)
+  zchrome click "#login-btn"
+  zchrome fill "#email" "test@example.com"
+
+  # Verify session is still alive
+  zchrome connect                                # Shows session info
+
+  # View provider status
+  zchrome provider status
+
+  # Close session when done
+  zchrome provider close
+
+  # Or use --cleanup to close after single command
+  zchrome --cleanup navigate https://example.com
+
+  # Switch back to local Chrome
+  zchrome provider set local
+  zchrome open                                   # Now launches local Chrome

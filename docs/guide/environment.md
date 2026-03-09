@@ -12,6 +12,10 @@ zchrome supports environment variables to configure defaults without repeating c
 | `ZCHROME_DATA_DIR` | path | Chrome user data directory | session-specific |
 | `ZCHROME_VERBOSE` | bool | Enable verbose output (`1` or `true`) | `false` |
 | `ZCHROME_HEADLESS` | string | Headless mode: `new`, `old`, or `off` | `off` |
+| `ZCHROME_PROVIDER` | string | Cloud provider: `local`, `kernel`, `notte`, `browserbase` | `local` |
+| `ZCHROME_KERNEL_API_KEY` | string | Kernel.sh API key | - |
+| `ZCHROME_NOTTE_API_KEY` | string | Notte.cc API key | - |
+| `ZCHROME_BROWSERBASE_API_KEY` | string | Browserbase API key | - |
 
 ## Priority Order
 
@@ -140,9 +144,47 @@ export ZCHROME_HEADLESS="new"
 zchrome open  # Launches headless Chrome
 ```
 
+### ZCHROME_PROVIDER
+
+Set the default cloud browser provider. Values: `local` (default), `kernel`, `notte`, `browserbase`.
+
+```bash
+export ZCHROME_PROVIDER="kernel"
+zchrome navigate https://example.com  # Uses Kernel.sh cloud browser
+```
+
+See [Cloud Providers](/cli/providers) for detailed provider documentation.
+
+### ZCHROME_KERNEL_API_KEY
+
+API key for [Kernel.sh](https://kernel.sh) cloud browser provider.
+
+```bash
+export ZCHROME_KERNEL_API_KEY="your-api-key"
+zchrome provider set kernel
+```
+
+### ZCHROME_NOTTE_API_KEY
+
+API key for [Notte.cc](https://notte.cc) cloud browser provider.
+
+```bash
+export ZCHROME_NOTTE_API_KEY="your-api-key"
+zchrome provider set notte
+```
+
+### ZCHROME_BROWSERBASE_API_KEY
+
+API key for [Browserbase](https://browserbase.com) cloud browser provider.
+
+```bash
+export ZCHROME_BROWSERBASE_API_KEY="your-api-key"
+zchrome provider set browserbase
+```
+
 ## CI/CD Examples
 
-### GitHub Actions
+### GitHub Actions (Local Chrome)
 
 ```yaml
 jobs:
@@ -162,6 +204,24 @@ jobs:
           zchrome open
           zchrome navigate https://example.com
           zchrome screenshot --output test.png
+```
+
+### GitHub Actions (Cloud Provider)
+
+```yaml
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      ZCHROME_PROVIDER: kernel
+      ZCHROME_KERNEL_API_KEY: ${{ secrets.KERNEL_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run browser tests
+        run: |
+          # No Chrome install needed - using cloud browser
+          zchrome --cleanup navigate https://example.com
+          zchrome --cleanup screenshot --output test.png
 ```
 
 ### Docker

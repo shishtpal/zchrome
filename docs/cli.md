@@ -31,6 +31,8 @@ zchrome [options] <command> [command-args]
 | `--output <path>` | Output file path |
 | `--full` | Capture full page screenshot (not just viewport) |
 | `--session <name>` | Use a named session (default: "default") |
+| `--provider <name>` | Use cloud provider (kernel, notte, browserbase) |
+| `--cleanup` | Close cloud session when command exits |
 
 ## Sessions
 
@@ -48,6 +50,39 @@ zchrome session list
 ```
 
 See the [Sessions](/cli/sessions) page for full documentation on session management, storage, and use cases.
+
+## Cloud Providers
+
+zchrome supports cloud browser providers for running automation in the cloud. Cloud providers work the same way as local Chrome - use `open` to create a session.
+
+```bash
+# Set your API key
+$env:ZCHROME_KERNEL_API_KEY = "your-api-key"
+
+# Set the provider
+zchrome provider set kernel
+
+# Create a cloud browser session
+zchrome open
+
+# Now run commands - they use the cloud browser
+zchrome navigate https://example.com
+zchrome screenshot --output page.png
+
+# Close when done
+zchrome provider close
+```
+
+**Provider Commands:**
+
+```bash
+zchrome provider list          # List available providers
+zchrome provider set <name>    # Set default provider
+zchrome provider status        # Show current provider info
+zchrome provider close         # Close active cloud session
+```
+
+See the [Cloud Providers](/cli/providers) page for full documentation on provider setup, session persistence, and CI/CD integration.
 
 ## Config File
 

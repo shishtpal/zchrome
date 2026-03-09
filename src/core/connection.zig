@@ -2,6 +2,7 @@ const std = @import("std");
 const json = @import("json");
 const protocol = @import("protocol.zig");
 const wss = @import("wss");
+const url = @import("../util/url.zig");
 const WebSocket = wss.Client;
 const WebSocketError = wss.Error;
 const Session = @import("session.zig").Session;
@@ -74,38 +75,15 @@ pub const Connection = struct {
 
     /// Open a connection to a WebSocket URL
     pub fn open(ws_url: []const u8, opts: Options) !*Self {
-        // Parse ws:// URL to extract host, port, path
-        const host_start = if (std.mem.startsWith(u8, ws_url, "wss://"))
-            @as(usize, 6)
-        else if (std.mem.startsWith(u8, ws_url, "ws://"))
-            @as(usize, 5)
-        else
-            return error.InvalidUrl;
-
-        const rest = ws_url[host_start..];
-
-        // Find path separator
-        const path_start = std.mem.indexOf(u8, rest, "/") orelse rest.len;
-        const host_port = rest[0..path_start];
-        const path = if (path_start < rest.len) rest[path_start..] else "/";
-
-        // Parse host and port
-        var host: []const u8 = undefined;
-        var port: u16 = if (std.mem.startsWith(u8, ws_url, "wss://")) 443 else 80;
-
-        if (std.mem.indexOf(u8, host_port, ":")) |colon| {
-            host = host_port[0..colon];
-            port = std.fmt.parseInt(u16, host_port[colon + 1 ..], 10) catch return error.InvalidUrl;
-        } else {
-            host = host_port;
-        }
+        const parsed = url.parseWsUrl(opts.allocator, ws_url) catch return error.InvalidUrl;
+        defer parsed.deinit(opts.allocator);
 
         // Connect
         const websocket = WebSocket.connect(.{
-            .host = host,
-            .port = port,
-            .path = path,
-            .tls = std.mem.startsWith(u8, ws_url, "wss://"),
+            .host = parsed.host,
+            .port = parsed.port,
+            .path = parsed.path,
+            .tls = parsed.is_secure,
             .allocator = opts.allocator,
             .io = opts.io,
         }) catch return error.ConnectionFailed;

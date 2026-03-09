@@ -24,6 +24,11 @@ pub const Config = struct {
     media_feature: ?[]const u8 = null,
     user_agent: ?[]const u8 = null,
 
+    // Cloud provider settings
+    provider: ?[]const u8 = null,           // "local", "kernel", "notte", "browserbase"
+    provider_session_id: ?[]const u8 = null, // Active cloud session ID
+    provider_auto_cleanup: ?bool = null,     // Override provider's default cleanup behavior
+
     pub fn deinit(self: *Config, allocator: std.mem.Allocator) void {
         if (self.chrome_path) |p| allocator.free(p);
         if (self.data_dir) |d| allocator.free(d);
@@ -35,6 +40,8 @@ pub const Config = struct {
         if (self.auth_pass) |p| allocator.free(p);
         if (self.media_feature) |m| allocator.free(m);
         if (self.user_agent) |u| allocator.free(u);
+        if (self.provider) |p| allocator.free(p);
+        if (self.provider_session_id) |s| allocator.free(s);
         self.* = .{};
     }
 };
@@ -153,6 +160,15 @@ pub fn loadConfigFromPath(allocator: std.mem.Allocator, io: std.Io, path: []cons
     }
     if (parsed.get("user_agent")) |v| {
         if (v == .string) config.user_agent = allocator.dupe(u8, v.string) catch null;
+    }
+    if (parsed.get("provider")) |v| {
+        if (v == .string) config.provider = allocator.dupe(u8, v.string) catch null;
+    }
+    if (parsed.get("provider_session_id")) |v| {
+        if (v == .string) config.provider_session_id = allocator.dupe(u8, v.string) catch null;
+    }
+    if (parsed.get("provider_auto_cleanup")) |v| {
+        if (v == .bool) config.provider_auto_cleanup = v.bool;
     }
 
     return config;
@@ -304,6 +320,25 @@ pub fn saveConfigToPath(config: Config, allocator: std.mem.Allocator, io: std.Io
         try json_buf.appendSlice(allocator, "  \"user_agent\": \"");
         try appendEscapedString(&json_buf, allocator, ua);
         try json_buf.appendSlice(allocator, "\"");
+    }
+    if (config.provider) |p| {
+        if (!first) try json_buf.appendSlice(allocator, ",\n");
+        first = false;
+        try json_buf.appendSlice(allocator, "  \"provider\": \"");
+        try appendEscapedString(&json_buf, allocator, p);
+        try json_buf.appendSlice(allocator, "\"");
+    }
+    if (config.provider_session_id) |sid| {
+        if (!first) try json_buf.appendSlice(allocator, ",\n");
+        first = false;
+        try json_buf.appendSlice(allocator, "  \"provider_session_id\": \"");
+        try appendEscapedString(&json_buf, allocator, sid);
+        try json_buf.appendSlice(allocator, "\"");
+    }
+    if (config.provider_auto_cleanup) |cleanup| {
+        if (!first) try json_buf.appendSlice(allocator, ",\n");
+        first = false;
+        try json_buf.appendSlice(allocator, if (cleanup) "  \"provider_auto_cleanup\": true" else "  \"provider_auto_cleanup\": false");
     }
 
     try json_buf.appendSlice(allocator, "\n}\n");

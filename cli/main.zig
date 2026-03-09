@@ -1,6 +1,7 @@
 const std = @import("std");
 const cdp = @import("cdp");
 const args_mod = @import("args.zig");
+const cloud = @import("cloud.zig");
 const config_mod = @import("config.zig");
 const impl = @import("commands/mod.zig");
 const runner = @import("runner.zig");
@@ -52,6 +53,12 @@ pub fn main(init: std.process.Init) !void {
             }
         }
     }
+    // Provider from environment variable
+    if (args.provider == null) {
+        if (init.environ_map.get("ZCHROME_PROVIDER")) |v| {
+            if (v.len > 0) args.provider = allocator.dupe(u8, v) catch null;
+        }
+    }
 
     session_mod.migrateToSessions(allocator, init.io) catch {};
 
@@ -63,6 +70,7 @@ pub fn main(init: std.process.Init) !void {
         .name = session_name,
         .allocator = allocator,
         .io = init.io,
+        .init = init,
     };
     defer session_ctx.deinit();
 
@@ -70,6 +78,11 @@ pub fn main(init: std.process.Init) !void {
 
     if (args.command == .session) {
         try impl.sessionCmd(&session_ctx, args.positional);
+        return;
+    }
+
+    if (args.command == .provider) {
+        try impl.providerCmd(&session_ctx, args.positional, init.environ_map);
         return;
     }
 
@@ -89,9 +102,14 @@ pub fn main(init: std.process.Init) !void {
         args.port = config.port;
     }
 
+    // Determine effective provider (CLI flag > config > "local")
+    const effective_provider = args.provider orelse config.provider orelse "local";
+    const is_cloud_provider = !std.mem.eql(u8, effective_provider, "local");
+
     const needs_target = switch (args.command) {
-        .navigate, .screenshot, .pdf, .evaluate, .network, .cookies, .storage, .snapshot, .click, .dblclick, .focus, .type, .fill, .select, .multiselect, .hover, .check, .uncheck, .scroll, .scrollintoview, .drag, .get, .upload, .back, .forward, .reload, .press, .keydown, .keyup, .wait, .mouse, .cursor, .set, .dialog, .dev, .diff, .dom => true,
-        .tab, .window, .version, .list_targets, .pages, .interactive, .open, .connect, .session, .help => false,
+        // navigate has its own page selection logic in cmdNavigate
+        .screenshot, .pdf, .evaluate, .network, .cookies, .storage, .snapshot, .click, .dblclick, .focus, .type, .fill, .select, .multiselect, .hover, .check, .uncheck, .scroll, .scrollintoview, .drag, .get, .upload, .back, .forward, .reload, .press, .keydown, .keyup, .wait, .mouse, .cursor, .set, .dialog, .dev, .diff, .dom => true,
+        .navigate, .tab, .window, .version, .list_targets, .pages, .interactive, .open, .connect, .session, .provider, .help => false,
     };
     if (needs_target and args.use_target == null and config.last_target != null) {
         args.use_target = allocator.dupe(u8, config.last_target.?) catch null;
@@ -99,24 +117,63 @@ pub fn main(init: std.process.Init) !void {
 
     switch (args.command) {
         .open => {
-            try runner.cmdOpen(args, allocator, init.io);
+            if (is_cloud_provider) {
+                const prov = cloud.getProviderOrExit(effective_provider, init.environ_map);
+                try cloud.cloudOpen(.{
+                    .allocator = allocator,
+                    .init = init,
+                    .session_ctx = &session_ctx,
+                    .config = &config,
+                    .provider = prov.provider,
+                    .api_key = prov.api_key,
+                    .verbose = args.verbose,
+                    .timeout_ms = args.timeout_ms,
+                });
+            } else {
+                try runner.cmdOpen(args, allocator, init.io);
+            }
             return;
         },
         .connect => {
-            try runner.cmdConnect(args, allocator, init.io);
+            if (is_cloud_provider) {
+                const prov = cloud.getProviderOrExit(effective_provider, init.environ_map);
+                try cloud.cloudConnect(.{
+                    .allocator = allocator,
+                    .init = init,
+                    .session_ctx = &session_ctx,
+                    .config = &config,
+                    .provider = prov.provider,
+                    .api_key = prov.api_key,
+                    .verbose = args.verbose,
+                });
+            } else {
+                try runner.cmdConnect(args, allocator, init.io);
+            }
             return;
         },
         else => {},
     }
 
-    const is_connected = args.url != null;
-    var browser = if (args.url) |ws_url|
-        cdp.Browser.connect(ws_url, allocator, init.io, .{ .verbose = args.verbose }) catch |err| {
-            std.debug.print("Failed to connect: {}\n", .{err});
+    // For cloud providers, require explicit 'open' first
+    if (is_cloud_provider) {
+        cloud.requireCloudSession(effective_provider, args.url);
+    }
+
+    var is_connected = args.url != null;
+    var browser: *cdp.Browser = undefined;
+
+    if (args.url) |ws_url| {
+        browser = cdp.Browser.connect(ws_url, allocator, init.io, .{ .verbose = args.verbose }) catch |err| {
+            if (is_cloud_provider) {
+                cloud.printCloudConnectionError(err);
+            } else {
+                std.debug.print("Failed to connect: {}\n", .{err});
+            }
             std.process.exit(1);
-        }
-    else
-        cdp.Browser.launch(.{
+        };
+        is_connected = true;
+    } else {
+        browser = cdp.Browser.launch(.{
             .headless = args.headless,
             .executable_path = args.chrome_path,
             .allocator = allocator,
@@ -126,6 +183,7 @@ pub fn main(init: std.process.Init) !void {
             std.debug.print("Failed to launch browser: {}\n", .{err});
             std.process.exit(1);
         };
+    }
     defer if (is_connected) browser.disconnect() else browser.close();
 
     const is_page_url = if (args.url) |url|
@@ -150,8 +208,25 @@ pub fn main(init: std.process.Init) !void {
             .pages => try runner.cmdPages(browser, allocator),
             .interactive => try runner.cmdInteractive(browser, args, allocator),
             .snapshot => try runner.cmdSnapshot(browser, args, allocator),
-            .open, .connect, .session, .help => unreachable,
+            .open, .connect, .session, .provider, .help => unreachable,
             else => try runner.withFirstPage(browser, args, allocator),
+        }
+    }
+
+    // Cleanup cloud session if --cleanup flag was set
+    if (args.cleanup_session and is_cloud_provider) {
+        if (cdp.getProvider(effective_provider)) |provider| {
+            if (init.environ_map.get(provider.api_key_env_var)) |api_key| {
+                cloud.cloudCleanup(.{
+                    .allocator = allocator,
+                    .init = init,
+                    .session_ctx = &session_ctx,
+                    .config = &config,
+                    .provider = provider,
+                    .api_key = api_key,
+                    .verbose = args.verbose,
+                });
+            }
         }
     }
 }

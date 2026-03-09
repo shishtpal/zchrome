@@ -5,6 +5,9 @@ hero:
   name: "zchrome"
   text: "Chrome DevTools Protocol for Zig"
   tagline: Native CDP client with zero external dependencies
+  image:
+    src: /logo.svg
+    alt: zchrome
   actions:
     - theme: brand
       text: Get Started

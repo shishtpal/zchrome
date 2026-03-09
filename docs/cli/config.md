@@ -61,6 +61,14 @@ sessions/
 | `offline` | Offline mode enabled |
 | `media_feature` | Preferred color scheme (dark/light) |
 
+### Cloud Provider Settings
+
+| Field | Description |
+|-------|-------------|
+| `provider` | Cloud provider name: `local`, `kernel`, `notte`, `browserbase` |
+| `provider_session_id` | Active cloud session ID (auto-managed) |
+| `provider_auto_cleanup` | Whether to cleanup session on exit |
+
 ## Auto-Applied Settings
 
 Session settings are automatically re-applied when connecting to a page:
@@ -164,8 +172,29 @@ zchrome --session mobile set device "iPhone 14"
 # sessions/mobile/zchrome.json
 ```
 
+### Cloud Provider Config
+
+```bash
+# Set provider (saves to config)
+zchrome provider set kernel
+
+# Config now contains:
+# {
+#   "provider": "kernel",
+#   "provider_session_id": "sess_abc123...",
+#   "ws_url": "wss://..."
+# }
+
+# Subsequent commands use saved cloud session
+zchrome navigate https://example.com
+
+# Close session (clears provider_session_id and ws_url)
+zchrome provider close
+```
+
 ## See Also
 
 - [CLI Sessions](/cli/sessions) - Managing named sessions
+- [Cloud Providers](/cli/providers) - Cloud browser provider setup
 - [Environment Variables](/guide/environment) - All supported environment variables
 - [Session Emulation](/cli#session-emulation-set) - Emulation commands

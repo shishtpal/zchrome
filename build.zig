@@ -25,6 +25,13 @@ pub fn build(b: *std.Build) void {
     });
     const wss_mod = wss_dep.module("zlib_wss");
 
+    // ─── HTTP Module (from zlib-http) ─────────────────────────
+    const http_dep = b.dependency("zlib_http", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const http_mod = http_dep.module("zlib-http");
+
     // ─── Library Module ──────────────────────────────────────
     const cdp_mod = b.createModule(.{
         .root_source_file = b.path("src/root.zig"),
@@ -33,6 +40,7 @@ pub fn build(b: *std.Build) void {
     });
     cdp_mod.addImport("json", json_mod);
     cdp_mod.addImport("wss", wss_mod);
+    cdp_mod.addImport("zhttp", http_mod);
 
     // ─── CLI Executable ──────────────────────────────────────
     const cli_mod = b.createModule(.{

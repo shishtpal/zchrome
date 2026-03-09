@@ -64,6 +64,14 @@ pub const yaml = @import("util/yaml.zig");
 pub const url = @import("util/url.zig");
 pub const retry = @import("util/retry.zig");
 pub const base64 = @import("util/base64.zig");
+pub const rest = @import("util/rest.zig");
+
+// Cloud Browser Providers
+pub const providers = @import("providers/mod.zig");
+pub const Provider = providers.Provider;
+pub const SessionInfo = providers.SessionInfo;
+pub const getProvider = providers.getProvider;
+pub const listProviders = providers.listProviders;
 
 // ─── Error Sets ─────────────────────────────────────────────────────────────
 

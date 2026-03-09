@@ -6,6 +6,7 @@ pub const SessionContext = struct {
     name: []const u8,
     allocator: std.mem.Allocator,
     io: std.Io,
+    init: std.process.Init,
 
     /// Get config path for this session
     pub fn configPath(self: *const SessionContext) ![]const u8 {

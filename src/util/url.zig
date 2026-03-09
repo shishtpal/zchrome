@@ -8,14 +8,17 @@ pub const WsUrl = struct {
     is_secure: bool, // wss:// vs ws://
 
     /// Free all allocated fields
-    pub fn deinit(self: *WsUrl, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: *const WsUrl, allocator: std.mem.Allocator) void {
         allocator.free(self.host);
         allocator.free(self.path);
     }
 };
 
 /// Parse a WebSocket URL into its components
-/// Supports: ws://host:port/path and wss://host:port/path
+/// Supports:
+/// - ws://host:port/path
+/// - wss://host:port/path
+/// - wss://host?query=only
 pub fn parseWsUrl(allocator: std.mem.Allocator, url: []const u8) !WsUrl {
     var remaining = url;
 
@@ -31,8 +34,17 @@ pub fn parseWsUrl(allocator: std.mem.Allocator, url: []const u8) !WsUrl {
         return error.InvalidScheme;
     }
 
-    // Find path separator
-    const path_start = std.mem.indexOfScalar(u8, remaining, '/') orelse remaining.len;
+    // Find the start of the request target. Some providers return
+    // query-only URLs like `wss://host?sessionId=...` with no explicit `/`.
+    const path_start = blk: {
+        const slash = std.mem.indexOfScalar(u8, remaining, '/');
+        const query = std.mem.indexOfScalar(u8, remaining, '?');
+
+        if (query) |q| {
+            break :blk if (slash) |s| @min(s, q) else q;
+        }
+        break :blk slash orelse remaining.len;
+    };
 
     // Parse host:port
     const host_port = remaining[0..path_start];
@@ -118,6 +130,16 @@ test "parseWsUrl - no path" {
     try std.testing.expectEqualStrings("localhost", result.host);
     try std.testing.expectEqual(@as(u16, 9222), result.port);
     try std.testing.expectEqualStrings("/", result.path);
+}
+
+test "parseWsUrl - query only request target" {
+    const result = try parseWsUrl(std.testing.allocator, "wss://connect.browserbase.com?sessionId=abc123");
+    defer result.deinit(std.testing.allocator);
+
+    try std.testing.expectEqualStrings("connect.browserbase.com", result.host);
+    try std.testing.expectEqual(@as(u16, 443), result.port);
+    try std.testing.expectEqualStrings("?sessionId=abc123", result.path);
+    try std.testing.expect(result.is_secure);
 }
 
 test "parseWsUrl - invalid scheme" {

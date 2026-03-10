@@ -9,14 +9,28 @@ The config file is stored per session:
 ```
 sessions/
 ├── default/
-│   └── zchrome.json    # Default session config
+│   ├── zchrome.json       # Base session config
+│   └── zchrome.user.json  # User overrides (optional)
 ├── work/
-│   └── zchrome.json    # Work session config
+│   ├── zchrome.json
+│   └── zchrome.user.json
 └── testing/
-    └── zchrome.json    # Testing session config
+    └── zchrome.json
 ```
 
+### User Config Files
+
+Each session can have an optional `zchrome.user.json` file that overrides values from the base `zchrome.json`. This is useful for:
+
+- **Personal settings** that shouldn't be shared (e.g., local Chrome path)
+- **Development overrides** without modifying the base config
+- **Machine-specific settings** when sharing configs across machines
+
+User config values take precedence over base config values. Fields not specified in the user config fall back to the base config.
+
 ## Config Format
+
+**Base config (`zchrome.json`):**
 
 ```json
 {
@@ -36,7 +50,20 @@ sessions/
 }
 ```
 
+**User override (`zchrome.user.json`):**
+
+```json
+{
+  "chrome_path": "D:\\Apps\\ChromePortable\\chrome.exe",
+  "port": 9223
+}
+```
+
+In this example, the user config overrides `chrome_path` and `port`, while all other settings come from the base config.
+
 ## Configuration Fields
+
+All fields are optional. In user config files, only specify the fields you want to override.
 
 ### Connection Settings
 
@@ -44,7 +71,7 @@ sessions/
 |-------|-------------|
 | `chrome_path` | Path to Chrome executable |
 | `data_dir` | User data directory for Chrome profile |
-| `port` | Debug port (default: 9222) |
+| `port` | Debug port (defaults to 9222 if not specified) |
 | `ws_url` | WebSocket URL for browser connection |
 | `last_target` | Last used target ID (for `--use` flag) |
 
@@ -89,6 +116,19 @@ zchrome --port 9223 connect
 
 # Config has viewport 1920x1080, but this uses 1366x768
 zchrome set viewport 1366 768
+```
+
+## Debugging Config Loading
+
+Use `--verbose` to see which config files are loaded and how they're merged:
+
+```bash
+zchrome --verbose open
+# [config] Loading base config: .../sessions/default/zchrome.json
+# [config] Successfully read: .../sessions/default/zchrome.json
+# [config] Looking for user config: .../sessions/default/zchrome.user.json
+# [config] Successfully read: .../sessions/default/zchrome.user.json
+# [config] Merging user config over base config
 ```
 
 ## Setting Config Values

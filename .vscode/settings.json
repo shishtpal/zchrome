@@ -1,18 +1,24 @@
 {
     "cSpell.words": [
-        "dblclick",
-        "domcontentloaded",
-        "Geolocation",
-        "keyup",
-        "mousedown",
-        "mousemove",
-        "networkidle",
-        "scrollintoview",
-        "spinloop",
-        "subcmd",
-        "subcontext",
-        "vitepress",
-        "zchrome",
-        "zsnap"
+      "backgrounding",
+      "dblclick",
+      "deprioritizing",
+      "domcontentloaded",
+      "Geolocation",
+      "infobars",
+      "keyup",
+      "mousedown",
+      "mousemove",
+      "networkidle",
+      "rasterizer",
+      "repost",
+      "reposting",
+      "scrollintoview",
+      "spinloop",
+      "subcmd",
+      "subcontext",
+      "vitepress",
+      "zchrome",
+      "zsnap"
     ]
 }

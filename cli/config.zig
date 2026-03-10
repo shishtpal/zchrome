@@ -29,6 +29,9 @@ pub const Config = struct {
     provider_session_id: ?[]const u8 = null, // Active cloud session ID
     provider_auto_cleanup: ?bool = null,     // Override provider's default cleanup behavior
 
+    // Chrome launch arguments
+    chrome_args: ?[]const []const u8 = null, // Additional Chrome CLI arguments
+
     pub fn deinit(self: *Config, allocator: std.mem.Allocator) void {
         if (self.chrome_path) |p| allocator.free(p);
         if (self.data_dir) |d| allocator.free(d);
@@ -42,6 +45,10 @@ pub const Config = struct {
         if (self.user_agent) |u| allocator.free(u);
         if (self.provider) |p| allocator.free(p);
         if (self.provider_session_id) |s| allocator.free(s);
+        if (self.chrome_args) |args| {
+            for (args) |arg| allocator.free(arg);
+            allocator.free(args);
+        }
         self.* = .{};
     }
 };
@@ -169,6 +176,19 @@ pub fn loadConfigFromPath(allocator: std.mem.Allocator, io: std.Io, path: []cons
     }
     if (parsed.get("provider_auto_cleanup")) |v| {
         if (v == .bool) config.provider_auto_cleanup = v.bool;
+    }
+    if (parsed.get("chrome_args")) |v| {
+        if (v == .array) {
+            var args_list: std.ArrayList([]const u8) = .empty;
+            for (v.array.items) |item| {
+                if (item == .string) {
+                    if (allocator.dupe(u8, item.string)) |s| {
+                        args_list.append(allocator, s) catch {};
+                    } else |_| {}
+                }
+            }
+            config.chrome_args = args_list.toOwnedSlice(allocator) catch null;
+        }
     }
 
     return config;
@@ -339,6 +359,20 @@ pub fn saveConfigToPath(config: Config, allocator: std.mem.Allocator, io: std.Io
         if (!first) try json_buf.appendSlice(allocator, ",\n");
         first = false;
         try json_buf.appendSlice(allocator, if (cleanup) "  \"provider_auto_cleanup\": true" else "  \"provider_auto_cleanup\": false");
+    }
+    if (config.chrome_args) |args| {
+        if (args.len > 0) {
+            if (!first) try json_buf.appendSlice(allocator, ",\n");
+            first = false;
+            try json_buf.appendSlice(allocator, "  \"chrome_args\": [");
+            for (args, 0..) |arg, i| {
+                if (i > 0) try json_buf.appendSlice(allocator, ", ");
+                try json_buf.appendSlice(allocator, "\"");
+                try appendEscapedString(&json_buf, allocator, arg);
+                try json_buf.appendSlice(allocator, "\"");
+            }
+            try json_buf.appendSlice(allocator, "]");
+        }
     }
 
     try json_buf.appendSlice(allocator, "\n}\n");

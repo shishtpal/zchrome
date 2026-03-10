@@ -41,20 +41,6 @@ fn parseConfigFromJson(allocator: std.mem.Allocator, value: json.Value) !Config 
     return config;
 }
 
-/// Escape a string for JSON output
-fn appendEscapedString(buf: *std.ArrayList(u8), allocator: std.mem.Allocator, str: []const u8) !void {
-    for (str) |c| {
-        switch (c) {
-            '\\' => try buf.appendSlice(allocator, "\\\\"),
-            '"' => try buf.appendSlice(allocator, "\\\""),
-            '\n' => try buf.appendSlice(allocator, "\\n"),
-            '\r' => try buf.appendSlice(allocator, "\\r"),
-            '\t' => try buf.appendSlice(allocator, "\\t"),
-            else => try buf.append(allocator, c),
-        }
-    }
-}
-
 /// Serialize config to JSON string
 fn serializeConfig(allocator: std.mem.Allocator, config: Config) ![]const u8 {
     var json_buf: std.ArrayList(u8) = .empty;
@@ -68,7 +54,7 @@ fn serializeConfig(allocator: std.mem.Allocator, config: Config) ![]const u8 {
         if (!first) try json_buf.appendSlice(allocator, ",\n");
         first = false;
         try json_buf.appendSlice(allocator, "  \"chrome_path\": \"");
-        try appendEscapedString(&json_buf, allocator, path);
+        try json.appendEscapedString(allocator, &json_buf, path);
         try json_buf.appendSlice(allocator, "\"");
     }
 
@@ -76,7 +62,7 @@ fn serializeConfig(allocator: std.mem.Allocator, config: Config) ![]const u8 {
         if (!first) try json_buf.appendSlice(allocator, ",\n");
         first = false;
         try json_buf.appendSlice(allocator, "  \"data_dir\": \"");
-        try appendEscapedString(&json_buf, allocator, dir);
+        try json.appendEscapedString(allocator, &json_buf, dir);
         try json_buf.appendSlice(allocator, "\"");
     }
 
@@ -90,7 +76,7 @@ fn serializeConfig(allocator: std.mem.Allocator, config: Config) ![]const u8 {
         if (!first) try json_buf.appendSlice(allocator, ",\n");
         first = false;
         try json_buf.appendSlice(allocator, "  \"ws_url\": \"");
-        try appendEscapedString(&json_buf, allocator, url);
+        try json.appendEscapedString(allocator, &json_buf, url);
         try json_buf.appendSlice(allocator, "\"");
     }
 
@@ -98,7 +84,7 @@ fn serializeConfig(allocator: std.mem.Allocator, config: Config) ![]const u8 {
         if (!first) try json_buf.appendSlice(allocator, ",\n");
         first = false;
         try json_buf.appendSlice(allocator, "  \"last_target\": \"");
-        try appendEscapedString(&json_buf, allocator, target);
+        try json.appendEscapedString(allocator, &json_buf, target);
         try json_buf.appendSlice(allocator, "\"");
     }
 
@@ -234,7 +220,7 @@ test "appendEscapedString - no special characters" {
     var buf: std.ArrayList(u8) = .empty;
     defer buf.deinit(std.testing.allocator);
 
-    try appendEscapedString(&buf, std.testing.allocator, "hello world");
+    try json.appendEscapedString(std.testing.allocator, &buf, "hello world");
     try std.testing.expectEqualStrings("hello world", buf.items);
 }
 
@@ -242,7 +228,7 @@ test "appendEscapedString - with backslashes" {
     var buf: std.ArrayList(u8) = .empty;
     defer buf.deinit(std.testing.allocator);
 
-    try appendEscapedString(&buf, std.testing.allocator, "path\\to\\file");
+    try json.appendEscapedString(std.testing.allocator, &buf, "path\\to\\file");
     try std.testing.expectEqualStrings("path\\\\to\\\\file", buf.items);
 }
 
@@ -250,7 +236,7 @@ test "appendEscapedString - with quotes" {
     var buf: std.ArrayList(u8) = .empty;
     defer buf.deinit(std.testing.allocator);
 
-    try appendEscapedString(&buf, std.testing.allocator, "say \"hello\"");
+    try json.appendEscapedString(std.testing.allocator, &buf, "say \"hello\"");
     try std.testing.expectEqualStrings("say \\\"hello\\\"", buf.items);
 }
 
@@ -258,7 +244,7 @@ test "appendEscapedString - with newlines" {
     var buf: std.ArrayList(u8) = .empty;
     defer buf.deinit(std.testing.allocator);
 
-    try appendEscapedString(&buf, std.testing.allocator, "line1\nline2");
+    try json.appendEscapedString(std.testing.allocator, &buf, "line1\nline2");
     try std.testing.expectEqualStrings("line1\\nline2", buf.items);
 }
 
@@ -266,7 +252,7 @@ test "appendEscapedString - with carriage returns" {
     var buf: std.ArrayList(u8) = .empty;
     defer buf.deinit(std.testing.allocator);
 
-    try appendEscapedString(&buf, std.testing.allocator, "line1\r\nline2");
+    try json.appendEscapedString(std.testing.allocator, &buf, "line1\r\nline2");
     try std.testing.expectEqualStrings("line1\\r\\nline2", buf.items);
 }
 
@@ -274,7 +260,7 @@ test "appendEscapedString - with tabs" {
     var buf: std.ArrayList(u8) = .empty;
     defer buf.deinit(std.testing.allocator);
 
-    try appendEscapedString(&buf, std.testing.allocator, "col1\tcol2");
+    try json.appendEscapedString(std.testing.allocator, &buf, "col1\tcol2");
     try std.testing.expectEqualStrings("col1\\tcol2", buf.items);
 }
 
@@ -282,7 +268,7 @@ test "appendEscapedString - all special characters" {
     var buf: std.ArrayList(u8) = .empty;
     defer buf.deinit(std.testing.allocator);
 
-    try appendEscapedString(&buf, std.testing.allocator, "a\"b\\c\nd\re\tf");
+    try json.appendEscapedString(std.testing.allocator, &buf, "a\"b\\c\nd\re\tf");
     try std.testing.expectEqualStrings("a\\\"b\\\\c\\nd\\re\\tf", buf.items);
 }
 

@@ -26,7 +26,7 @@ pub fn session(session_ctx: *const session_mod.SessionContext, positional: []con
         if (session_ctx.loadConfig()) |cfg| {
             var config = cfg;
             defer config.deinit(allocator);
-            if (config.port != 9222) std.debug.print("Port: {}\n", .{config.port});
+            if (config.port) |p| std.debug.print("Port: {}\n", .{p});
             if (config.ws_url) |ws| std.debug.print("WebSocket URL: {s}\n", .{ws});
             if (config.viewport_width) |w| {
                 if (config.viewport_height) |h| {
@@ -104,11 +104,11 @@ fn showSession(allocator: std.mem.Allocator, io: std.Io, name: []const u8) !void
         allocator.free(sd);
     }
 
-    const cfg = session_mod.loadSessionConfig(allocator, io, name);
+    const cfg = session_mod.loadSessionConfig(allocator, io, name, .{});
     if (cfg) |c| {
         var config = c;
         defer config.deinit(allocator);
-        if (config.port != 9222) std.debug.print("Port: {}\n", .{config.port});
+        if (config.port) |p| std.debug.print("Port: {}\n", .{p});
         if (config.ws_url) |ws| std.debug.print("WebSocket URL: {s}\n", .{ws});
         if (config.chrome_path) |cp| std.debug.print("Chrome: {s}\n", .{cp});
         if (config.data_dir) |dd| std.debug.print("Data dir: {s}\n", .{dd});

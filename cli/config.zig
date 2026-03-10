@@ -4,16 +4,20 @@ const json = @import("json");
 const load_config = @import("config/loadConfig.zig");
 pub const loadConfig = load_config.loadConfig;
 pub const loadConfigFromPath = load_config.loadConfigFromPath;
+pub const LoadOptions = load_config.LoadOptions;
 
 const save_config = @import("config/saveConfig.zig");
 pub const saveConfig = save_config.saveConfig;
 pub const saveConfigToPath = save_config.saveConfigToPath;
 
+const merge_config = @import("config/mergeConfig.zig");
+pub const mergeConfig = merge_config.mergeConfig;
+
 /// Configuration stored in zchrome.json alongside the executable
 pub const Config = struct {
     chrome_path: ?[]const u8 = null,
     data_dir: ?[]const u8 = null,
-    port: u16 = 9222,
+    port: ?u16 = null,
     ws_url: ?[]const u8 = null,
     last_target: ?[]const u8 = null,
     last_mouse_x: ?f64 = null,
@@ -61,7 +65,8 @@ pub const Config = struct {
     }
 };
 
-const config_filename = "zchrome.json";
+pub const config_filename = "zchrome.json";
+pub const user_config_filename = "zchrome.user.json";
 
 /// Get the path to zchrome.json (alongside the executable)
 pub fn getConfigPath(allocator: std.mem.Allocator, io: std.Io) ![]const u8 {
@@ -72,6 +77,16 @@ pub fn getConfigPath(allocator: std.mem.Allocator, io: std.Io) ![]const u8 {
     };
     defer allocator.free(exe_dir);
     return std.fs.path.join(allocator, &.{ exe_dir, config_filename });
+}
+
+/// Get user config path from base config path (e.g., zchrome.json -> zchrome.user.json)
+pub fn getUserConfigPath(allocator: std.mem.Allocator, base_path: []const u8) ?[]const u8 {
+    if (std.mem.endsWith(u8, base_path, ".json")) {
+        const stem = base_path[0 .. base_path.len - 5]; // Remove ".json"
+        return std.fmt.allocPrint(allocator, "{s}.user.json", .{stem}) catch null;
+    }
+    // If path doesn't end with .json, append .user.json
+    return std.fmt.allocPrint(allocator, "{s}.user.json", .{base_path}) catch null;
 }
 
 /// Get the default snapshot file path (alongside the executable)

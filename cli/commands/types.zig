@@ -38,7 +38,7 @@ pub const CommandCtx = struct {
         if (self.session) |s| {
             return s.loadConfig() orelse config_mod.Config{};
         }
-        return config_mod.loadConfig(self.allocator, self.io) orelse config_mod.Config{};
+        return config_mod.loadConfig(self.allocator, self.io, .{}) orelse config_mod.Config{};
     }
 
     /// Save config using session context if available, otherwise fallback to global

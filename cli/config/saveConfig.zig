@@ -3,11 +3,10 @@ const json = @import("json");
 const root = @import("../config.zig");
 
 const Config = root.Config;
-const getConfigPath = root.getConfigPath;
 
 /// Save configuration to zchrome.json (legacy - uses exe directory)
 pub fn saveConfig(config: Config, allocator: std.mem.Allocator, io: std.Io) !void {
-    const config_path = try getConfigPath(allocator, io);
+    const config_path = try root.getConfigPath(allocator, io);
     defer allocator.free(config_path);
     try saveConfigToPath(config, allocator, io, config_path);
 }
@@ -38,12 +37,13 @@ pub fn saveConfigToPath(config: Config, allocator: std.mem.Allocator, io: std.Io
         try json_buf.appendSlice(allocator, "\"");
     }
 
-    // Always write port
-    if (!first) try json_buf.appendSlice(allocator, ",\n");
-    first = false;
-    const port_str = try std.fmt.allocPrint(allocator, "  \"port\": {}", .{config.port});
-    defer allocator.free(port_str);
-    try json_buf.appendSlice(allocator, port_str);
+    if (config.port) |port| {
+        if (!first) try json_buf.appendSlice(allocator, ",\n");
+        first = false;
+        const port_str = try std.fmt.allocPrint(allocator, "  \"port\": {}", .{port});
+        defer allocator.free(port_str);
+        try json_buf.appendSlice(allocator, port_str);
+    }
 
     if (config.ws_url) |url| {
         if (!first) try json_buf.appendSlice(allocator, ",\n");

@@ -608,7 +608,7 @@ fn findFirstRealPage(pages: []cdp.TargetInfo) ?*cdp.TargetInfo {
     return null;
 }
 
-pub fn cmdOpen(args: Args, allocator: std.mem.Allocator, io: std.Io) !void {
+pub fn cmdOpen(args: Args, allocator: std.mem.Allocator, io: std.Io, config: *config_mod.Config) !void {
     const port = args.port orelse 9222;
 
     if (http_mod.isChromeRunning(io, port)) {
@@ -618,24 +618,10 @@ pub fn cmdOpen(args: Args, allocator: std.mem.Allocator, io: std.Io) !void {
         };
         defer allocator.free(current_ws_url);
 
-        var is_same_session = false;
-        var existing_chrome_args: ?[]const []const u8 = null;
-        if (args.session_ctx) |ctx| {
-            if (ctx.loadConfig()) |cfg| {
-                var config = cfg;
-                if (config.ws_url) |saved_ws_url| {
-                    is_same_session = std.mem.eql(u8, saved_ws_url, current_ws_url);
-                }
-                // Preserve chrome_args - take ownership, don't free with config
-                existing_chrome_args = config.chrome_args;
-                config.chrome_args = null;
-                config.deinit(allocator);
-            }
-        }
-        defer if (existing_chrome_args) |chrome_args| {
-            for (chrome_args) |arg| allocator.free(arg);
-            allocator.free(chrome_args);
-        };
+        const is_same_session = if (config.ws_url) |saved_ws_url|
+            std.mem.eql(u8, saved_ws_url, current_ws_url)
+        else
+            false;
 
         if (is_same_session) {
             std.debug.print("Chrome already running on port {}\n", .{port});
@@ -647,7 +633,7 @@ pub fn cmdOpen(args: Args, allocator: std.mem.Allocator, io: std.Io) !void {
                 .port = port,
                 .ws_url = current_ws_url,
                 .last_target = null,
-                .chrome_args = existing_chrome_args,
+                .chrome_args = config.chrome_args,
             };
             if (args.session_ctx) |ctx| {
                 ctx.saveConfig(save_config) catch |err| {
@@ -702,32 +688,11 @@ pub fn cmdOpen(args: Args, allocator: std.mem.Allocator, io: std.Io) !void {
     }
 
     // Append chrome_args from config (added last so they can override defaults)
-    // We need to dupe the strings since config will be freed, and keep them for saving later
-    var duped_chrome_args: std.ArrayList([]const u8) = .empty;
-    defer {
-        for (duped_chrome_args.items) |arg| allocator.free(arg);
-        duped_chrome_args.deinit(allocator);
-    }
-
-    if (args.session_ctx) |ctx| {
-        if (ctx.loadConfig()) |cfg| {
-            var config = cfg;
-            defer config.deinit(allocator);
-            if (config.chrome_args) |chrome_args| {
-                for (chrome_args) |arg| {
-                    const duped = try allocator.dupe(u8, arg);
-                    try duped_chrome_args.append(allocator, duped);
-                    try argv_list.append(allocator, duped);
-                }
-            }
+    if (config.chrome_args) |chrome_args| {
+        for (chrome_args) |arg| {
+            try argv_list.append(allocator, arg);
         }
     }
-
-    // Convert to slice for saving (don't free these - they're owned by duped_chrome_args)
-    const chrome_args_for_save: ?[]const []const u8 = if (duped_chrome_args.items.len > 0)
-        duped_chrome_args.items
-    else
-        null;
 
     std.debug.print("Launching Chrome...\n", .{});
     std.debug.print("  Executable: {s}\n", .{chrome_path});
@@ -763,7 +728,7 @@ pub fn cmdOpen(args: Args, allocator: std.mem.Allocator, io: std.Io) !void {
         .port = port,
         .ws_url = null,
         .last_target = null,
-        .chrome_args = chrome_args_for_save,
+        .chrome_args = config.chrome_args,
     };
     if (args.session_ctx) |ctx| {
         ctx.saveConfig(new_config) catch |err| {

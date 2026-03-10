@@ -60,7 +60,7 @@ pub fn applyEmulationSettings(session: *cdp.Session, allocator: std.mem.Allocato
     // Chrome auto-dismisses the dialog when Page.enable() is called later.
     _ = session.sendCommand("Page.enable", .{}) catch {};
 
-    const config_opt = if (session_ctx) |ctx| ctx.loadConfig() else config_mod.loadConfig(allocator, io);
+    const config_opt = if (session_ctx) |ctx| ctx.loadConfig() else config_mod.loadConfig(allocator, io, .{});
     var config = config_opt orelse return;
     defer config.deinit(allocator);
 

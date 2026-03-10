@@ -1,39 +1,61 @@
 const std = @import("std");
 const json = @import("json");
 const root = @import("../config.zig");
+const merge_config = @import("mergeConfig.zig");
 
 const Config = root.Config;
-const config_filename = "zchrome.json";
+const getConfigPath = root.getConfigPath;
+const getUserConfigPath = root.getUserConfigPath;
+const mergeConfig = merge_config.mergeConfig;
+
+pub const LoadOptions = struct {
+    verbose: bool = false,
+};
 
 /// Load configuration from zchrome.json (legacy - uses exe directory)
-pub fn loadConfig(allocator: std.mem.Allocator, io: std.Io) ?Config {
-    // Try to get exe directory, fall back to cwd
-    const exe_dir_path = std.process.executableDirPathAlloc(io, allocator) catch null;
-    defer if (exe_dir_path) |p| allocator.free(p);
-
-    const config_path = if (exe_dir_path) |p|
-        std.fs.path.join(allocator, &.{ p, config_filename }) catch null
-    else
-        null;
-    defer if (config_path) |cp| allocator.free(cp);
-
-    if (config_path) |path| {
-        return loadConfigFromPath(allocator, io, path);
-    }
-
-    return loadConfigFromPath(allocator, io, config_filename);
+pub fn loadConfig(allocator: std.mem.Allocator, io: std.Io, options: LoadOptions) ?Config {
+    const config_path = getConfigPath(allocator, io) catch return null;
+    defer allocator.free(config_path);
+    return loadConfigFromPath(allocator, io, config_path, options);
 }
 
 /// Load configuration from a specific path
-pub fn loadConfigFromPath(allocator: std.mem.Allocator, io: std.Io, path: []const u8) ?Config {
-    // Read the file
+pub fn loadConfigFromPath(allocator: std.mem.Allocator, io: std.Io, path: []const u8, options: LoadOptions) ?Config {
+    if (options.verbose) {
+        std.debug.print("[config] Loading base config: {s}\n", .{path});
+    }
+
+    var config = readConfigFile(allocator, io, path, options) orelse return null;
+
+    // Try to load user config and merge over base
+    const user_path = getUserConfigPath(allocator, path) orelse return config;
+    defer allocator.free(user_path);
+
+    if (options.verbose) {
+        std.debug.print("[config] Looking for user config: {s}\n", .{user_path});
+    }
+
+    var user_config = readConfigFile(allocator, io, user_path, options) orelse {
+        if (options.verbose) {
+            std.debug.print("[config] No user config found, using base config only\n", .{});
+        }
+        return config;
+    };
+
+    if (options.verbose) {
+        std.debug.print("[config] Merging user config over base config\n", .{});
+    }
+
+    return mergeConfig(allocator, &config, &user_config);
+}
+
+/// Read and parse a config file from the given path
+fn readConfigFile(allocator: std.mem.Allocator, io: std.Io, path: []const u8, options: LoadOptions) ?Config {
     var file_buf: [64 * 1024]u8 = undefined;
 
-    // Try absolute path first
     const content = blk: {
         const dir = std.Io.Dir.cwd();
         break :blk dir.readFile(io, path, &file_buf) catch {
-            // Try as absolute path by opening parent directory
             const parent = std.fs.path.dirname(path) orelse return null;
             const filename = std.fs.path.basename(path);
             const abs_dir = std.Io.Dir.openDirAbsolute(io, parent, .{}) catch return null;
@@ -41,11 +63,18 @@ pub fn loadConfigFromPath(allocator: std.mem.Allocator, io: std.Io, path: []cons
         };
     };
 
-    // Parse JSON
+    if (options.verbose) {
+        std.debug.print("[config] Successfully read: {s}\n", .{path});
+    }
+
+    return parseConfigFromContent(allocator, content);
+}
+
+/// Parse config from JSON content
+fn parseConfigFromContent(allocator: std.mem.Allocator, content: []const u8) ?Config {
     var parsed = json.parse(allocator, content, .{}) catch return null;
     defer parsed.deinit(allocator);
 
-    // Extract fields
     var config = Config{};
 
     if (parsed.get("chrome_path")) |v| {

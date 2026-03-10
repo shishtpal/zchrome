@@ -7,6 +7,7 @@ pub const SessionContext = struct {
     allocator: std.mem.Allocator,
     io: std.Io,
     init: std.process.Init,
+    verbose: bool = false,
 
     /// Get config path for this session
     pub fn configPath(self: *const SessionContext) ![]const u8 {
@@ -20,7 +21,7 @@ pub const SessionContext = struct {
 
     /// Load config for this session
     pub fn loadConfig(self: *const SessionContext) ?config_mod.Config {
-        return loadSessionConfig(self.allocator, self.io, self.name);
+        return loadSessionConfig(self.allocator, self.io, self.name, .{ .verbose = self.verbose });
     }
 
     /// Save config for this session
@@ -108,11 +109,11 @@ fn ensureSessionDir(allocator: std.mem.Allocator, io: std.Io, session_name: []co
 }
 
 /// Load config for a session
-pub fn loadSessionConfig(allocator: std.mem.Allocator, io: std.Io, session_name: []const u8) ?config_mod.Config {
+pub fn loadSessionConfig(allocator: std.mem.Allocator, io: std.Io, session_name: []const u8, options: config_mod.LoadOptions) ?config_mod.Config {
     const config_path = getSessionConfigPath(allocator, io, session_name) catch return null;
     defer allocator.free(config_path);
 
-    return config_mod.loadConfigFromPath(allocator, io, config_path);
+    return config_mod.loadConfigFromPath(allocator, io, config_path, options);
 }
 
 /// Save config for a session (creates session dir if needed)

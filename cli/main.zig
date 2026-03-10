@@ -71,6 +71,7 @@ pub fn main(init: std.process.Init) !void {
         .allocator = allocator,
         .io = init.io,
         .init = init,
+        .verbose = args.verbose,
     };
     defer session_ctx.deinit();
 
@@ -130,7 +131,7 @@ pub fn main(init: std.process.Init) !void {
                     .timeout_ms = args.timeout_ms,
                 });
             } else {
-                try runner.cmdOpen(args, allocator, init.io);
+                try runner.cmdOpen(args, allocator, init.io, &config);
             }
             return;
         },

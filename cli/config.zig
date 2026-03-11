@@ -41,8 +41,14 @@ pub const Config = struct {
     provider_session_id: ?[]const u8 = null, // Active cloud session ID
     provider_auto_cleanup: ?bool = null, // Override provider's default cleanup behavior
 
+    // Browser communication mode
+    via: ?[]const u8 = null, // "port" or "pipe"
+
     // Chrome launch arguments
     chrome_args: ?[]const []const u8 = null, // Additional Chrome CLI arguments
+
+    // Extension paths (unpacked extensions to load)
+    extensions: ?[]const []const u8 = null, // Paths to unpacked extensions
 
     pub fn deinit(self: *Config, allocator: std.mem.Allocator) void {
         if (self.chrome_path) |p| allocator.free(p);
@@ -61,6 +67,11 @@ pub const Config = struct {
             for (args) |arg| allocator.free(arg);
             allocator.free(args);
         }
+        if (self.extensions) |exts| {
+            for (exts) |ext| allocator.free(ext);
+            allocator.free(exts);
+        }
+        if (self.via) |v| allocator.free(v);
         self.* = .{};
     }
 };

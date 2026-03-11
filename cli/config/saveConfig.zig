@@ -186,6 +186,29 @@ pub fn saveConfigToPath(config: Config, allocator: std.mem.Allocator, io: std.Io
         }
     }
 
+    if (config.via) |via| {
+        if (!first) try json_buf.appendSlice(allocator, ",\n");
+        first = false;
+        try json_buf.appendSlice(allocator, "  \"via\": \"");
+        try json.appendEscapedString(allocator, &json_buf, via);
+        try json_buf.appendSlice(allocator, "\"");
+    }
+
+    if (config.extensions) |exts| {
+        if (exts.len > 0) {
+            if (!first) try json_buf.appendSlice(allocator, ",\n");
+            first = false;
+            try json_buf.appendSlice(allocator, "  \"extensions\": [");
+            for (exts, 0..) |ext, i| {
+                if (i > 0) try json_buf.appendSlice(allocator, ", ");
+                try json_buf.appendSlice(allocator, "\"");
+                try json.appendEscapedString(allocator, &json_buf, ext);
+                try json_buf.appendSlice(allocator, "\"");
+            }
+            try json_buf.appendSlice(allocator, "]");
+        }
+    }
+
     try json_buf.appendSlice(allocator, "\n}\n");
 
     // Write to file at specified path

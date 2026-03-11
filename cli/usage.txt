@@ -171,6 +171,26 @@ CLOUD BROWSER PROVIDERS:
   Once a provider is set, all subsequent commands use the cloud browser.
   Sessions persist between commands for faster execution.
 
+CHROME EXTENSIONS:
+  zchrome extensions               List loaded extensions
+  zchrome extensions list          List loaded extensions
+  zchrome extensions load <path>   Load an unpacked extension
+  zchrome extensions unload <path> Unload an extension
+
+  Notes:
+  --via=port             (Default) Use --load-extension CLI flag
+                         Compatible with Chrome 137+ via workaround
+  --via=pipe             Use CDP Extensions.loadUnpacked via pipe
+                         Future-proof method for Chrome 137+
+                         (POSIX only, experimental)
+
+  Notes:
+  - Extensions require headed mode (headless is auto-disabled)
+  - Extensions cannot be used with cloud providers
+  - Restart Chrome with 'zchrome open' after loading/unloading extensions
+  - Extensions are stored per-session
+  - The --via setting is saved to config for subsequent commands
+
 ENVIRONMENT VARIABLES:
   ZCHROME_PROVIDER             Default provider (local, kernel, notte, browserbase)
   ZCHROME_KERNEL_API_KEY       Kernel.sh API key
@@ -182,11 +202,18 @@ ENVIRONMENT VARIABLES:
   ZCHROME_VERBOSE              Enable verbose mode (1 or true)
   ZCHROME_HEADLESS             Headless mode (new or old)
   ZCHROME_SESSION              Default session name
+  ZCHROME_EXTENSIONS           Comma-separated extension paths (merges with config)
 
 CONFIG FILE:
   zchrome.json is stored alongside the executable for portability.
-  It stores chrome_path, data_dir, port, ws_url, last_target, and mouse position.
+  It stores chrome_path, data_dir, port, ws_url, last_target, extensions, via, and mouse position.
   Options from command line override config file values.
+
+  To manually configure extensions in config:
+  {
+    "extensions": ["/path/to/extension1", "/path/to/extension2"],
+    "via": "port"
+  }
 
 EXAMPLES:
   # Launch Chrome and connect
@@ -319,3 +346,13 @@ EXAMPLES:
   # Switch back to local Chrome
   zchrome provider set local
   zchrome open                                   # Now launches local Chrome
+
+  # Chrome extensions
+  zchrome extensions load /path/to/my-extension # Load an unpacked extension
+  zchrome extensions list                        # List loaded extensions
+  zchrome open                                   # Restart Chrome with extension
+  zchrome extensions unload /path/to/my-extension # Remove extension
+
+  # Load extensions via environment variable
+  # $env:ZCHROME_EXTENSIONS = "/ext1,/ext2"
+  zchrome open                                   # Opens with extensions loaded

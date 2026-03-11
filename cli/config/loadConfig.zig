@@ -158,6 +158,24 @@ fn parseConfigFromContent(allocator: std.mem.Allocator, content: []const u8) ?Co
             config.chrome_args = args_list.toOwnedSlice(allocator) catch null;
         }
     }
+    if (parsed.get("via")) |v| {
+        if (v == .string) {
+            config.via = allocator.dupe(u8, v.string) catch null;
+        }
+    }
+    if (parsed.get("extensions")) |v| {
+        if (v == .array) {
+            var ext_list: std.ArrayList([]const u8) = .empty;
+            for (v.array.items) |item| {
+                if (item == .string) {
+                    if (allocator.dupe(u8, item.string)) |s| {
+                        ext_list.append(allocator, s) catch {};
+                    } else |_| {}
+                }
+            }
+            config.extensions = ext_list.toOwnedSlice(allocator) catch null;
+        }
+    }
 
     return config;
 }

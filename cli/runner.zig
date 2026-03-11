@@ -6,6 +6,7 @@ const http_mod = @import("http.zig");
 const interactive_mod = @import("interactive/mod.zig");
 const impl = @import("commands/mod.zig");
 const session_mod = @import("session.zig");
+const via_pipe = @import("via_pipe/mod.zig");
 
 const Args = args_mod.Args;
 
@@ -634,6 +635,7 @@ pub fn cmdOpen(args: Args, allocator: std.mem.Allocator, io: std.Io, config: *co
                 .ws_url = current_ws_url,
                 .last_target = null,
                 .chrome_args = config.chrome_args,
+                .extensions = config.extensions,
             };
             if (args.session_ctx) |ctx| {
                 ctx.saveConfig(save_config) catch |err| {
@@ -682,9 +684,51 @@ pub fn cmdOpen(args: Args, allocator: std.mem.Allocator, io: std.Io, config: *co
     defer allocator.free(data_arg);
     try argv_list.append(allocator, data_arg);
 
-    if (args.headless != .off) {
+    // Check for extensions
+    const has_extensions = config.extensions != null and config.extensions.?.len > 0;
+
+    // Resolve via mode: CLI arg > config > default (port)
+    const via_mode: args_mod.ViaMode = args.via orelse blk: {
+        if (config.via) |v| {
+            break :blk std.meta.stringToEnum(args_mod.ViaMode, v) orelse .port;
+        }
+        break :blk .port;
+    };
+
+    // Handle headless mode (extensions require headed mode)
+    if (args.headless != .off and !has_extensions) {
         const headless_arg: []const u8 = if (args.headless == .new) "--headless=new" else "--headless";
         try argv_list.append(allocator, headless_arg);
+    } else if (args.headless != .off and has_extensions) {
+        std.debug.print("Note: Running in headed mode (extensions require GUI)\n", .{});
+    }
+
+    // Load extensions if configured
+    // Track extension args separately so we can free them after spawn
+    var ext_args: std.ArrayList([]const u8) = .empty;
+    defer {
+        for (ext_args.items) |arg| allocator.free(arg);
+        ext_args.deinit(allocator);
+    }
+    if (has_extensions) {
+        switch (via_mode) {
+            .port => {
+                // Port mode: Use --load-extension with workaround flag for Chrome 137+
+                try argv_list.append(allocator, "--disable-features=DisableLoadExtensionCommandLineSwitch");
+                for (config.extensions.?) |ext_path| {
+                    const ext_arg = try std.fmt.allocPrint(allocator, "--load-extension={s}", .{ext_path});
+                    try ext_args.append(allocator, ext_arg);
+                    try argv_list.append(allocator, ext_arg);
+                }
+            },
+            .pipe => {
+                // Pipe mode: Extensions will be loaded via CDP after Chrome starts
+                // Add flags needed for CDP extension loading
+                try argv_list.append(allocator, "--remote-debugging-pipe");
+                try argv_list.append(allocator, "--enable-unsafe-extension-debugging");
+                std.debug.print("Note: Using pipe mode for extension loading via CDP\n", .{});
+            },
+        }
     }
 
     // Append chrome_args from config (added last so they can override defaults)
@@ -698,8 +742,12 @@ pub fn cmdOpen(args: Args, allocator: std.mem.Allocator, io: std.Io, config: *co
     std.debug.print("  Executable: {s}\n", .{chrome_path});
     std.debug.print("  Port: {}\n", .{port});
     std.debug.print("  Data dir: {s}\n", .{data_dir});
-    if (args.headless != .off) {
+    if (args.headless != .off and !has_extensions) {
         std.debug.print("  Headless: {s}\n", .{@tagName(args.headless)});
+    }
+    if (has_extensions) {
+        std.debug.print("  Extensions: {}\n", .{config.extensions.?.len});
+        std.debug.print("  Via: {s}\n", .{@tagName(via_mode)});
     }
 
     if (args.verbose) {
@@ -722,6 +770,10 @@ pub fn cmdOpen(args: Args, allocator: std.mem.Allocator, io: std.Io, config: *co
 
     std.debug.print("\nChrome launched. Run 'zchrome connect' to get WebSocket URL.\n", .{});
 
+    // Save via mode as string
+    const via_str = @tagName(via_mode);
+    const via_to_save = allocator.dupe(u8, via_str) catch null;
+
     const new_config = config_mod.Config{
         .chrome_path = chrome_path,
         .data_dir = data_dir,
@@ -729,12 +781,15 @@ pub fn cmdOpen(args: Args, allocator: std.mem.Allocator, io: std.Io, config: *co
         .ws_url = null,
         .last_target = null,
         .chrome_args = config.chrome_args,
+        .extensions = config.extensions,
+        .via = via_to_save,
     };
     if (args.session_ctx) |ctx| {
         ctx.saveConfig(new_config) catch |err| {
             std.debug.print("Warning: Could not save config: {}\n", .{err});
         };
     }
+    if (via_to_save) |v| allocator.free(v);
 }
 
 pub fn cmdConnect(args: Args, allocator: std.mem.Allocator, io: std.Io) !void {

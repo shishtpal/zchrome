@@ -87,6 +87,11 @@ pub fn main(init: std.process.Init) !void {
         return;
     }
 
+    if (args.command == .extensions) {
+        try impl.extensionsCmd(&session_ctx, args.positional);
+        return;
+    }
+
     var config = session_ctx.loadConfig() orelse config_mod.Config{};
     defer config.deinit(allocator);
 
@@ -103,6 +108,33 @@ pub fn main(init: std.process.Init) !void {
         args.port = config.port;
     }
 
+    // Merge ZCHROME_EXTENSIONS environment variable with config extensions
+    if (init.environ_map.get("ZCHROME_EXTENSIONS")) |v| {
+        if (v.len > 0) {
+            var ext_list: std.ArrayList([]const u8) = .empty;
+            // Copy existing config extensions
+            if (config.extensions) |exts| {
+                for (exts) |ext| {
+                    ext_list.append(allocator, allocator.dupe(u8, ext) catch continue) catch {};
+                }
+            }
+            // Parse and add env var extensions (comma-separated)
+            var iter = std.mem.splitScalar(u8, v, ',');
+            while (iter.next()) |path| {
+                const trimmed = std.mem.trim(u8, path, " ");
+                if (trimmed.len > 0) {
+                    ext_list.append(allocator, allocator.dupe(u8, trimmed) catch continue) catch {};
+                }
+            }
+            // Replace config.extensions with merged list
+            if (config.extensions) |old| {
+                for (old) |ext| allocator.free(ext);
+                allocator.free(old);
+            }
+            config.extensions = ext_list.toOwnedSlice(allocator) catch null;
+        }
+    }
+
     // Determine effective provider (CLI flag > config > "local")
     const effective_provider = args.provider orelse config.provider orelse "local";
     const is_cloud_provider = !std.mem.eql(u8, effective_provider, "local");
@@ -110,10 +142,19 @@ pub fn main(init: std.process.Init) !void {
     const needs_target = switch (args.command) {
         // navigate has its own page selection logic in cmdNavigate
         .screenshot, .pdf, .evaluate, .network, .cookies, .storage, .snapshot, .click, .dblclick, .focus, .type, .fill, .select, .multiselect, .hover, .check, .uncheck, .scroll, .scrollintoview, .drag, .get, .upload, .back, .forward, .reload, .press, .keydown, .keyup, .wait, .mouse, .cursor, .set, .dialog, .dev, .diff, .dom => true,
-        .navigate, .tab, .window, .version, .list_targets, .pages, .interactive, .open, .connect, .session, .provider, .help => false,
+        .navigate, .tab, .window, .version, .list_targets, .pages, .interactive, .open, .connect, .session, .provider, .extensions, .help => false,
     };
     if (needs_target and args.use_target == null and config.last_target != null) {
         args.use_target = allocator.dupe(u8, config.last_target.?) catch null;
+    }
+
+    // Validate extensions compatibility
+    if (config.extensions != null and config.extensions.?.len > 0) {
+        if (is_cloud_provider) {
+            std.debug.print("Error: Cannot use extensions with cloud providers\n", .{});
+            std.debug.print("Extensions require a local browser.\n", .{});
+            std.process.exit(1);
+        }
     }
 
     switch (args.command) {

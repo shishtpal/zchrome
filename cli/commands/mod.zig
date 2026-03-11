@@ -35,6 +35,7 @@ const diff_mod = @import("../diff/mod.zig");
 const diff_cmd_mod = @import("diff.zig");
 const dom_mod = @import("dom.zig");
 const provider_mod = @import("provider.zig");
+const extensions_mod = @import("extensions.zig");
 
 // ─── Type Re-exports ─────────────────────────────────────────────────────────
 
@@ -196,3 +197,8 @@ pub const ExtractMode = dom_mod.ExtractMode;
 // ─── Provider Re-exports ──────────────────────────────────────────────────────
 
 pub const providerCmd = provider_mod.providerCmd;
+
+// ─── Extensions Re-exports ────────────────────────────────────────────────────
+
+pub const extensionsCmd = extensions_mod.extensions;
+pub const printExtensionsHelp = extensions_mod.printExtensionsHelp;

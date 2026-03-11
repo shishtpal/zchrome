@@ -2,6 +2,12 @@ const std = @import("std");
 const cdp = @import("cdp");
 const session_mod = @import("session.zig");
 
+/// Browser communication mode
+pub const ViaMode = enum {
+    port, // Default: --remote-debugging-port + --load-extension
+    pipe, // --remote-debugging-pipe + CDP Extensions.loadUnpacked
+};
+
 pub const Args = struct {
     url: ?[]const u8 = null,
     headless: cdp.Headless = .off,
@@ -20,6 +26,8 @@ pub const Args = struct {
     session_ctx: ?*const session_mod.SessionContext = null,
     /// Cloud browser provider name (local, kernel, notte, browserbase)
     provider: ?[]const u8 = null,
+    /// Browser communication mode (port or pipe)
+    via: ?ViaMode = null,
     /// Cleanup cloud session on exit
     cleanup_session: bool = false,
     snap_interactive: bool = false,
@@ -86,6 +94,7 @@ pub const Args = struct {
         diff,
         dom,
         provider,
+        extensions,
         help,
     };
 
@@ -147,6 +156,7 @@ pub fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
     var replay_from: ?usize = null;
     var provider_arg: ?[]const u8 = null;
     var cleanup_session: bool = false;
+    var via_mode: ?ViaMode = null;
 
     _ = iter.skip();
 
@@ -254,6 +264,13 @@ pub fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
                 provider_arg = try allocator.dupe(u8, val);
             } else if (std.mem.eql(u8, arg, "--cleanup")) {
                 cleanup_session = true;
+            } else if (std.mem.eql(u8, arg, "--via")) {
+                const val = iter.next() orelse return error.MissingArgument;
+                via_mode = std.meta.stringToEnum(ViaMode, val);
+                if (via_mode == null) {
+                    std.debug.print("Error: Invalid --via value '{s}'. Use 'port' or 'pipe'.\n", .{val});
+                    return error.InvalidArgument;
+                }
             } else {
                 try positional.append(allocator, try allocator.dupe(u8, arg));
             }
@@ -305,6 +322,7 @@ pub fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
         .replay_from = replay_from,
         .provider = provider_arg,
         .cleanup_session = cleanup_session,
+        .via = via_mode,
     };
 }
 

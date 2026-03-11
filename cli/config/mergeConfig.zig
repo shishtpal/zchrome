@@ -36,8 +36,12 @@ pub fn mergeConfig(allocator: std.mem.Allocator, base: *Config, user: *Config) C
         // Port - user overrides base if user has a value set
         .port = user.port orelse base.port,
 
-        // Array field - user overrides base (free the losing value)
+        // Via mode - user overrides base
+        .via = mergeStringField(allocator, &base.via, &user.via),
+
+        // Array fields - user overrides base (free the losing value)
         .chrome_args = mergeArrayField(allocator, &base.chrome_args, &user.chrome_args),
+        .extensions = mergeArrayField(allocator, &base.extensions, &user.extensions),
     };
 }
 

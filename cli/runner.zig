@@ -2,6 +2,7 @@ const std = @import("std");
 const cdp = @import("cdp");
 const args_mod = @import("args.zig");
 const config_mod = @import("config.zig");
+const cursor_utils = @import("cursor/utils.zig");
 const http_mod = @import("http.zig");
 const interactive_mod = @import("interactive/mod.zig");
 const impl = @import("commands/mod.zig");
@@ -794,9 +795,12 @@ pub fn cmdOpen(args: Args, allocator: std.mem.Allocator, io: std.Io, config: *co
         }
 
         std.debug.print("\nExtensions loaded. Chrome is running.\n", .{});
+        std.debug.print("Press Enter to close pipe connection (Chrome will keep running)...\n", .{});
 
-        // Clean up the pipe connection
-        // Chrome will continue running independently after we close the pipe
+        // Wait for user input to keep pipe alive
+        cursor_utils.waitForEnter(io);
+
+        // Clean up pipe connection
         chrome_pipe.deinit();
     } else {
         // Port mode: Use standard process spawn

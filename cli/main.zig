@@ -3,6 +3,7 @@ const cdp = @import("cdp");
 const args_mod = @import("args.zig");
 const cloud = @import("cloud.zig");
 const config_mod = @import("config.zig");
+const globals = @import("globals.zig");
 const impl = @import("commands/mod.zig");
 const runner = @import("runner.zig");
 const session_mod = @import("session.zig");
@@ -44,6 +45,8 @@ pub fn main(init: std.process.Init) !void {
             args.verbose = std.mem.eql(u8, v, "1") or std.mem.eql(u8, v, "true");
         }
     }
+    // Set global verbose flag for use throughout the codebase
+    globals.verbose = args.verbose;
     if (args.headless == .off) {
         if (init.environ_map.get("ZCHROME_HEADLESS")) |v| {
             if (std.mem.eql(u8, v, "new")) {

@@ -152,8 +152,8 @@ This mode:
 - Adds `--enable-unsafe-extension-debugging` flag
 - Loads extensions via CDP after Chrome starts
 
-::: warning
-Pipe mode is experimental and currently only supports POSIX systems (Linux, macOS).
+::: tip
+Pipe mode supports Windows 11, Linux, and macOS.
 :::
 
 ### Configuration

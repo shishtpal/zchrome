@@ -127,7 +127,7 @@ zchrome --session youtube open --port 9223
 zchrome extensions load ./my-extension
 zchrome open --via=port
 
-# Launch with extensions using pipe mode (experimental, POSIX only)
+# Launch with extensions using pipe mode (Windows, Linux, macOS)
 zchrome open --via=pipe
 ```
 
@@ -136,7 +136,7 @@ zchrome open --via=pipe
 | Mode | Description |
 |------|-------------|
 | `port` | (Default) Uses `--load-extension` CLI flag with Chrome 137+ workaround |
-| `pipe` | Uses CDP `Extensions.loadUnpacked` via debugging pipe (experimental) |
+| `pipe` | Uses CDP `Extensions.loadUnpacked` via debugging pipe |
 
 **Port handling:**
 - The port is saved to the session's config and reused automatically

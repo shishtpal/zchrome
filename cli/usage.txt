@@ -182,7 +182,7 @@ CHROME EXTENSIONS:
                          Compatible with Chrome 137+ via workaround
   --via=pipe             Use CDP Extensions.loadUnpacked via pipe
                          Future-proof method for Chrome 137+
-                         (POSIX only, experimental)
+                         (Windows, Linux, macOS)
 
   Notes:
   - Extensions require headed mode (headless is auto-disabled)

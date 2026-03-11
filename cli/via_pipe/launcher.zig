@@ -2,17 +2,119 @@
 //!
 //! Spawns Chrome with --remote-debugging-pipe and sets up file descriptors
 //! 3 (Chrome reads) and 4 (Chrome writes) for CDP communication.
+//!
+//! Platform support:
+//! - POSIX (Linux, macOS): Uses fork/dup2/exec
+//! - Windows: Uses CreateProcessW with STARTUPINFO.lpReserved2
 
 const std = @import("std");
 const json = @import("json");
 const builtin = @import("builtin");
+const globals = @import("../globals.zig");
+
+// Platform-specific types
+const NativeHandle = if (builtin.os.tag == .windows)
+    std.os.windows.HANDLE
+else
+    std.posix.fd_t;
+
+// Platform-specific imports
+const windows = if (builtin.os.tag == .windows) std.os.windows else struct {};
+
+// Windows API extern declarations (not all in Zig stdlib)
+const win32 = if (builtin.os.tag == .windows) struct {
+    const HANDLE = std.os.windows.HANDLE;
+    const BOOL = std.os.windows.BOOL;
+    const DWORD = std.os.windows.DWORD;
+    const LPDWORD = *DWORD;
+    const LPVOID = *anyopaque;
+    const LPCVOID = *const anyopaque;
+    const SECURITY_ATTRIBUTES = std.os.windows.SECURITY_ATTRIBUTES;
+
+    const HANDLE_FLAG_INHERIT: DWORD = 0x00000001;
+    const STD_INPUT_HANDLE: DWORD = @bitCast(@as(i32, -10));
+    const STD_OUTPUT_HANDLE: DWORD = @bitCast(@as(i32, -11));
+    const STD_ERROR_HANDLE: DWORD = @bitCast(@as(i32, -12));
+    const INVALID_HANDLE_VALUE: HANDLE = @ptrFromInt(@as(usize, @bitCast(@as(isize, -1))));
+
+    extern "kernel32" fn CreatePipe(
+        hReadPipe: *HANDLE,
+        hWritePipe: *HANDLE,
+        lpPipeAttributes: ?*SECURITY_ATTRIBUTES,
+        nSize: DWORD,
+    ) callconv(.winapi) BOOL;
+
+    extern "kernel32" fn SetHandleInformation(
+        hObject: HANDLE,
+        dwMask: DWORD,
+        dwFlags: DWORD,
+    ) callconv(.winapi) BOOL;
+
+    extern "kernel32" fn ReadFile(
+        hFile: HANDLE,
+        lpBuffer: [*]u8,
+        nNumberOfBytesToRead: DWORD,
+        lpNumberOfBytesRead: ?LPDWORD,
+        lpOverlapped: ?LPVOID,
+    ) callconv(.winapi) BOOL;
+
+    extern "kernel32" fn WriteFile(
+        hFile: HANDLE,
+        lpBuffer: [*]const u8,
+        nNumberOfBytesToWrite: DWORD,
+        lpNumberOfBytesWritten: ?LPDWORD,
+        lpOverlapped: ?LPVOID,
+    ) callconv(.winapi) BOOL;
+
+    extern "kernel32" fn CloseHandle(hObject: HANDLE) callconv(.winapi) BOOL;
+
+    extern "kernel32" fn GetStdHandle(nStdHandle: DWORD) callconv(.winapi) ?HANDLE;
+
+    extern "kernel32" fn GetLastError() callconv(.winapi) DWORD;
+} else struct {};
+
+// Compile-time platform check
+comptime {
+    const supported = builtin.os.tag == .windows or
+        builtin.os.tag == .linux or
+        builtin.os.tag == .macos or
+        builtin.os.tag.isDarwin();
+    if (!supported) {
+        @compileError("Pipe mode is only supported on Windows, Linux, and macOS");
+    }
+}
+
+// Windows CRT flags for stdio buffer
+const FOPEN: u8 = 0x01;
+const FPIPE: u8 = 0x08;
+const FDEV: u8 = 0x40;
+
+/// Result from a CDP command, wrapping JSON for proper cleanup.
+pub const CommandResult = struct {
+    /// The parsed JSON value (root of the tree)
+    root: json.Value,
+    /// The result portion (may be same as root or a child)
+    value: json.Value,
+    /// Allocator for cleanup
+    allocator: std.mem.Allocator,
+
+    /// Free the JSON data.
+    pub fn deinit(self: *CommandResult) void {
+        self.root.deinit(self.allocator);
+    }
+
+    /// Get a field from the result value.
+    pub fn get(self: *const CommandResult, key: []const u8) ?json.Value {
+        return self.value.get(key);
+    }
+};
 
 /// Chrome process with pipe-based CDP communication.
 pub const ChromePipe = struct {
     /// Pipe for sending commands to Chrome (parent writes, Chrome reads via fd 3)
-    write_pipe: std.fs.File,
+    write_handle: NativeHandle,
     /// Pipe for receiving responses from Chrome (Chrome writes via fd 4, parent reads)
-    read_pipe: std.fs.File,
+    read_handle: NativeHandle,
     /// Read buffer for accumulating responses
     read_buf: std.ArrayList(u8),
     /// Allocator
@@ -29,6 +131,20 @@ pub const ChromePipe = struct {
     /// Spawn Chrome with pipe-based debugging.
     /// Returns a ChromePipe for CDP communication.
     pub fn spawn(
+        allocator: std.mem.Allocator,
+        io: std.Io,
+        chrome_path: []const u8,
+        base_args: []const []const u8,
+    ) !*Self {
+        if (builtin.os.tag == .windows) {
+            return spawnWindows(allocator, io, chrome_path, base_args);
+        } else {
+            return spawnPosix(allocator, io, chrome_path, base_args);
+        }
+    }
+
+    /// POSIX spawn implementation using fork/dup2/exec
+    fn spawnPosix(
         allocator: std.mem.Allocator,
         io: std.Io,
         chrome_path: []const u8,
@@ -104,9 +220,172 @@ pub const ChromePipe = struct {
         // Create ChromePipe instance
         const self = try allocator.create(Self);
         self.* = .{
-            .write_pipe = .{ .handle = pipe_to_chrome[1] },
-            .read_pipe = .{ .handle = pipe_from_chrome[0] },
-            .read_buf = std.ArrayList(u8).init(allocator),
+            .write_handle = pipe_to_chrome[1],
+            .read_handle = pipe_from_chrome[0],
+            .read_buf = .empty,
+            .allocator = allocator,
+            .io = io,
+            .next_id = 1,
+            .is_closed = false,
+        };
+
+        return self;
+    }
+
+    /// Windows spawn implementation using CreateProcessW with lpReserved2
+    fn spawnWindows(
+        allocator: std.mem.Allocator,
+        io: std.Io,
+        chrome_path: []const u8,
+        base_args: []const []const u8,
+    ) !*Self {
+        const HANDLE = win32.HANDLE;
+        const INVALID_HANDLE_VALUE = win32.INVALID_HANDLE_VALUE;
+
+        // Security attributes for inheritable handles
+        var sa: windows.SECURITY_ATTRIBUTES = .{
+            .nLength = @sizeOf(windows.SECURITY_ATTRIBUTES),
+            .lpSecurityDescriptor = null,
+            .bInheritHandle = windows.TRUE,
+        };
+
+        // Create pipe for parent->Chrome (Chrome reads from fd 3)
+        var pipe_to_chrome_read: HANDLE = INVALID_HANDLE_VALUE;
+        var pipe_to_chrome_write: HANDLE = INVALID_HANDLE_VALUE;
+        if (win32.CreatePipe(&pipe_to_chrome_read, &pipe_to_chrome_write, &sa, 0) == 0) {
+            return error.PipeCreationFailed;
+        }
+        errdefer {
+            _ = win32.CloseHandle(pipe_to_chrome_read);
+            _ = win32.CloseHandle(pipe_to_chrome_write);
+        }
+
+        // Make write end non-inheritable (parent keeps this)
+        if (win32.SetHandleInformation(pipe_to_chrome_write, win32.HANDLE_FLAG_INHERIT, 0) == 0) {
+            return error.SetHandleInfoFailed;
+        }
+
+        // Create pipe for Chrome->parent (Chrome writes to fd 4)
+        var pipe_from_chrome_read: HANDLE = INVALID_HANDLE_VALUE;
+        var pipe_from_chrome_write: HANDLE = INVALID_HANDLE_VALUE;
+        if (win32.CreatePipe(&pipe_from_chrome_read, &pipe_from_chrome_write, &sa, 0) == 0) {
+            return error.PipeCreationFailed;
+        }
+        errdefer {
+            _ = win32.CloseHandle(pipe_from_chrome_read);
+            _ = win32.CloseHandle(pipe_from_chrome_write);
+        }
+
+        // Make read end non-inheritable (parent keeps this)
+        if (win32.SetHandleInformation(pipe_from_chrome_read, win32.HANDLE_FLAG_INHERIT, 0) == 0) {
+            return error.SetHandleInfoFailed;
+        }
+
+        // Get standard handles for fd 0-2 (may be null)
+        const std_input = win32.GetStdHandle(win32.STD_INPUT_HANDLE) orelse INVALID_HANDLE_VALUE;
+        const std_output = win32.GetStdHandle(win32.STD_OUTPUT_HANDLE) orelse INVALID_HANDLE_VALUE;
+        const std_error = win32.GetStdHandle(win32.STD_ERROR_HANDLE) orelse INVALID_HANDLE_VALUE;
+
+        // Build stdio buffer for Windows CRT fd inheritance
+        // Layout: int count, u8[count] flags, HANDLE[count] handles
+        const fd_count: u32 = 5; // stdin, stdout, stderr, fd3, fd4
+        const buffer_size = @sizeOf(u32) + fd_count + fd_count * @sizeOf(HANDLE);
+        var stdio_buffer = try allocator.alloc(u8, buffer_size);
+        defer allocator.free(stdio_buffer);
+
+        // Write fd count
+        @as(*align(1) u32, @ptrCast(stdio_buffer.ptr)).* = fd_count;
+
+        // Write CRT flags for each fd
+        const flags_ptr = stdio_buffer.ptr + @sizeOf(u32);
+        flags_ptr[0] = FOPEN | FDEV; // stdin
+        flags_ptr[1] = FOPEN | FDEV; // stdout
+        flags_ptr[2] = FOPEN | FDEV; // stderr
+        flags_ptr[3] = FOPEN | FPIPE; // fd 3 (Chrome reads)
+        flags_ptr[4] = FOPEN | FPIPE; // fd 4 (Chrome writes)
+
+        // Write handles for each fd
+        const handles_ptr: [*]align(1) HANDLE = @ptrCast(stdio_buffer.ptr + @sizeOf(u32) + fd_count);
+        handles_ptr[0] = if (std_input != INVALID_HANDLE_VALUE) std_input else INVALID_HANDLE_VALUE;
+        handles_ptr[1] = if (std_output != INVALID_HANDLE_VALUE) std_output else INVALID_HANDLE_VALUE;
+        handles_ptr[2] = if (std_error != INVALID_HANDLE_VALUE) std_error else INVALID_HANDLE_VALUE;
+        handles_ptr[3] = pipe_to_chrome_read; // Chrome reads from this
+        handles_ptr[4] = pipe_from_chrome_write; // Chrome writes to this
+
+        // Build command line
+        var cmd_line: std.ArrayList(u8) = .empty;
+        defer cmd_line.deinit(allocator);
+
+        // Quote chrome path if needed
+        try cmd_line.append(allocator, '"');
+        try cmd_line.appendSlice(allocator, chrome_path);
+        try cmd_line.append(allocator, '"');
+
+        // Add base args
+        for (base_args) |arg| {
+            try cmd_line.append(allocator, ' ');
+            try cmd_line.append(allocator, '"');
+            try cmd_line.appendSlice(allocator, arg);
+            try cmd_line.append(allocator, '"');
+        }
+
+        // Add pipe debugging flags
+        try cmd_line.appendSlice(allocator, " \"--remote-debugging-pipe\"");
+        try cmd_line.appendSlice(allocator, " \"--enable-unsafe-extension-debugging\"");
+
+        // Null terminate
+        try cmd_line.append(allocator, 0);
+
+        // Convert to wide string for CreateProcessW (null-terminated)
+        const cmd_line_w = try std.unicode.utf8ToUtf16LeAllocZ(allocator, cmd_line.items[0 .. cmd_line.items.len - 1]);
+        defer allocator.free(cmd_line_w);
+
+        // Set up STARTUPINFOW
+        var startup_info: windows.STARTUPINFOW = std.mem.zeroes(windows.STARTUPINFOW);
+        startup_info.cb = @sizeOf(windows.STARTUPINFOW);
+        startup_info.dwFlags = windows.STARTF_USESTDHANDLES;
+        startup_info.hStdInput = std_input;
+        startup_info.hStdOutput = std_output;
+        startup_info.hStdError = std_error;
+        startup_info.cbReserved2 = @intCast(buffer_size);
+        startup_info.lpReserved2 = @ptrCast(stdio_buffer.ptr);
+
+        var process_info: windows.PROCESS.INFORMATION = std.mem.zeroes(windows.PROCESS.INFORMATION);
+
+        // Create the process
+        const result = windows.kernel32.CreateProcessW(
+            null, // lpApplicationName
+            @constCast(@as([*:0]u16, cmd_line_w.ptr)), // lpCommandLine
+            null, // lpProcessAttributes
+            null, // lpThreadAttributes
+            windows.TRUE, // bInheritHandles
+            .{}, // dwCreationFlags
+            null, // lpEnvironment
+            null, // lpCurrentDirectory
+            &startup_info,
+            &process_info,
+        );
+
+        if (result == 0) {
+            const err = win32.GetLastError();
+            std.debug.print("CreateProcessW failed with error: {}\n", .{err});
+            return error.ProcessCreationFailed;
+        }
+
+        // Close process and thread handles (we don't need them)
+        _ = win32.CloseHandle(process_info.hProcess);
+        _ = win32.CloseHandle(process_info.hThread);
+
+        // Close child ends of pipes (Chrome has them now)
+        _ = win32.CloseHandle(pipe_to_chrome_read);
+        _ = win32.CloseHandle(pipe_from_chrome_write);
+
+        // Create ChromePipe instance with parent ends
+        const self = try allocator.create(Self);
+        self.* = .{
+            .write_handle = pipe_to_chrome_write,
+            .read_handle = pipe_from_chrome_read,
+            .read_buf = .empty,
             .allocator = allocator,
             .io = io,
             .next_id = 1,
@@ -126,7 +405,8 @@ pub const ChromePipe = struct {
     }
 
     /// Send a CDP command and wait for response.
-    pub fn sendCommand(self: *Self, method: []const u8, params: anytype) !json.Value {
+    /// Returns a CommandResult that must be freed with .deinit().
+    pub fn sendCommand(self: *Self, method: []const u8, params: anytype) !CommandResult {
         const id = self.next_id;
         self.next_id += 1;
 
@@ -151,24 +431,38 @@ pub const ChromePipe = struct {
 
         try cmd_buf.appendSlice(self.allocator, "}");
 
+        // Debug: print command being sent
+        if (globals.verbose) {
+            std.debug.print("[pipe] Sending CDP command: {s}\n", .{cmd_buf.items});
+        }
+
         // Send command (null-terminated for pipe protocol)
-        _ = try self.write_pipe.write(cmd_buf.items);
-        _ = try self.write_pipe.write(&[_]u8{0});
+        try writeAll(self.write_handle, cmd_buf.items);
+        try writeAll(self.write_handle, &[_]u8{0});
 
         // Read response (until null byte)
         self.read_buf.clearRetainingCapacity();
         while (true) {
             var byte: [1]u8 = undefined;
-            const n = try self.read_pipe.read(&byte);
+            const n = try readOne(self.read_handle, &byte);
             if (n == 0) return error.ConnectionClosed;
             if (byte[0] == 0) break;
             try self.read_buf.append(self.allocator, byte[0]);
         }
 
+        // Debug: print raw response
+        if (globals.verbose) {
+            std.debug.print("[pipe] CDP response ({} bytes): {s}\n", .{ self.read_buf.items.len, self.read_buf.items });
+        }
+
         // Parse response
-        const parsed = json.parse(self.allocator, self.read_buf.items) catch {
+        var parsed = json.parse(self.allocator, self.read_buf.items, .{}) catch |err| {
+            if (globals.verbose) {
+                std.debug.print("[pipe] JSON parse error: {}\n", .{err});
+            }
             return error.InvalidResponse;
         };
+        errdefer parsed.deinit(self.allocator);
 
         // Check for error
         if (parsed.get("error")) |err| {
@@ -177,28 +471,84 @@ pub const ChromePipe = struct {
                     std.debug.print("CDP Error: {s}\n", .{msg.string});
                 }
             }
+            parsed.deinit(self.allocator);
             return error.CDPError;
         }
 
-        // Return result
-        if (parsed.get("result")) |result| {
-            return result;
-        }
-
-        return parsed;
+        // Return result wrapped in CommandResult for proper cleanup
+        const result_value = parsed.get("result") orelse parsed;
+        return CommandResult{
+            .root = parsed,
+            .value = result_value,
+            .allocator = self.allocator,
+        };
     }
 
     /// Close pipes and cleanup.
     pub fn deinit(self: *Self) void {
         if (!self.is_closed) {
-            self.write_pipe.close();
-            self.read_pipe.close();
+            closeHandle(self.write_handle);
+            closeHandle(self.read_handle);
             self.is_closed = true;
         }
-        self.read_buf.deinit();
+        self.read_buf.deinit(self.allocator);
         self.allocator.destroy(self);
     }
 };
+
+// ─── Platform-specific I/O helpers ─────────────────────────────────────────────
+
+fn writeAll(handle: NativeHandle, data: []const u8) !void {
+    if (builtin.os.tag == .windows) {
+        var written: u32 = 0;
+        const result = win32.WriteFile(
+            handle,
+            data.ptr,
+            @intCast(data.len),
+            &written,
+            null,
+        );
+        if (result == 0) return error.WriteError;
+    } else {
+        var total: usize = 0;
+        while (total < data.len) {
+            const n = std.posix.write(handle, data[total..]) catch |err| {
+                if (err == error.WouldBlock) continue;
+                return error.WriteError;
+            };
+            if (n == 0) return error.WriteError;
+            total += n;
+        }
+    }
+}
+
+fn readOne(handle: NativeHandle, buf: *[1]u8) !usize {
+    if (builtin.os.tag == .windows) {
+        var bytes_read: u32 = 0;
+        const result = win32.ReadFile(
+            handle,
+            buf,
+            1,
+            &bytes_read,
+            null,
+        );
+        if (result == 0) return error.ReadError;
+        return bytes_read;
+    } else {
+        return std.posix.read(handle, buf) catch |err| {
+            if (err == error.WouldBlock) return 0;
+            return error.ReadError;
+        };
+    }
+}
+
+fn closeHandle(handle: NativeHandle) void {
+    if (builtin.os.tag == .windows) {
+        _ = win32.CloseHandle(handle);
+    } else {
+        std.posix.close(handle);
+    }
+}
 
 /// Serialize params struct to JSON.
 fn serializeParams(allocator: std.mem.Allocator, buf: *std.ArrayList(u8), params: anytype) !void {
@@ -245,8 +595,17 @@ fn serializeValue(allocator: std.mem.Allocator, buf: *std.ArrayList(u8), value: 
 
     if (T == []const u8) {
         try buf.appendSlice(allocator, "\"");
-        // TODO: Escape string properly
-        try buf.appendSlice(allocator, value);
+        // Escape special characters in JSON strings
+        for (value) |c| {
+            switch (c) {
+                '\\' => try buf.appendSlice(allocator, "\\\\"),
+                '"' => try buf.appendSlice(allocator, "\\\""),
+                '\n' => try buf.appendSlice(allocator, "\\n"),
+                '\r' => try buf.appendSlice(allocator, "\\r"),
+                '\t' => try buf.appendSlice(allocator, "\\t"),
+                else => try buf.append(allocator, c),
+            }
+        }
         try buf.appendSlice(allocator, "\"");
     } else if (T == bool) {
         try buf.appendSlice(allocator, if (value) "true" else "false");

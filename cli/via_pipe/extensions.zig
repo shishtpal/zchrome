@@ -21,9 +21,10 @@ pub const ExtensionInfo = struct {
 /// Load an unpacked extension via CDP Extensions.loadUnpacked.
 /// Returns the extension ID on success.
 pub fn loadExtension(chrome: *ChromePipe, path: []const u8) ![]const u8 {
-    const result = try chrome.sendCommand("Extensions.loadUnpacked", .{
+    var result = try chrome.sendCommand("Extensions.loadUnpacked", .{
         .path = path,
     });
+    defer result.deinit();
 
     // Extract extension ID from result
     if (result.get("id")) |id_val| {
@@ -37,10 +38,11 @@ pub fn loadExtension(chrome: *ChromePipe, path: []const u8) ![]const u8 {
 
 /// Load an unpacked extension with incognito mode enabled.
 pub fn loadExtensionWithIncognito(chrome: *ChromePipe, path: []const u8) ![]const u8 {
-    const result = try chrome.sendCommand("Extensions.loadUnpacked", .{
+    var result = try chrome.sendCommand("Extensions.loadUnpacked", .{
         .path = path,
         .enableInIncognito = true,
     });
+    defer result.deinit();
 
     if (result.get("id")) |id_val| {
         if (id_val == .string) {
@@ -53,26 +55,28 @@ pub fn loadExtensionWithIncognito(chrome: *ChromePipe, path: []const u8) ![]cons
 
 /// Unload an extension via CDP Extensions.uninstall.
 pub fn unloadExtension(chrome: *ChromePipe, extension_id: []const u8) !void {
-    _ = try chrome.sendCommand("Extensions.uninstall", .{
+    var result = try chrome.sendCommand("Extensions.uninstall", .{
         .id = extension_id,
     });
+    result.deinit();
 }
 
 /// Get list of loaded unpacked extensions.
 pub fn getExtensions(chrome: *ChromePipe) ![]ExtensionInfo {
-    const result = try chrome.sendCommand("Extensions.getExtensions", .{});
+    var result = try chrome.sendCommand("Extensions.getExtensions", .{});
+    defer result.deinit();
 
     if (result.get("extensions")) |exts_val| {
         if (exts_val == .array) {
-            var list = std.ArrayList(ExtensionInfo).init(chrome.allocator);
+            var list: std.ArrayList(ExtensionInfo) = .empty;
             errdefer {
                 for (list.items) |item| {
-                    chrome.allocator.free(item.id);
-                    chrome.allocator.free(item.name);
-                    chrome.allocator.free(item.version);
-                    chrome.allocator.free(item.path);
+                    if (item.id.len > 0) chrome.allocator.free(item.id);
+                    if (item.name.len > 0) chrome.allocator.free(item.name);
+                    if (item.version.len > 0) chrome.allocator.free(item.version);
+                    if (item.path.len > 0) chrome.allocator.free(item.path);
                 }
-                list.deinit();
+                list.deinit(chrome.allocator);
             }
 
             for (exts_val.array.items) |ext| {
@@ -83,10 +87,10 @@ pub fn getExtensions(chrome: *ChromePipe) ![]ExtensionInfo {
                     .path = if (ext.get("path")) |v| if (v == .string) try chrome.allocator.dupe(u8, v.string) else "" else "",
                     .enabled = if (ext.get("enabled")) |v| v == .true else false,
                 };
-                try list.append(info);
+                try list.append(chrome.allocator, info);
             }
 
-            return try list.toOwnedSlice();
+            return try list.toOwnedSlice(chrome.allocator);
         }
     }
 

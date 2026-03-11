@@ -671,19 +671,6 @@ pub fn cmdOpen(args: Args, allocator: std.mem.Allocator, io: std.Io, config: *co
     };
     defer if (data_dir_allocated) allocator.free(data_dir);
 
-    var argv_list: std.ArrayList([]const u8) = .empty;
-    defer argv_list.deinit(allocator);
-
-    try argv_list.append(allocator, chrome_path);
-
-    const port_arg = try std.fmt.allocPrint(allocator, "--remote-debugging-port={}", .{port});
-    defer allocator.free(port_arg);
-    try argv_list.append(allocator, port_arg);
-
-    const data_arg = try std.fmt.allocPrint(allocator, "--user-data-dir={s}", .{data_dir});
-    defer allocator.free(data_arg);
-    try argv_list.append(allocator, data_arg);
-
     // Check for extensions
     const has_extensions = config.extensions != null and config.extensions.?.len > 0;
 
@@ -694,6 +681,25 @@ pub fn cmdOpen(args: Args, allocator: std.mem.Allocator, io: std.Io, config: *co
         }
         break :blk .port;
     };
+
+    // Check if we're using pipe mode for extensions
+    const use_pipe_mode = has_extensions and via_mode == .pipe;
+
+    var argv_list: std.ArrayList([]const u8) = .empty;
+    defer argv_list.deinit(allocator);
+
+    try argv_list.append(allocator, chrome_path);
+
+    // Only add port flag if NOT using pipe mode (pipe mode doesn't use port)
+    const port_arg = try std.fmt.allocPrint(allocator, "--remote-debugging-port={}", .{port});
+    defer allocator.free(port_arg);
+    if (!use_pipe_mode) {
+        try argv_list.append(allocator, port_arg);
+    }
+
+    const data_arg = try std.fmt.allocPrint(allocator, "--user-data-dir={s}", .{data_dir});
+    defer allocator.free(data_arg);
+    try argv_list.append(allocator, data_arg);
 
     // Handle headless mode (extensions require headed mode)
     if (args.headless != .off and !has_extensions) {
@@ -723,9 +729,7 @@ pub fn cmdOpen(args: Args, allocator: std.mem.Allocator, io: std.Io, config: *co
             },
             .pipe => {
                 // Pipe mode: Extensions will be loaded via CDP after Chrome starts
-                // Add flags needed for CDP extension loading
-                try argv_list.append(allocator, "--remote-debugging-pipe");
-                try argv_list.append(allocator, "--enable-unsafe-extension-debugging");
+                // The via_pipe module adds --remote-debugging-pipe and --enable-unsafe-extension-debugging
                 std.debug.print("Note: Using pipe mode for extension loading via CDP\n", .{});
             },
         }
@@ -755,20 +759,59 @@ pub fn cmdOpen(args: Args, allocator: std.mem.Allocator, io: std.Io, config: *co
         for (argv_list.items) |arg| {
             std.debug.print(" {s}", .{arg});
         }
+        // Show pipe flags if using pipe mode (added by spawn internally)
+        if (use_pipe_mode) {
+            std.debug.print(" --remote-debugging-pipe --enable-unsafe-extension-debugging", .{});
+        }
         std.debug.print("\n", .{});
     }
 
-    _ = std.process.spawn(io, .{
-        .argv = argv_list.items,
-        .stdin = .ignore,
-        .stdout = .ignore,
-        .stderr = .ignore,
-    }) catch |err| {
-        std.debug.print("Error launching Chrome: {}\n", .{err});
-        std.process.exit(1);
-    };
+    // Launch Chrome - use pipe mode spawner if via=pipe with extensions
+    if (use_pipe_mode) {
+        // Pipe mode: Use via_pipe module to spawn Chrome with fd 3/4
+        const chrome_pipe = via_pipe.ChromePipe.spawn(
+            allocator,
+            io,
+            chrome_path,
+            argv_list.items[1..], // Skip chrome_path (first arg)
+        ) catch |err| {
+            std.debug.print("Error launching Chrome with pipe mode: {}\n", .{err});
+            std.debug.print("Try using --via=port as an alternative.\n", .{});
+            std.process.exit(1);
+        };
 
-    std.debug.print("\nChrome launched. Run 'zchrome connect' to get WebSocket URL.\n", .{});
+        std.debug.print("\nChrome launched with pipe mode.\n", .{});
+
+        // Load extensions via CDP
+        std.debug.print("Loading extensions via CDP...\n", .{});
+        for (config.extensions.?) |ext_path| {
+            const ext_id = via_pipe.loadExtension(chrome_pipe, ext_path) catch |err| {
+                std.debug.print("  Failed to load {s}: {}\n", .{ ext_path, err });
+                continue;
+            };
+            std.debug.print("  Loaded: {s} -> {s}\n", .{ ext_path, ext_id });
+            allocator.free(ext_id);
+        }
+
+        std.debug.print("\nExtensions loaded. Chrome is running.\n", .{});
+
+        // Clean up the pipe connection
+        // Chrome will continue running independently after we close the pipe
+        chrome_pipe.deinit();
+    } else {
+        // Port mode: Use standard process spawn
+        _ = std.process.spawn(io, .{
+            .argv = argv_list.items,
+            .stdin = .ignore,
+            .stdout = .ignore,
+            .stderr = .ignore,
+        }) catch |err| {
+            std.debug.print("Error launching Chrome: {}\n", .{err});
+            std.process.exit(1);
+        };
+
+        std.debug.print("\nChrome launched. Run 'zchrome connect' to get WebSocket URL.\n", .{});
+    }
 
     // Save via mode as string
     const via_str = @tagName(via_mode);

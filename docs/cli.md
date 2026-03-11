@@ -136,7 +136,9 @@ zchrome open --via=pipe
 | Mode | Description |
 |------|-------------|
 | `port` | (Default) Uses `--load-extension` CLI flag with Chrome 137+ workaround |
-| `pipe` | Uses CDP `Extensions.loadUnpacked` via debugging pipe |
+| `pipe` | Uses CDP `Extensions.loadUnpacked` via debugging pipe + starts proxy server |
+
+In pipe mode, a CDP proxy server starts on port+1 (e.g., 9223) allowing other terminals to send commands while the main process keeps the pipe connection alive.
 
 **Port handling:**
 - The port is saved to the session's config and reused automatically

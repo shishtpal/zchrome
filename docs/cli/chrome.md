@@ -135,7 +135,7 @@ zchrome open
 
 Behind the scenes, zchrome adds `--disable-features=DisableLoadExtensionCommandLineSwitch` to re-enable the `--load-extension` flag on Chrome 137+.
 
-### Pipe Mode (Experimental)
+### Pipe Mode
 
 Pipe mode uses the Chrome DevTools Protocol `Extensions.loadUnpacked` method, which is the future-proof approach recommended by Google:
 
@@ -151,6 +151,31 @@ This mode:
 - Uses `--remote-debugging-pipe` instead of `--remote-debugging-port`
 - Adds `--enable-unsafe-extension-debugging` flag
 - Loads extensions via CDP after Chrome starts
+- Starts a **CDP proxy server** for cross-terminal communication
+
+#### Cross-Terminal Communication
+
+When running in pipe mode, zchrome starts a WebSocket proxy server that allows other terminals to send commands:
+
+**Terminal 1** - Start Chrome with pipe mode:
+```bash
+zchrome open --via=pipe
+# Extensions loaded.
+# CDP proxy listening on ws://127.0.0.1:9223/
+# Waiting for client connection...
+```
+
+**Terminal 2** - Send commands:
+```bash
+zchrome navigate https://example.com
+# URL: https://example.com
+# Title: Example Domain
+
+zchrome screenshot output.png
+# Screenshot saved
+```
+
+The proxy runs on port 9223 (one port above the configured port) and forwards all CDP commands to Chrome via the pipe. Events and responses are properly matched and forwarded back to the client.
 
 ::: tip
 Pipe mode supports Windows 11, Linux, and macOS.

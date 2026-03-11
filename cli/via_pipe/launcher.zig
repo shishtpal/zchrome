@@ -484,6 +484,46 @@ pub const ChromePipe = struct {
         };
     }
 
+    /// Send raw JSON command and get raw JSON response.
+    /// Used by CDP proxy to forward arbitrary commands.
+    /// Caller owns the returned slice and must free it.
+    pub fn sendRawJson(self: *Self, json_cmd: []const u8) ![]const u8 {
+        try self.sendCommandOnly(json_cmd);
+        return try self.readOneMessage();
+    }
+
+    /// Send a raw JSON command without waiting for response.
+    /// Used by proxy for bidirectional forwarding.
+    pub fn sendCommandOnly(self: *Self, json_cmd: []const u8) !void {
+        if (globals.verbose) {
+            std.debug.print("[pipe] -> {s}\n", .{json_cmd});
+        }
+
+        // Send command (null-terminated for pipe protocol)
+        try writeAll(self.write_handle, json_cmd);
+        try writeAll(self.write_handle, &[_]u8{0});
+    }
+
+    /// Read one null-terminated message from Chrome.
+    /// Caller owns the returned slice and must free it.
+    pub fn readOneMessage(self: *Self) ![]const u8 {
+        self.read_buf.clearRetainingCapacity();
+        while (true) {
+            var byte: [1]u8 = undefined;
+            const n = try readOne(self.read_handle, &byte);
+            if (n == 0) return error.ConnectionClosed;
+            if (byte[0] == 0) break;
+            try self.read_buf.append(self.allocator, byte[0]);
+        }
+
+        if (globals.verbose) {
+            std.debug.print("[pipe] <- {s}\n", .{self.read_buf.items});
+        }
+
+        // Return copy of response (caller owns it)
+        return try self.allocator.dupe(u8, self.read_buf.items);
+    }
+
     /// Close pipes and cleanup.
     pub fn deinit(self: *Self) void {
         if (!self.is_closed) {
@@ -550,7 +590,29 @@ fn closeHandle(handle: NativeHandle) void {
     }
 }
 
-/// Serialize params struct to JSON.
+/// Serialize a Zig struct to a JSON object string using comptime reflection.
+///
+/// Iterates over struct fields at comptime and serializes each field as a
+/// key-value pair. Optional fields with `null` values are omitted from output.
+///
+/// Features:
+/// - Comptime field iteration (no runtime reflection overhead)
+/// - Automatic `null` optional filtering
+/// - Field names used as JSON keys
+/// - Delegates to `serializeValue` for value serialization
+///
+/// Example:
+/// ```zig
+/// const params = .{
+///     .url = "https://example.com",
+///     .timeout = 5000,
+///     .verbose = true,
+///     .session_id = null,  // omitted from output
+/// };
+/// var buf = std.ArrayList(u8).init(allocator);
+/// try serializeParams(allocator, &buf, params);
+/// // Result: {"url":"https://example.com","timeout":5000,"verbose":true}
+/// ```
 fn serializeParams(allocator: std.mem.Allocator, buf: *std.ArrayList(u8), params: anytype) !void {
     const T = @TypeOf(params);
     const info = @typeInfo(T);
@@ -590,6 +652,26 @@ fn serializeParams(allocator: std.mem.Allocator, buf: *std.ArrayList(u8), params
     try buf.appendSlice(allocator, "}");
 }
 
+/// Serialize a Zig native value directly to JSON string.
+///
+/// Unlike `json.stringify()` from zlib-json which requires a `json.Value`,
+/// this function uses comptime reflection to serialize Zig types directly,
+/// avoiding the overhead of constructing intermediate Value objects.
+///
+/// Supported types:
+/// - `[]const u8` → JSON string (with escape handling)
+/// - `bool` → "true" or "false"
+/// - integers/floats → numeric literal
+/// - other types → "null"
+///
+/// Example:
+/// ```zig
+/// var buf = std.ArrayList(u8).init(allocator);
+/// try serializeValue(allocator, &buf, "hello");     // → "hello"
+/// try serializeValue(allocator, &buf, true);        // → true
+/// try serializeValue(allocator, &buf, 42);          // → 42
+/// try serializeValue(allocator, &buf, 3.14);        // → 3.14
+/// ```
 fn serializeValue(allocator: std.mem.Allocator, buf: *std.ArrayList(u8), value: anytype) !void {
     const T = @TypeOf(value);
 

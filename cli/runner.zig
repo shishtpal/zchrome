@@ -794,13 +794,53 @@ pub fn cmdOpen(args: Args, allocator: std.mem.Allocator, io: std.Io, config: *co
             allocator.free(ext_id);
         }
 
-        std.debug.print("\nExtensions loaded. Chrome is running.\n", .{});
-        std.debug.print("Press Enter to close pipe connection (Chrome will keep running)...\n", .{});
+        std.debug.print("\nExtensions loaded.\n", .{});
 
-        // Wait for user input to keep pipe alive
-        cursor_utils.waitForEnter(io);
+        // Start CDP proxy server on a different port (port + 1) to avoid conflicts
+        // with Chrome's HTTP endpoint checks
+        const proxy_port = port + 1;
+        const proxy = via_pipe.CdpProxyServer.init(allocator, io, chrome_pipe, proxy_port) catch |err| {
+            std.debug.print("Failed to create proxy server: {}\n", .{err});
+            chrome_pipe.deinit();
+            std.process.exit(1);
+        };
+        defer proxy.deinit();
 
-        // Clean up pipe connection
+        // Save proxy WebSocket URL to config so other terminals can connect
+        // Use proxy.port which is the actual bound port (may differ from requested if port was in use)
+        const ws_url = std.fmt.allocPrint(allocator, "ws://127.0.0.1:{d}/", .{proxy.port}) catch {
+            std.debug.print("Failed to allocate WebSocket URL\n", .{});
+            chrome_pipe.deinit();
+            std.process.exit(1);
+        };
+        defer allocator.free(ws_url);
+
+        const save_config = config_mod.Config{
+            .chrome_path = args.chrome_path,
+            .data_dir = args.data_dir,
+            .port = port,
+            .ws_url = ws_url,
+            .last_target = null,
+            .chrome_args = config.chrome_args,
+            .extensions = config.extensions,
+        };
+        if (args.session_ctx) |ctx| {
+            ctx.saveConfig(save_config) catch |err| {
+                std.debug.print("Warning: Could not save config: {}\n", .{err});
+            };
+        }
+
+        std.debug.print("\nOther terminals can now run commands:\n", .{});
+        std.debug.print("  zchrome navigate <url>\n", .{});
+        std.debug.print("  zchrome screenshot\n", .{});
+        std.debug.print("\nPress Ctrl+C to stop proxy and exit.\n", .{});
+
+        // Run proxy - blocks until stopped (via Ctrl+C)
+        proxy.run() catch |err| {
+            std.debug.print("Proxy error: {}\n", .{err});
+        };
+
+        // Clean up
         chrome_pipe.deinit();
     } else {
         // Port mode: Use standard process spawn

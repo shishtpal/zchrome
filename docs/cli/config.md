@@ -96,6 +96,13 @@ All fields are optional. In user config files, only specify the fields you want 
 | `provider_session_id` | Active cloud session ID (auto-managed) |
 | `provider_auto_cleanup` | Whether to cleanup session on exit |
 
+### Extension Settings
+
+| Field | Description |
+|-------|-------------|
+| `via` | Extension loading mode: `port` (default) or `pipe` |
+| `extensions` | Array of paths to unpacked extensions |
+
 ## Auto-Applied Settings
 
 Session settings are automatically re-applied when connecting to a page:
@@ -230,6 +237,31 @@ zchrome navigate https://example.com
 
 # Close session (clears provider_session_id and ws_url)
 zchrome provider close
+```
+
+### Extensions Config
+
+```bash
+# Load an extension (saves to config)
+zchrome extensions load /path/to/my-extension
+
+# Config now contains:
+# {
+#   "extensions": ["/path/to/my-extension"],
+#   "via": "port"
+# }
+
+# Launch Chrome with extension
+zchrome open
+
+# Subsequent opens will include the extension
+zchrome open
+
+# Use pipe mode for Chrome 137+ (experimental)
+zchrome open --via=pipe
+
+# Unload extension
+zchrome extensions unload /path/to/my-extension
 ```
 
 ## See Also

@@ -109,3 +109,70 @@ zchrome open
   ]
 }
 ```
+
+## Extension Loading
+
+zchrome supports loading unpacked Chrome extensions. Starting with Chrome 137, Google removed the `--load-extension` flag from branded Chrome builds. zchrome provides two modes for extension loading via the `--via` flag.
+
+### Extension Loading Modes
+
+| Mode | Flag | Description |
+|------|------|-------------|
+| `port` | `--via=port` | **(Default)** Uses `--load-extension` with Chrome 137+ workaround |
+| `pipe` | `--via=pipe` | Uses CDP `Extensions.loadUnpacked` via debugging pipe (experimental) |
+
+### Port Mode (Default)
+
+Port mode uses the traditional `--load-extension` CLI flag with an automatic workaround for Chrome 137+:
+
+```bash
+# Load an extension
+zchrome extensions load /path/to/my-extension
+
+# Launch Chrome (uses port mode by default)
+zchrome open
+```
+
+Behind the scenes, zchrome adds `--disable-features=DisableLoadExtensionCommandLineSwitch` to re-enable the `--load-extension` flag on Chrome 137+.
+
+### Pipe Mode (Experimental)
+
+Pipe mode uses the Chrome DevTools Protocol `Extensions.loadUnpacked` method, which is the future-proof approach recommended by Google:
+
+```bash
+# Load extensions
+zchrome extensions load /path/to/my-extension
+
+# Launch with pipe mode
+zchrome open --via=pipe
+```
+
+This mode:
+- Uses `--remote-debugging-pipe` instead of `--remote-debugging-port`
+- Adds `--enable-unsafe-extension-debugging` flag
+- Loads extensions via CDP after Chrome starts
+
+::: warning
+Pipe mode is experimental and currently only supports POSIX systems (Linux, macOS).
+:::
+
+### Configuration
+
+The `via` setting is saved to `zchrome.json` and used by subsequent commands:
+
+```json
+{
+  "port": 9222,
+  "via": "port",
+  "extensions": [
+    "/path/to/extension1",
+    "/path/to/extension2"
+  ]
+}
+```
+
+### Extension Requirements
+
+- Extensions require **headed mode** (headless is automatically disabled when extensions are configured)
+- Extensions **cannot be used with cloud providers** (they require a local browser)
+- Use absolute paths for extensions in config files

@@ -20,6 +20,7 @@ zchrome [options] <command> [command-args]
 
 | Option | Description |
 |--------|-------------|
+| `--via <mode>` | Extension loading mode: `port` (default) or `pipe` |
 | `--url <ws-url>` | Connect to existing Chrome instance |
 | `--use <target-id>` | Execute command on existing page |
 | `--headless [new\|old]` | Enable headless mode (default: off) |
@@ -107,7 +108,7 @@ See the [Config File](/cli/config) page for full documentation on configuration 
 Launch Chrome with remote debugging enabled.
 
 ```bash
-zchrome open [--chrome <path>] [--data-dir <path>] [--port <port>] [--headless]
+zchrome open [--chrome <path>] [--data-dir <path>] [--port <port>] [--headless] [--via <mode>]
 ```
 
 **Example:**
@@ -121,7 +122,21 @@ zchrome open --headless
 
 # Launch on a specific port (for multiple sessions)
 zchrome --session youtube open --port 9223
+
+# Launch with extensions using port mode (default, Chrome 137+ compatible)
+zchrome extensions load ./my-extension
+zchrome open --via=port
+
+# Launch with extensions using pipe mode (experimental, POSIX only)
+zchrome open --via=pipe
 ```
+
+**Extension Loading Modes:**
+
+| Mode | Description |
+|------|-------------|
+| `port` | (Default) Uses `--load-extension` CLI flag with Chrome 137+ workaround |
+| `pipe` | Uses CDP `Extensions.loadUnpacked` via debugging pipe (experimental) |
 
 **Port handling:**
 - The port is saved to the session's config and reused automatically

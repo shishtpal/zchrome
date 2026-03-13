@@ -103,6 +103,7 @@ zchrome version
 | `storage local\|session` | Get/set/clear web storage |
 | `tab` | List, open, switch, close tabs |
 | `session` | Manage named sessions |
+| `provider` | Manage cloud browser providers |
 | `cursor record\|replay` | Record/replay macros |
 | `interactive` | Interactive REPL mode |
 
@@ -168,6 +169,35 @@ pub fn main(init: std.process.Init) !void {
 }
 ```
 
+## Cloud Browser Providers
+
+zchrome supports cloud browser providers for running automation without a local Chrome installation:
+
+| Provider | Environment Variable |
+|----------|---------------------|
+| [Kernel.sh](https://kernel.sh) | `ZCHROME_KERNEL_API_KEY` |
+| [Notte.cc](https://notte.cc) | `ZCHROME_NOTTE_API_KEY` |
+| [Browserbase](https://browserbase.com) | `ZCHROME_BROWSERBASE_API_KEY` |
+| [Browserless.io](https://browserless.io) | `ZCHROME_BROWSERLESS_API_KEY` |
+
+```bash
+# Set API key and provider
+$env:ZCHROME_BROWSERLESS_API_KEY = "your-api-key"
+zchrome provider set browserless
+
+# Create cloud browser session
+zchrome open
+
+# Use like local Chrome
+zchrome navigate https://example.com
+zchrome screenshot output.png
+
+# Close when done
+zchrome provider close
+```
+
+See [Cloud Providers Guide](docs/cli/providers.md) for details.
+
 ## Environment Variables
 
 | Variable | Description |
@@ -178,6 +208,7 @@ pub fn main(init: std.process.Init) !void {
 | `ZCHROME_DATA_DIR` | Chrome user data directory |
 | `ZCHROME_HEADLESS` | Headless mode: "new", "old", or "off" |
 | `ZCHROME_VERBOSE` | Enable verbose output ("1" or "true") |
+| `ZCHROME_PROVIDER` | Cloud provider: "local", "kernel", "notte", "browserbase", "browserless" |
 
 See [Environment Variables Guide](docs/guide/environment.md) for details.
 

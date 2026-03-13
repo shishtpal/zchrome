@@ -2,6 +2,7 @@ const std = @import("std");
 const cdp = @import("cdp");
 const config_mod = @import("../config.zig");
 const session_mod = @import("../session.zig");
+const cloud = @import("../cloud.zig");
 
 const Provider = cdp.Provider;
 const SessionInfo = cdp.SessionInfo;
@@ -33,7 +34,7 @@ pub fn providerCmd(
     } else if (std.mem.eql(u8, subcmd, "set")) {
         if (positional.len < 2) {
             std.debug.print("Usage: zchrome provider set <name>\n", .{});
-            std.debug.print("Available providers: local, kernel, notte, browserbase\n", .{});
+            std.debug.print("Available providers: local, kernel, notte, browserbase, browserless\n", .{});
             return;
         }
         try setProvider(session_ctx, positional[1], allocator);
@@ -82,7 +83,7 @@ fn setProvider(session_ctx: *const session_mod.SessionContext, provider_name: []
     // Validate provider name
     const provider = cdp.getProvider(provider_name) orelse {
         std.debug.print("Error: Unknown provider '{s}'\n", .{provider_name});
-        std.debug.print("Available: local, kernel, notte, browserbase\n", .{});
+        std.debug.print("Available: local, kernel, notte, browserbase, browserless\n", .{});
         return;
     };
 
@@ -187,15 +188,26 @@ fn closeSession(session_ctx: *const session_mod.SessionContext, environ_map: *st
     std.debug.print("Closing session {s} on {s}...\n", .{ session_id, provider.display_name });
 
     var destroy_succeeded = true;
-    provider.destroySession(allocator, session_ctx.init, api_key, session_id) catch {
-        destroy_succeeded = false;
-    };
+
+    // Use stop_url if available (some providers like Browserless return it)
+    if (config.provider_stop_url) |stop_url| {
+        // Try stop_url first, with provider.destroySession as fallback
+        destroy_succeeded = cloud.deleteViaStopUrl(
+            allocator,
+            session_ctx.init,
+            stop_url,
+            provider,
+            api_key,
+            session_id,
+        );
+    } else {
+        provider.destroySession(allocator, session_ctx.init, api_key, session_id) catch {
+            destroy_succeeded = false;
+        };
+    }
 
     // Clear session from config regardless of API result (session may already be gone)
-    if (config.provider_session_id) |old| allocator.free(old);
-    config.provider_session_id = null;
-    if (config.ws_url) |old| allocator.free(old);
-    config.ws_url = null;
+    cloud.clearSession(allocator, &config);
 
     try session_ctx.saveConfig(config);
 
@@ -223,6 +235,7 @@ fn printHelp() void {
         \\  kernel            Kernel.sh cloud browsers
         \\  notte             Notte.cc cloud browsers
         \\  browserbase       Browserbase cloud browsers
+        \\  browserless       Browserless.io cloud browsers
         \\
         \\Examples:
         \\  zchrome provider set kernel
@@ -231,10 +244,13 @@ fn printHelp() void {
         \\  zchrome provider close
         \\
         \\Environment Variables:
-        \\  ZCHROME_PROVIDER             Default provider
-        \\  ZCHROME_KERNEL_API_KEY       Kernel.sh API key
-        \\  ZCHROME_NOTTE_API_KEY        Notte.cc API key
-        \\  ZCHROME_BROWSERBASE_API_KEY  Browserbase API key
+        \\  ZCHROME_PROVIDER               Default provider
+        \\  ZCHROME_KERNEL_API_KEY         Kernel.sh API key
+        \\  ZCHROME_NOTTE_API_KEY          Notte.cc API key
+        \\  ZCHROME_BROWSERBASE_API_KEY    Browserbase API key
+        \\  ZCHROME_BROWSERLESS_API_KEY    Browserless.io API key
+        \\  ZCHROME_BROWSERLESS_REGION     Browserless region (sfo|lon|ams)
+        \\  ZCHROME_BROWSERLESS_STEALTH    Enable stealth mode (true|false)
         \\
     , .{});
 }

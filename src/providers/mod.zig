@@ -13,6 +13,8 @@ pub const SessionInfo = struct {
     expires_at: ?i64 = null,
     /// Optional live view URL for debugging
     live_view_url: ?[]const u8 = null,
+    /// Optional URL to stop/delete the session (provider-specific)
+    stop_url: ?[]const u8 = null,
 
     allocator: std.mem.Allocator,
 
@@ -20,6 +22,7 @@ pub const SessionInfo = struct {
         self.allocator.free(self.session_id);
         self.allocator.free(self.cdp_ws_url);
         if (self.live_view_url) |url| self.allocator.free(url);
+        if (self.stop_url) |url| self.allocator.free(url);
     }
 };
 
@@ -118,6 +121,7 @@ pub fn getProvider(name: []const u8) ?*const Provider {
     if (std.mem.eql(u8, name, "kernel")) return &kernel_provider;
     if (std.mem.eql(u8, name, "notte")) return &notte_provider;
     if (std.mem.eql(u8, name, "browserbase")) return &browserbase_provider;
+    if (std.mem.eql(u8, name, "browserless")) return &browserless_provider;
     return null;
 }
 
@@ -128,6 +132,7 @@ pub fn listProviders() []const *const Provider {
         &kernel_provider,
         &notte_provider,
         &browserbase_provider,
+        &browserless_provider,
     };
 }
 
@@ -152,6 +157,9 @@ pub const notte_provider = notte.provider;
 pub const browserbase = @import("browserbase.zig");
 pub const browserbase_provider = browserbase.provider;
 
+pub const browserless = @import("browserless.zig");
+pub const browserless_provider = browserless.provider;
+
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 test "getProvider returns correct provider" {
@@ -165,5 +173,14 @@ test "getProvider returns correct provider" {
 
 test "listProviders returns all providers" {
     const providers = listProviders();
-    try std.testing.expect(providers.len == 4);
+    // Verify each registered provider is accessible via getProvider
+    for (providers) |p| {
+        try std.testing.expect(getProvider(p.name) != null);
+    }
+    // Verify we have at least the expected providers
+    try std.testing.expect(getProvider("local") != null);
+    try std.testing.expect(getProvider("kernel") != null);
+    try std.testing.expect(getProvider("notte") != null);
+    try std.testing.expect(getProvider("browserbase") != null);
+    try std.testing.expect(getProvider("browserless") != null);
 }

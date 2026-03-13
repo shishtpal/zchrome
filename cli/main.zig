@@ -147,7 +147,9 @@ pub fn main(init: std.process.Init) !void {
         .screenshot, .pdf, .evaluate, .network, .cookies, .storage, .snapshot, .click, .dblclick, .focus, .type, .fill, .select, .multiselect, .hover, .check, .uncheck, .scroll, .scrollintoview, .drag, .get, .upload, .back, .forward, .reload, .press, .keydown, .keyup, .wait, .mouse, .cursor, .set, .dialog, .dev, .diff, .dom => true,
         .navigate, .tab, .window, .version, .list_targets, .pages, .interactive, .open, .connect, .session, .provider, .extensions, .help => false,
     };
-    if (needs_target and args.use_target == null and config.last_target != null) {
+    // For cloud providers, don't use saved last_target as it may be stale across connections
+    // Instead, let the command re-query targets (via withFirstPage or similar)
+    if (needs_target and args.use_target == null and config.last_target != null and !is_cloud_provider) {
         args.use_target = allocator.dupe(u8, config.last_target.?) catch null;
     }
 

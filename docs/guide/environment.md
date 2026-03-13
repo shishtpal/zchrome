@@ -12,10 +12,13 @@ zchrome supports environment variables to configure defaults without repeating c
 | `ZCHROME_DATA_DIR` | path | Chrome user data directory | session-specific |
 | `ZCHROME_VERBOSE` | bool | Enable verbose output (`1` or `true`) | `false` |
 | `ZCHROME_HEADLESS` | string | Headless mode: `new`, `old`, or `off` | `off` |
-| `ZCHROME_PROVIDER` | string | Cloud provider: `local`, `kernel`, `notte`, `browserbase` | `local` |
+| `ZCHROME_PROVIDER` | string | Cloud provider: `local`, `kernel`, `notte`, `browserbase`, `browserless` | `local` |
 | `ZCHROME_KERNEL_API_KEY` | string | Kernel.sh API key | - |
 | `ZCHROME_NOTTE_API_KEY` | string | Notte.cc API key | - |
 | `ZCHROME_BROWSERBASE_API_KEY` | string | Browserbase API key | - |
+| `ZCHROME_BROWSERLESS_API_KEY` | string | Browserless.io API key | - |
+| `ZCHROME_BROWSERLESS_REGION` | string | Browserless region: `sfo`, `lon`, `ams` | `sfo` |
+| `ZCHROME_BROWSERLESS_STEALTH` | bool | Enable Browserless stealth mode | `false` |
 
 ## Priority Order
 
@@ -146,7 +149,7 @@ zchrome open  # Launches headless Chrome
 
 ### ZCHROME_PROVIDER
 
-Set the default cloud browser provider. Values: `local` (default), `kernel`, `notte`, `browserbase`.
+Set the default cloud browser provider. Values: `local` (default), `kernel`, `notte`, `browserbase`, `browserless`.
 
 ```bash
 export ZCHROME_PROVIDER="kernel"
@@ -180,6 +183,33 @@ API key for [Browserbase](https://browserbase.com) cloud browser provider.
 ```bash
 export ZCHROME_BROWSERBASE_API_KEY="your-api-key"
 zchrome provider set browserbase
+```
+
+### ZCHROME_BROWSERLESS_API_KEY
+
+API key for [Browserless.io](https://browserless.io) cloud browser provider.
+
+```bash
+export ZCHROME_BROWSERLESS_API_KEY="your-api-key"
+zchrome provider set browserless
+```
+
+### ZCHROME_BROWSERLESS_REGION
+
+Regional endpoint for Browserless.io. Values: `sfo` (US West, default), `lon` (Europe UK), `ams` (Europe Amsterdam).
+
+```bash
+export ZCHROME_BROWSERLESS_REGION="lon"  # Use London endpoint
+zchrome open
+```
+
+### ZCHROME_BROWSERLESS_STEALTH
+
+Enable stealth mode for Browserless.io to help bypass bot detection. Set to `true` or `1`.
+
+```bash
+export ZCHROME_BROWSERLESS_STEALTH="true"
+zchrome open  # Creates session with stealth mode enabled
 ```
 
 ## CI/CD Examples

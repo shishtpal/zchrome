@@ -10,6 +10,7 @@ zchrome supports cloud browser providers for running browser automation in the c
 | `kernel` | [Kernel.sh](https://kernel.sh) | `ZCHROME_KERNEL_API_KEY` |
 | `notte` | [Notte.cc](https://notte.cc) | `ZCHROME_NOTTE_API_KEY` |
 | `browserbase` | [Browserbase](https://browserbase.com) | `ZCHROME_BROWSERBASE_API_KEY` |
+| `browserless` | [Browserless.io](https://browserless.io) | `ZCHROME_BROWSERLESS_API_KEY` |
 
 ## Quick Start
 
@@ -69,6 +70,8 @@ Available Cloud Browser Providers:
                   env: ZCHROME_NOTTE_API_KEY
   browserbase     Browserbase          [needs API key]
                   env: ZCHROME_BROWSERBASE_API_KEY
+  browserless     Browserless.io       [needs API key]
+                  env: ZCHROME_BROWSERLESS_API_KEY
 
 To set a provider: zchrome provider set <name>
 To configure: set the environment variable shown above
@@ -275,6 +278,11 @@ $env:ZCHROME_PROVIDER = "kernel"
 $env:ZCHROME_KERNEL_API_KEY = "your-kernel-api-key"
 $env:ZCHROME_NOTTE_API_KEY = "your-notte-api-key"
 $env:ZCHROME_BROWSERBASE_API_KEY = "your-browserbase-api-key"
+$env:ZCHROME_BROWSERLESS_API_KEY = "your-browserless-api-key"
+
+# Browserless-specific options
+$env:ZCHROME_BROWSERLESS_REGION = "sfo"      # Region: sfo, lon, ams
+$env:ZCHROME_BROWSERLESS_STEALTH = "true"    # Enable stealth mode
 ```
 
 Priority order:
@@ -325,6 +333,49 @@ Created cloud session: sess_abc123
 Live view: https://kernel.sh/live/sess_abc123
 ...
 ```
+
+## Browserless.io
+
+[Browserless.io](https://browserless.io) is a cloud browser provider with support for stealth mode and regional endpoints.
+
+### Configuration
+
+```bash
+# Required: API key
+$env:ZCHROME_BROWSERLESS_API_KEY = "your-api-key"
+
+# Optional: Region (default: sfo)
+$env:ZCHROME_BROWSERLESS_REGION = "sfo"   # US West - San Francisco
+$env:ZCHROME_BROWSERLESS_REGION = "lon"   # Europe - London
+$env:ZCHROME_BROWSERLESS_REGION = "ams"   # Europe - Amsterdam
+
+# Optional: Stealth mode (helps bypass bot detection)
+$env:ZCHROME_BROWSERLESS_STEALTH = "true"
+```
+
+### Usage
+
+```bash
+# Set up Browserless
+$env:ZCHROME_BROWSERLESS_API_KEY = "your-api-key"
+zchrome provider set browserless
+
+# Create a cloud browser session
+zchrome open
+
+# Use normally
+zchrome navigate https://example.com
+zchrome screenshot --output page.png
+
+# Close when done
+zchrome provider close
+```
+
+### Important Notes
+
+- **Session State**: Browser state is preserved within a session using `processKeepAlive`. For best results, use `zchrome interactive` for multi-step workflows.
+- **Stealth Mode**: Enable with `ZCHROME_BROWSERLESS_STEALTH=true` to reduce bot detection.
+- **TTL**: Sessions have a default 5-minute timeout (TTL). The session is automatically cleaned up after expiry.
 
 ## See Also
 

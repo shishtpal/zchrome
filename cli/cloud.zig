@@ -14,6 +14,7 @@ pub const CloudContext = struct {
     api_key: []const u8,
     verbose: bool = false,
     timeout_ms: u32 = 30000,
+    stop_url: ?[]const u8 = null, // Direct URL for session deletion (provider-specific)
 };
 
 /// Create a new cloud browser session
@@ -52,6 +53,11 @@ pub fn cloudOpen(ctx: CloudContext) !void {
     if (session_info.live_view_url) |lv| {
         std.debug.print("Live view: {s}\n", .{lv});
     }
+    if (session_info.stop_url) |stop| {
+        if (ctx.verbose) {
+            std.debug.print("Stop URL: {s}\n", .{stop});
+        }
+    }
 
     // Save to config
     if (config.provider_session_id) |old| allocator.free(old);
@@ -64,6 +70,17 @@ pub fn cloudOpen(ctx: CloudContext) !void {
         std.debug.print("Warning: Failed to save ws_url: {}\n", .{err});
         break :blk null;
     };
+
+    // Save stop URL if provided (used for session deletion)
+    if (config.provider_stop_url) |old| allocator.free(old);
+    config.provider_stop_url = if (session_info.stop_url) |stop|
+        allocator.dupe(u8, stop) catch null
+    else
+        null;
+
+    // Clear any stale target from previous sessions
+    if (config.last_target) |old| allocator.free(old);
+    config.last_target = null;
 
     if (ctx.verbose) {
         std.debug.print("Saving config with session_id={s}, ws_url={s}\n", .{
@@ -130,9 +147,20 @@ pub fn cloudCleanup(ctx: CloudContext) void {
         std.debug.print("Cleaning up cloud session: {s}\n", .{session_id});
     }
 
-    provider.destroySession(allocator, ctx.init, ctx.api_key, session_id) catch |err| {
-        std.debug.print("Warning: Failed to cleanup session: {}\n", .{err});
-    };
+    // Use stop_url if provided (some providers like Browserless return it)
+    if (ctx.stop_url) |stop_url| {
+        if (ctx.verbose) {
+            std.debug.print("Using stop URL: {s}\n", .{stop_url});
+        }
+        // Try stop_url first, with provider.destroySession as fallback
+        if (!deleteViaStopUrl(allocator, ctx.init, stop_url, provider, ctx.api_key, session_id)) {
+            std.debug.print("Warning: Failed to cleanup session via stop URL\n", .{});
+        }
+    } else {
+        provider.destroySession(allocator, ctx.init, ctx.api_key, session_id) catch |err| {
+            std.debug.print("Warning: Failed to cleanup session: {}\n", .{err});
+        };
+    }
 
     // Clear session from config
     clearSession(allocator, config);
@@ -173,10 +201,44 @@ pub fn printCloudConnectionError(err: anyerror) void {
     std.debug.print("Session may have expired. Run 'zchrome open' to create a new session.\n", .{});
 }
 
-/// Clear session info from config
-fn clearSession(allocator: std.mem.Allocator, config: *Config) void {
+/// Clear session info from config (public for use by provider.zig)
+pub fn clearSession(allocator: std.mem.Allocator, config: *Config) void {
     if (config.provider_session_id) |old| allocator.free(old);
     config.provider_session_id = null;
     if (config.ws_url) |old| allocator.free(old);
     config.ws_url = null;
+    if (config.provider_stop_url) |old| allocator.free(old);
+    config.provider_stop_url = null;
+    if (config.last_target) |old| allocator.free(old);
+    config.last_target = null;
+}
+
+/// Attempt to delete session via stop_url. Returns true on success, false on failure.
+/// If stop_url deletion fails and fallback params are provided, attempts destroySession as fallback.
+pub fn deleteViaStopUrl(
+    allocator: std.mem.Allocator,
+    init: std.process.Init,
+    stop_url: []const u8,
+    fallback_provider: ?*const cdp.Provider,
+    fallback_api_key: ?[]const u8,
+    fallback_session_id: ?[]const u8,
+) bool {
+    const rest = cdp.rest;
+    var response = rest.request(stop_url, .{
+        .allocator = allocator,
+        .init = init,
+        .method = .DELETE,
+    }) catch {
+        // Try fallback if provided
+        if (fallback_provider) |provider| {
+            if (fallback_api_key) |api_key| {
+                if (fallback_session_id) |session_id| {
+                    provider.destroySession(allocator, init, api_key, session_id) catch {};
+                }
+            }
+        }
+        return false;
+    };
+    response.deinit();
+    return true;
 }

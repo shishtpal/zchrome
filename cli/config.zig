@@ -37,8 +37,9 @@ pub const Config = struct {
     user_agent: ?[]const u8 = null,
 
     // Cloud provider settings
-    provider: ?[]const u8 = null, // "local", "kernel", "notte", "browserbase"
+    provider: ?[]const u8 = null, // "local", "kernel", "notte", "browserbase", "browserless"
     provider_session_id: ?[]const u8 = null, // Active cloud session ID
+    provider_stop_url: ?[]const u8 = null, // URL to stop/delete the session (provider-specific)
     provider_auto_cleanup: ?bool = null, // Override provider's default cleanup behavior
 
     // Browser communication mode
@@ -63,6 +64,7 @@ pub const Config = struct {
         if (self.user_agent) |u| allocator.free(u);
         if (self.provider) |p| allocator.free(p);
         if (self.provider_session_id) |s| allocator.free(s);
+        if (self.provider_stop_url) |u| allocator.free(u);
         if (self.chrome_args) |args| {
             for (args) |arg| allocator.free(arg);
             allocator.free(args);

@@ -1,6 +1,8 @@
 {
     "cSpell.words": [
       "backgrounding",
+      "Browserbase",
+      "Browserless",
       "CDP",
       "cli",
       "dblclick",
@@ -12,6 +14,7 @@
       "mousedown",
       "mousemove",
       "networkidle",
+      "notte",
       "rasterizer",
       "repost",
       "reposting",

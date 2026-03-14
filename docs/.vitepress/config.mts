@@ -126,6 +126,7 @@ export default defineConfig({
                         { text: "Sessions", link: "/cli/sessions" },
                         { text: "Config File", link: "/cli/config" },
                         { text: "Network Commands", link: "/cli/network" },
+                        { text: "Clipboard", link: "/cli/clipboard" },
                         { text: "Cursor Commands", link: "/cli/cursor" },
                     ],
                 },

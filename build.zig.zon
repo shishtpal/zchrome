@@ -24,5 +24,8 @@
         .zlib_http = .{
             .path = "../zlib-http",
         },
+        .zlib_clipboard = .{
+            .path = "../zlib_clipboard",
+        },
     },
 }

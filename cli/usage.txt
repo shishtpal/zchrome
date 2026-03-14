@@ -58,6 +58,12 @@ ELEMENT ACTIONS:
   drag <src> <tgt>         Drag and drop from source to target element
   upload <sel> <files>     Upload files to file input
 
+CLIPBOARD:
+  clipboard read           Read text from system clipboard
+  clipboard write <text>   Write text to system clipboard
+  clipboard copy           Copy current selection (Ctrl+C)
+  clipboard paste          Paste from clipboard (Ctrl+V)
+
 KEYBOARD:
   press <key>              Press key (Enter, Tab, Control+a) (alias: key)
   keydown <key>            Hold key down

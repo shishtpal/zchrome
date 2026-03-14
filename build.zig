@@ -32,6 +32,13 @@ pub fn build(b: *std.Build) void {
     });
     const http_mod = http_dep.module("zlib-http");
 
+    // ─── Clipboard Module (from zlib_clipboard) ──────────────
+    const clipboard_dep = b.dependency("zlib_clipboard", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const clipboard_mod = clipboard_dep.module("zlib_clipboard");
+
     // ─── Library Module ──────────────────────────────────────
     const cdp_mod = b.createModule(.{
         .root_source_file = b.path("src/root.zig"),
@@ -52,6 +59,7 @@ pub fn build(b: *std.Build) void {
     cli_mod.addImport("json", json_mod);
     cli_mod.addImport("png", png_mod);
     cli_mod.addImport("wss", wss_mod);
+    cli_mod.addImport("clipboard", clipboard_mod);
 
     const cli = b.addExecutable(.{
         .name = "zchrome",

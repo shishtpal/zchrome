@@ -93,6 +93,7 @@ pub const Args = struct {
         session,
         diff,
         dom,
+        clipboard,
         provider,
         extensions,
         help,

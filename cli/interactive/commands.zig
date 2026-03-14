@@ -457,6 +457,11 @@ pub fn cmdDiff(state: *InteractiveState, args: []const []const u8) !void {
     try impl.diff(session, buildCtx(state, args));
 }
 
+pub fn cmdClipboard(state: *InteractiveState, args: []const []const u8) !void {
+    const session = try requireSession(state);
+    try impl.clipboardCmd(session, buildCtx(state, args));
+}
+
 pub fn cmdDom(state: *InteractiveState, args: []const []const u8) !void {
     const session = try requireSession(state);
     // Parse --output / -o and --all / -a flags; pass remaining args as positional.

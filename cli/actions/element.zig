@@ -12,7 +12,9 @@ pub fn getElementPosition(
     allocator: std.mem.Allocator,
     resolved: *const ResolvedElement,
 ) !ElementPosition {
-    var runtime = cdp.Runtime.init(session);
+    // Use OOP iframe session if available
+    const effective_session = resolved.getEffectiveSession(session);
+    var runtime = cdp.Runtime.init(effective_session);
     try runtime.enable();
 
     var js: []const u8 = undefined;
@@ -110,7 +112,8 @@ pub fn clickElement(
         // Synthetic JS click path: dispatches a MouseEvent via JS.
         // isTrusted: false — not suitable for SPA frameworks but useful for
         // sites that intercept CDP mouse events.
-        var runtime = cdp.Runtime.init(session);
+        const effective_session = resolved.getEffectiveSession(session);
+        var runtime = cdp.Runtime.init(effective_session);
         try runtime.enable();
 
         var js: []const u8 = undefined;
@@ -168,7 +171,8 @@ pub fn focusElement(
     allocator: std.mem.Allocator,
     resolved: *const ResolvedElement,
 ) !void {
-    var runtime = cdp.Runtime.init(session);
+    const effective_session = resolved.getEffectiveSession(session);
+    var runtime = cdp.Runtime.init(effective_session);
     try runtime.enable();
 
     var js: []const u8 = undefined;
@@ -211,7 +215,8 @@ pub fn fillElement(
     resolved: *const ResolvedElement,
     text: []const u8,
 ) !void {
-    var runtime = cdp.Runtime.init(session);
+    const effective_session = resolved.getEffectiveSession(session);
+    var runtime = cdp.Runtime.init(effective_session);
     try runtime.enable();
 
     const escaped_text = try helpers.escapeJsString(allocator, text);
@@ -272,7 +277,8 @@ pub fn selectOption(
     resolved: *const ResolvedElement,
     value: []const u8,
 ) !void {
-    var runtime = cdp.Runtime.init(session);
+    const effective_session = resolved.getEffectiveSession(session);
+    var runtime = cdp.Runtime.init(effective_session);
     try runtime.enable();
 
     const escaped_val = try helpers.escapeJsString(allocator, value);
@@ -317,7 +323,8 @@ pub fn multiselectOptions(
     resolved: *const ResolvedElement,
     values_json: []const u8,
 ) !void {
-    var runtime = cdp.Runtime.init(session);
+    const effective_session = resolved.getEffectiveSession(session);
+    var runtime = cdp.Runtime.init(effective_session);
     try runtime.enable();
 
     const escaped_val = try helpers.escapeJsString(allocator, values_json);
@@ -382,7 +389,8 @@ pub fn setChecked(
     resolved: *const ResolvedElement,
     checked: bool,
 ) !void {
-    var runtime = cdp.Runtime.init(session);
+    const effective_session = resolved.getEffectiveSession(session);
+    var runtime = cdp.Runtime.init(effective_session);
     try runtime.enable();
 
     const check_str = if (checked) "true" else "false";
@@ -441,7 +449,8 @@ pub fn scrollIntoView(
     allocator: std.mem.Allocator,
     resolved: *const ResolvedElement,
 ) !void {
-    var runtime = cdp.Runtime.init(session);
+    const effective_session = resolved.getEffectiveSession(session);
+    var runtime = cdp.Runtime.init(effective_session);
     try runtime.enable();
 
     var js: []const u8 = undefined;

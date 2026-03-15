@@ -1,4 +1,5 @@
 const std = @import("std");
+const cdp = @import("cdp");
 
 /// Resolved element information
 pub const ResolvedElement = struct {
@@ -20,11 +21,34 @@ pub const ResolvedElement = struct {
     /// Viewport offsets for iframe coordinate adjustment (Phase 2)
     iframe_offsets: ?struct { x: f64, y: f64 } = null,
 
+    // OOP iframe support (Phase 3)
+    /// Session for OOP iframe (if element is inside a cross-origin iframe)
+    frame_session: ?*cdp.Session = null,
+    /// Session ID for cleanup (we own this session and must detach)
+    frame_session_id: ?[]const u8 = null,
+    /// Connection reference for detaching (if we own a frame session)
+    connection: ?*cdp.Connection = null,
+
     pub fn deinit(self: *ResolvedElement) void {
         if (self.css_selector) |s| self.allocator.free(s);
         if (self.role) |r| self.allocator.free(r);
         if (self.name) |n| self.allocator.free(n);
         if (self.root_expression) |r| self.allocator.free(r);
+
+        // Detach from OOP iframe session if we own it
+        if (self.frame_session_id) |session_id| {
+            if (self.connection) |conn| {
+                var target = cdp.Target.init(conn);
+                target.detachFromTarget(session_id) catch {};
+            }
+            self.allocator.free(session_id);
+        }
+        // Note: frame_session is owned by connection, don't free it
+    }
+
+    /// Get the effective session to use for CDP commands
+    pub fn getEffectiveSession(self: *const ResolvedElement, default_session: *cdp.Session) *cdp.Session {
+        return self.frame_session orelse default_session;
     }
 };
 

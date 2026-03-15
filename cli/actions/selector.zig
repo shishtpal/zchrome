@@ -100,13 +100,27 @@ fn resolveDeepSelectorWithSession(allocator: std.mem.Allocator, session: *cdp.Se
     try runtime.enable();
 
     // Track current context and root expression
-    // Note: context_id will be used in Phase 3 for OOP iframes
     const current_context_id: ?i64 = null;
     var root_expr: std.ArrayList(u8) = .empty;
     defer root_expr.deinit(allocator);
 
     var total_iframe_offset_x: f64 = 0;
     var total_iframe_offset_y: f64 = 0;
+
+    // OOP iframe session tracking (Phase 3)
+    var oop_frame_session: ?*cdp.Session = null;
+    var oop_frame_session_id: ?[]const u8 = null;
+    var oop_connection: ?*cdp.Connection = null;
+    errdefer {
+        // Clean up if we fail after attaching
+        if (oop_frame_session_id) |sid| {
+            if (oop_connection) |conn| {
+                var target = cdp.Target.init(conn);
+                target.detachFromTarget(sid) catch {};
+            }
+            allocator.free(sid);
+        }
+    }
 
     // Process all segments except the last one
     for (segments.items[0 .. segments.items.len - 1], 0..) |segment, i| {
@@ -160,13 +174,15 @@ fn resolveDeepSelectorWithSession(allocator: std.mem.Allocator, session: *cdp.Se
                         total_iframe_offset_y += helpers.getFloatFromJson(y) orelse 0;
                     }
 
-                    // Get iframe's contentDocument context
-                    // For same-origin iframes, we can access contentDocument directly
+                    // Check if iframe is same-origin (contentDocument accessible)
                     const ctx_js = try std.fmt.allocPrint(allocator,
                         \\(function(){{
                         \\  var el = {s};
-                        \\  if (!el || !el.contentDocument) return null;
-                        \\  return true;
+                        \\  if (!el) return {{ accessible: false }};
+                        \\  try {{
+                        \\    if (el.contentDocument) return {{ accessible: true }};
+                        \\  }} catch(e) {{}}
+                        \\  return {{ accessible: false, src: el.src || '' }};
                         \\}})()
                     , .{query_js});
                     defer allocator.free(ctx_js);
@@ -177,11 +193,84 @@ fn resolveDeepSelectorWithSession(allocator: std.mem.Allocator, session: *cdp.Se
                     });
                     defer ctx_result.deinit(allocator);
 
-                    // For same-origin iframes, we can just change the root expression
-                    // to query within the iframe's contentDocument
-                    root_expr.clearRetainingCapacity();
-                    try root_expr.appendSlice(allocator, query_js);
-                    try root_expr.appendSlice(allocator, ".contentDocument");
+                    var is_accessible = false;
+                    var iframe_src: ?[]const u8 = null;
+                    if (ctx_result.value) |ctx_val| {
+                        if (ctx_val == .object) {
+                            if (ctx_val.object.get("accessible")) |acc| {
+                                is_accessible = if (acc == .bool) acc.bool else false;
+                            }
+                            if (!is_accessible) {
+                                if (ctx_val.object.get("src")) |src| {
+                                    if (src == .string and src.string.len > 0) {
+                                        iframe_src = src.string;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (is_accessible) {
+                        // Same-origin iframe: use contentDocument
+                        root_expr.clearRetainingCapacity();
+                        try root_expr.appendSlice(allocator, query_js);
+                        try root_expr.appendSlice(allocator, ".contentDocument");
+                    } else {
+                        // Cross-origin (OOP) iframe: need to attach to iframe target
+                        // This requires finding the iframe's target and creating a session
+                        if (iframe_src) |src| {
+                            std.debug.print("Note: Cross-origin iframe detected (src: {s}). Attempting to attach...\n", .{src});
+
+                            // Find the iframe's target by URL
+                            var target = cdp.Target.init(session.connection);
+                            const targets = try target.getTargets(allocator);
+                            defer {
+                                for (targets) |*t| t.deinit(allocator);
+                                allocator.free(targets);
+                            }
+
+                            var iframe_target_id: ?[]const u8 = null;
+                            for (targets) |t| {
+                                if (std.mem.eql(u8, t.type, "iframe") and std.mem.indexOf(u8, t.url, src) != null) {
+                                    iframe_target_id = t.target_id;
+                                    break;
+                                }
+                            }
+
+                            if (iframe_target_id == null) {
+                                std.debug.print("Error: Could not find target for cross-origin iframe. The iframe may need to load first.\n", .{});
+                                return error.CrossOriginIframeNotFound;
+                            }
+
+                            // Attach to iframe target with flatten=true to get a session
+                            const frame_session_id = try target.attachToTarget(allocator, iframe_target_id.?, true);
+                            errdefer allocator.free(frame_session_id);
+
+                            // Get/create session for this target
+                            const frame_session = session.connection.getOrCreateSession(frame_session_id) catch |err| {
+                                std.debug.print("Error: Could not create session for iframe target: {}\n", .{err});
+                                allocator.free(frame_session_id);
+                                return error.CrossOriginIframeSessionFailed;
+                            };
+
+                            // Enable Runtime on the iframe session
+                            var frame_runtime = cdp.Runtime.init(frame_session);
+                            try frame_runtime.enable();
+
+                            // Store iframe session info for the result
+                            // Note: We'll need to return these and let the caller manage cleanup
+                            oop_frame_session = frame_session;
+                            oop_frame_session_id = frame_session_id;
+                            oop_connection = session.connection;
+
+                            // For OOP iframes, reset root expression to query from document
+                            root_expr.clearRetainingCapacity();
+                            try root_expr.appendSlice(allocator, "document");
+                        } else {
+                            std.debug.print("Error: Cross-origin iframe without src attribute\n", .{});
+                            return error.CrossOriginIframe;
+                        }
+                    }
                 } else if (std.mem.eql(u8, elem_type, "shadow")) {
                     // It's a shadow host
                     if (i == 0 and root_expr.items.len == 0) {
@@ -222,6 +311,16 @@ fn resolveDeepSelectorWithSession(allocator: std.mem.Allocator, session: *cdp.Se
     // Set iframe offsets if we traversed iframes
     if (total_iframe_offset_x != 0 or total_iframe_offset_y != 0) {
         resolved.iframe_offsets = .{ .x = total_iframe_offset_x, .y = total_iframe_offset_y };
+    }
+
+    // Set OOP iframe session info (Phase 3)
+    // Transfer ownership to the result - caller must call deinit() to clean up
+    if (oop_frame_session) |frame_session| {
+        resolved.frame_session = frame_session;
+        resolved.frame_session_id = oop_frame_session_id;
+        resolved.connection = oop_connection;
+        // Clear our copies so errdefer doesn't double-free
+        oop_frame_session_id = null;
     }
 
     return resolved;

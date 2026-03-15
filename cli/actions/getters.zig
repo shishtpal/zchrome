@@ -11,7 +11,8 @@ pub fn getText(
     allocator: std.mem.Allocator,
     resolved: *const ResolvedElement,
 ) !?[]const u8 {
-    var runtime = cdp.Runtime.init(session);
+    const effective_session = resolved.getEffectiveSession(session);
+    var runtime = cdp.Runtime.init(effective_session);
     try runtime.enable();
 
     const js = try helpers.buildGetterJs(allocator, resolved, "el.textContent.trim()");
@@ -32,7 +33,8 @@ pub fn getHtml(
     allocator: std.mem.Allocator,
     resolved: *const ResolvedElement,
 ) !?[]const u8 {
-    var runtime = cdp.Runtime.init(session);
+    const effective_session = resolved.getEffectiveSession(session);
+    var runtime = cdp.Runtime.init(effective_session);
     try runtime.enable();
 
     const js = try helpers.buildGetterJs(allocator, resolved, "el.innerHTML");
@@ -53,7 +55,8 @@ pub fn getValue(
     allocator: std.mem.Allocator,
     resolved: *const ResolvedElement,
 ) !?[]const u8 {
-    var runtime = cdp.Runtime.init(session);
+    const effective_session = resolved.getEffectiveSession(session);
+    var runtime = cdp.Runtime.init(effective_session);
     try runtime.enable();
 
     const js = try helpers.buildGetterJs(allocator, resolved, "el.value||''");
@@ -75,7 +78,8 @@ pub fn getAttribute(
     resolved: *const ResolvedElement,
     attr_name: []const u8,
 ) !?[]const u8 {
-    var runtime = cdp.Runtime.init(session);
+    const effective_session = resolved.getEffectiveSession(session);
+    var runtime = cdp.Runtime.init(effective_session);
     try runtime.enable();
 
     const escaped_attr = try helpers.escapeJsString(allocator, attr_name);
@@ -136,7 +140,8 @@ pub fn getCount(
     allocator: std.mem.Allocator,
     resolved: *const ResolvedElement,
 ) !usize {
-    var runtime = cdp.Runtime.init(session);
+    const effective_session = resolved.getEffectiveSession(session);
+    var runtime = cdp.Runtime.init(effective_session);
     try runtime.enable();
 
     const selector = resolved.css_selector orelse return 0;
@@ -164,7 +169,8 @@ pub fn getStyles(
     allocator: std.mem.Allocator,
     resolved: *const ResolvedElement,
 ) !?[]const u8 {
-    var runtime = cdp.Runtime.init(session);
+    const effective_session = resolved.getEffectiveSession(session);
+    var runtime = cdp.Runtime.init(effective_session);
     try runtime.enable();
 
     const getter_expr = "(function(){var s=getComputedStyle(el);var r={};for(var i=0;i<s.length;i++){var p=s[i];r[p]=s.getPropertyValue(p)}return JSON.stringify(r)})()";

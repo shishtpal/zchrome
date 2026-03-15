@@ -37,6 +37,7 @@ const dom_mod = @import("dom.zig");
 const provider_mod = @import("provider.zig");
 const clipboard_mod = @import("clipboard.zig");
 const extensions_mod = @import("extensions.zig");
+const media_mod = @import("media.zig");
 
 // ─── Type Re-exports ─────────────────────────────────────────────────────────
 
@@ -208,3 +209,8 @@ pub const printClipboardHelp = clipboard_mod.printClipboardHelp;
 
 pub const extensionsCmd = extensions_mod.extensions;
 pub const printExtensionsHelp = extensions_mod.printExtensionsHelp;
+
+// ─── Media Re-exports ─────────────────────────────────────────────────────────
+
+pub const media = media_mod.media;
+pub const printMediaHelp = media_mod.printMediaHelp;

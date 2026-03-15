@@ -27,6 +27,14 @@ pub fn wait(session: *cdp.Session, ctx: CommandCtx) !void {
         try waitForLoadState(session, ctx.allocator, state, timeout_ms);
     } else if (ctx.wait_fn) |expr| {
         try waitForFunction(session, ctx.allocator, expr, timeout_ms);
+    } else if (ctx.wait_media_playing) |selector| {
+        try waitForMediaPlaying(session, ctx.allocator, selector, timeout_ms);
+    } else if (ctx.wait_media_ended) |selector| {
+        try waitForMediaEnded(session, ctx.allocator, selector, timeout_ms);
+    } else if (ctx.wait_media_ready) |selector| {
+        try waitForMediaReady(session, ctx.allocator, selector, timeout_ms);
+    } else if (ctx.wait_media_error) |selector| {
+        try waitForMediaError(session, ctx.allocator, selector, timeout_ms);
     } else if (ctx.positional.len > 0) {
         const arg = ctx.positional[0];
         // Check if it's a number (ms) or selector
@@ -159,6 +167,106 @@ fn waitForFunction(session: *cdp.Session, allocator: std.mem.Allocator, expr: []
     }
 }
 
+// ─── Media Wait Functions ─────────────────────────────────────────────────────
+
+fn waitForMediaPlaying(session: *cdp.Session, allocator: std.mem.Allocator, selector: []const u8, timeout_ms: u32) !void {
+    const js = if (selector.len == 0)
+        // Wait for ANY media to play
+        "(() => { const els = document.querySelectorAll('audio, video'); for (const el of els) { if (!el.paused && !el.ended) return true; } return false; })()"
+    else blk: {
+        const escaped = try actions_mod.helpers.escapeJsString(allocator, selector);
+        defer allocator.free(escaped);
+        break :blk try std.fmt.allocPrint(allocator, "(() => {{ const el = document.querySelector('{s}'); return el && !el.paused && !el.ended; }})()", .{escaped});
+    };
+    defer if (selector.len > 0) allocator.free(js);
+
+    if (try pollUntil(session, allocator, js, timeout_ms)) {
+        if (selector.len == 0)
+            std.debug.print("Media playing\n", .{})
+        else
+            std.debug.print("Media playing: {s}\n", .{selector});
+    } else {
+        if (selector.len == 0)
+            std.debug.print("Timeout waiting for any media to play\n", .{})
+        else
+            std.debug.print("Timeout waiting for media to play: {s}\n", .{selector});
+        return error.Timeout;
+    }
+}
+
+fn waitForMediaEnded(session: *cdp.Session, allocator: std.mem.Allocator, selector: []const u8, timeout_ms: u32) !void {
+    const js = if (selector.len == 0)
+        "(() => { const els = document.querySelectorAll('audio, video'); for (const el of els) { if (el.ended) return true; } return false; })()"
+    else blk: {
+        const escaped = try actions_mod.helpers.escapeJsString(allocator, selector);
+        defer allocator.free(escaped);
+        break :blk try std.fmt.allocPrint(allocator, "(() => {{ const el = document.querySelector('{s}'); return el && el.ended; }})()", .{escaped});
+    };
+    defer if (selector.len > 0) allocator.free(js);
+
+    if (try pollUntil(session, allocator, js, timeout_ms)) {
+        if (selector.len == 0)
+            std.debug.print("Media ended\n", .{})
+        else
+            std.debug.print("Media ended: {s}\n", .{selector});
+    } else {
+        if (selector.len == 0)
+            std.debug.print("Timeout waiting for any media to end\n", .{})
+        else
+            std.debug.print("Timeout waiting for media to end: {s}\n", .{selector});
+        return error.Timeout;
+    }
+}
+
+fn waitForMediaReady(session: *cdp.Session, allocator: std.mem.Allocator, selector: []const u8, timeout_ms: u32) !void {
+    // readyState >= 3 means HAVE_FUTURE_DATA or HAVE_ENOUGH_DATA
+    const js = if (selector.len == 0)
+        "(() => { const els = document.querySelectorAll('audio, video'); for (const el of els) { if (el.readyState >= 3) return true; } return false; })()"
+    else blk: {
+        const escaped = try actions_mod.helpers.escapeJsString(allocator, selector);
+        defer allocator.free(escaped);
+        break :blk try std.fmt.allocPrint(allocator, "(() => {{ const el = document.querySelector('{s}'); return el && el.readyState >= 3; }})()", .{escaped});
+    };
+    defer if (selector.len > 0) allocator.free(js);
+
+    if (try pollUntil(session, allocator, js, timeout_ms)) {
+        if (selector.len == 0)
+            std.debug.print("Media ready\n", .{})
+        else
+            std.debug.print("Media ready: {s}\n", .{selector});
+    } else {
+        if (selector.len == 0)
+            std.debug.print("Timeout waiting for any media to be ready\n", .{})
+        else
+            std.debug.print("Timeout waiting for media to be ready: {s}\n", .{selector});
+        return error.Timeout;
+    }
+}
+
+fn waitForMediaError(session: *cdp.Session, allocator: std.mem.Allocator, selector: []const u8, timeout_ms: u32) !void {
+    const js = if (selector.len == 0)
+        "(() => { const els = document.querySelectorAll('audio, video'); for (const el of els) { if (el.error) return true; } return false; })()"
+    else blk: {
+        const escaped = try actions_mod.helpers.escapeJsString(allocator, selector);
+        defer allocator.free(escaped);
+        break :blk try std.fmt.allocPrint(allocator, "(() => {{ const el = document.querySelector('{s}'); return el && el.error !== null; }})()", .{escaped});
+    };
+    defer if (selector.len > 0) allocator.free(js);
+
+    if (try pollUntil(session, allocator, js, timeout_ms)) {
+        if (selector.len == 0)
+            std.debug.print("Media error detected\n", .{})
+        else
+            std.debug.print("Media error detected: {s}\n", .{selector});
+    } else {
+        if (selector.len == 0)
+            std.debug.print("Timeout waiting for any media error\n", .{})
+        else
+            std.debug.print("Timeout waiting for media error: {s}\n", .{selector});
+        return error.Timeout;
+    }
+}
+
 /// Poll a JS condition until it returns true or timeout
 fn pollUntil(session: *cdp.Session, allocator: std.mem.Allocator, js_condition: []const u8, timeout_ms: u32) !bool {
     var runtime = cdp.Runtime.init(session);
@@ -222,18 +330,27 @@ pub fn printWaitHelp() void {
         \\Usage: wait <selector|ms> [options]
         \\
         \\Options:
-        \\  --text <string>    Wait for text to appear on page
-        \\  --match <pattern>  Wait for URL to match pattern (glob: ** and *)
-        \\  --load <state>     Wait for load state (load, domcontentloaded, networkidle)
-        \\  --fn <expression>  Wait for JS expression to return truthy
+        \\  --text <string>           Wait for text to appear on page
+        \\  --match <pattern>         Wait for URL to match pattern (glob: ** and *)
+        \\  --load <state>            Wait for load state (load, domcontentloaded, networkidle)
+        \\  --fn <expression>         Wait for JS expression to return truthy
+        \\
+        \\Media Options (selector optional - omit for any media):
+        \\  --media-playing [sel]     Wait for media to start playing
+        \\  --media-ended [sel]       Wait for media playback to end
+        \\  --media-ready [sel]       Wait for media to have enough data (readyState >= 3)
+        \\  --media-error [sel]       Wait for media error
         \\
         \\Examples:
-        \\  wait "#login-form"           Wait for element to be visible
-        \\  wait 2000                    Wait 2 seconds
-        \\  wait --text "Welcome"        Wait for text
-        \\  wait --match "**/dashboard"   Wait for URL pattern
-        \\  wait --load networkidle       Wait for network idle
-        \\  wait --fn "window.ready"      Wait for JS condition
+        \\  wait "#login-form"             Wait for element to be visible
+        \\  wait 2000                      Wait 2 seconds
+        \\  wait --text "Welcome"          Wait for text
+        \\  wait --match "**/dashboard"    Wait for URL pattern
+        \\  wait --load networkidle        Wait for network idle
+        \\  wait --fn "window.ready"       Wait for JS condition
+        \\  wait --media-playing           Wait for any media to play
+        \\  wait --media-playing "video"   Wait for specific video to play
+        \\  wait --media-ended "#player"   Wait for media to end
         \\
     , .{});
 }

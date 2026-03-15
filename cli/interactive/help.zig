@@ -98,6 +98,15 @@ pub fn print() void {
         \\  wait --match "pat"    Wait for URL pattern (glob)
         \\  wait --load <state>   Wait for load state (load, domcontentloaded, networkidle)
         \\  wait --fn "expr"      Wait for JS condition to be true
+        \\  wait --media-playing [sel]  Wait for media to play (optional selector)
+        \\  wait --media-ended [sel]    Wait for media to end
+        \\  wait --media-ready [sel]    Wait for media data (readyState >= 3)
+        \\  wait --media-error [sel]    Wait for media error
+        \\
+        \\Media:
+        \\  media list              List all audio/video elements (JSON)
+        \\  media get [selector]    Get media element state (JSON)
+        \\  media get <sel> --check-autoplay  Check if autoplay is blocked
         \\
         \\Network:
         \\  network route <url>           Intercept & log matching requests

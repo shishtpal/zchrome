@@ -13,16 +13,16 @@
     },
     .dependencies = .{
         .zlib_json = .{
-            .path = "../zlib-json",
+            .path = "../zlib_json",
         },
         .zlib_png = .{
-            .path = "../zlib-png",
+            .path = "../zlib_png",
         },
         .zlib_wss = .{
-            .path = "../zlib-wss",
+            .path = "../zlib_wss",
         },
         .zlib_http = .{
-            .path = "../zlib-http",
+            .path = "../zlib_http",
         },
         .zlib_clipboard = .{
             .path = "../zlib_clipboard",

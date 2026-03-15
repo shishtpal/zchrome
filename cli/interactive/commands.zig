@@ -381,6 +381,10 @@ pub fn cmdWait(state: *InteractiveState, args: []const []const u8) !void {
     var wait_url: ?[]const u8 = null;
     var wait_load: ?[]const u8 = null;
     var wait_fn: ?[]const u8 = null;
+    var wait_media_playing: ?[]const u8 = null;
+    var wait_media_ended: ?[]const u8 = null;
+    var wait_media_ready: ?[]const u8 = null;
+    var wait_media_error: ?[]const u8 = null;
     var positional: std.ArrayList([]const u8) = .empty;
     defer positional.deinit(state.allocator);
 
@@ -399,6 +403,35 @@ pub fn cmdWait(state: *InteractiveState, args: []const []const u8) !void {
         } else if (eql(arg, "--fn") and i + 1 < args.len) {
             i += 1;
             wait_fn = args[i];
+        } else if (eql(arg, "--media-playing")) {
+            // Optional selector
+            if (i + 1 < args.len and !std.mem.startsWith(u8, args[i + 1], "--")) {
+                i += 1;
+                wait_media_playing = args[i];
+            } else {
+                wait_media_playing = "";
+            }
+        } else if (eql(arg, "--media-ended")) {
+            if (i + 1 < args.len and !std.mem.startsWith(u8, args[i + 1], "--")) {
+                i += 1;
+                wait_media_ended = args[i];
+            } else {
+                wait_media_ended = "";
+            }
+        } else if (eql(arg, "--media-ready")) {
+            if (i + 1 < args.len and !std.mem.startsWith(u8, args[i + 1], "--")) {
+                i += 1;
+                wait_media_ready = args[i];
+            } else {
+                wait_media_ready = "";
+            }
+        } else if (eql(arg, "--media-error")) {
+            if (i + 1 < args.len and !std.mem.startsWith(u8, args[i + 1], "--")) {
+                i += 1;
+                wait_media_error = args[i];
+            } else {
+                wait_media_error = "";
+            }
         } else {
             try positional.append(state.allocator, arg);
         }
@@ -409,6 +442,10 @@ pub fn cmdWait(state: *InteractiveState, args: []const []const u8) !void {
     ctx.wait_url = wait_url;
     ctx.wait_load = wait_load;
     ctx.wait_fn = wait_fn;
+    ctx.wait_media_playing = wait_media_playing;
+    ctx.wait_media_ended = wait_media_ended;
+    ctx.wait_media_ready = wait_media_ready;
+    ctx.wait_media_error = wait_media_error;
     try impl.wait(session, ctx);
 }
 
@@ -460,6 +497,11 @@ pub fn cmdDiff(state: *InteractiveState, args: []const []const u8) !void {
 pub fn cmdClipboard(state: *InteractiveState, args: []const []const u8) !void {
     const session = try requireSession(state);
     try impl.clipboardCmd(session, buildCtx(state, args));
+}
+
+pub fn cmdMedia(state: *InteractiveState, args: []const []const u8) !void {
+    const session = try requireSession(state);
+    try impl.media(session, buildCtx(state, args));
 }
 
 pub fn cmdDom(state: *InteractiveState, args: []const []const u8) !void {

@@ -251,7 +251,8 @@ cli/commands/              Modular command implementations
   elements.zig            click, fill, check, etc.
   keyboard.zig            press, keyDown, keyUp
   mouse.zig               mouse move/down/up/wheel
-  wait.zig                Wait conditions
+  wait.zig                Wait conditions (including media wait)
+  media.zig               Audio/video element inspection
   getters.zig             get text/html/value/attr
   setters.zig             set viewport/device/ua/geo
   dispatch.zig            dispatchSessionCommand

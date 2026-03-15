@@ -9,7 +9,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    const json_mod = json_dep.module("json");
+    const json_mod = json_dep.module("zlib_json");
 
     // ─── PNG Module (from zlib-png) ────────────────────────────
     const png_dep = b.dependency("zlib_png", .{
@@ -30,7 +30,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    const http_mod = http_dep.module("zlib-http");
+    const http_mod = http_dep.module("zlib_http");
 
     // ─── Clipboard Module (from zlib_clipboard) ──────────────
     const clipboard_dep = b.dependency("zlib_clipboard", .{

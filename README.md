@@ -99,6 +99,7 @@ zchrome version
 | `fill <selector> <text>` | Fill input field |
 | `version` | Display browser version info |
 | `network` | Monitor network requests |
+| `media list\|get` | Inspect audio/video elements |
 | `cookies` | Manage cookies |
 | `storage local\|session` | Get/set/clear web storage |
 | `tab` | List, open, switch, close tabs |

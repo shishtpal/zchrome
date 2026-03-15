@@ -24,6 +24,11 @@ pub const CommandCtx = struct {
     wait_url: ?[]const u8 = null,
     wait_load: ?[]const u8 = null,
     wait_fn: ?[]const u8 = null,
+    // Media wait options (selector is optional - null means any media)
+    wait_media_playing: ?[]const u8 = null,
+    wait_media_ended: ?[]const u8 = null,
+    wait_media_ready: ?[]const u8 = null,
+    wait_media_error: ?[]const u8 = null,
     // Click options
     click_js: bool = false,
     // Replay options

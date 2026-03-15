@@ -39,6 +39,10 @@ pub const Args = struct {
     wait_url: ?[]const u8 = null,
     wait_load: ?[]const u8 = null,
     wait_fn: ?[]const u8 = null,
+    wait_media_playing: ?[]const u8 = null,
+    wait_media_ended: ?[]const u8 = null,
+    wait_media_ready: ?[]const u8 = null,
+    wait_media_error: ?[]const u8 = null,
     click_js: bool = false,
     replay_retries: u32 = 3,
     replay_retry_delay: u32 = 100,
@@ -96,6 +100,7 @@ pub const Args = struct {
         clipboard,
         provider,
         extensions,
+        media,
         help,
     };
 
@@ -112,6 +117,10 @@ pub const Args = struct {
         if (self.wait_url) |w| allocator.free(w);
         if (self.wait_load) |w| allocator.free(w);
         if (self.wait_fn) |w| allocator.free(w);
+        if (self.wait_media_playing) |w| allocator.free(w);
+        if (self.wait_media_ended) |w| allocator.free(w);
+        if (self.wait_media_ready) |w| allocator.free(w);
+        if (self.wait_media_error) |w| allocator.free(w);
         if (self.session_arg) |s| allocator.free(s);
         if (self.replay_fallback) |f| allocator.free(f);
         if (self.provider) |p| allocator.free(p);
@@ -148,6 +157,10 @@ pub fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
     var wait_url: ?[]const u8 = null;
     var wait_load: ?[]const u8 = null;
     var wait_fn: ?[]const u8 = null;
+    var wait_media_playing: ?[]const u8 = null;
+    var wait_media_ended: ?[]const u8 = null;
+    var wait_media_ready: ?[]const u8 = null;
+    var wait_media_error: ?[]const u8 = null;
     var click_js: bool = false;
     var session_arg: ?[]const u8 = null;
     var replay_retries: u32 = 3;
@@ -244,6 +257,32 @@ pub fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
             } else if (std.mem.eql(u8, arg, "--fn")) {
                 const val = iter.next() orelse return error.MissingArgument;
                 wait_fn = try allocator.dupe(u8, val);
+            } else if (std.mem.eql(u8, arg, "--media-playing")) {
+                // Optional selector - if next arg starts with -- or is missing, use empty string
+                const val = iter.next() orelse "";
+                wait_media_playing = if (val.len > 0 and std.mem.startsWith(u8, val, "--")) blk: {
+                    // Put it back for next iteration by adding to positional
+                    try positional.append(allocator, try allocator.dupe(u8, val));
+                    break :blk try allocator.dupe(u8, "");
+                } else try allocator.dupe(u8, val);
+            } else if (std.mem.eql(u8, arg, "--media-ended")) {
+                const val = iter.next() orelse "";
+                wait_media_ended = if (val.len > 0 and std.mem.startsWith(u8, val, "--")) blk: {
+                    try positional.append(allocator, try allocator.dupe(u8, val));
+                    break :blk try allocator.dupe(u8, "");
+                } else try allocator.dupe(u8, val);
+            } else if (std.mem.eql(u8, arg, "--media-ready")) {
+                const val = iter.next() orelse "";
+                wait_media_ready = if (val.len > 0 and std.mem.startsWith(u8, val, "--")) blk: {
+                    try positional.append(allocator, try allocator.dupe(u8, val));
+                    break :blk try allocator.dupe(u8, "");
+                } else try allocator.dupe(u8, val);
+            } else if (std.mem.eql(u8, arg, "--media-error")) {
+                const val = iter.next() orelse "";
+                wait_media_error = if (val.len > 0 and std.mem.startsWith(u8, val, "--")) blk: {
+                    try positional.append(allocator, try allocator.dupe(u8, val));
+                    break :blk try allocator.dupe(u8, "");
+                } else try allocator.dupe(u8, val);
             } else if (std.mem.eql(u8, arg, "--js")) {
                 click_js = true;
             } else if (std.mem.eql(u8, arg, "--retries")) {
@@ -314,6 +353,10 @@ pub fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
         .wait_url = wait_url,
         .wait_load = wait_load,
         .wait_fn = wait_fn,
+        .wait_media_playing = wait_media_playing,
+        .wait_media_ended = wait_media_ended,
+        .wait_media_ready = wait_media_ready,
+        .wait_media_error = wait_media_error,
         .click_js = click_js,
         .session_arg = session_arg,
         .replay_retries = replay_retries,

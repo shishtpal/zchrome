@@ -78,12 +78,13 @@ pub fn buildGetterJs(
         return try std.fmt.allocPrint(allocator,
             \\(function(role,name,nth,root){{
             \\root=root||document;
-            \\var IMPLICIT_ROLES={{'link':'a[href]','button':'button,input[type="button"],input[type="submit"],input[type="reset"]','textbox':'input:not([type]),input[type="text"],input[type="email"],input[type="password"],input[type="search"],input[type="tel"],input[type="url"],input[type="number"],textarea,[contenteditable="true"],[contenteditable=""]','checkbox':'input[type="checkbox"]','radio':'input[type="radio"]','combobox':'select','heading':'h1,h2,h3,h4,h5,h6'}};
+            \\var IMPLICIT_ROLES={{'link':'a[href]','button':'button,input[type="button"],input[type="submit"],input[type="reset"]','textbox':'input:not([type]),input[type="text"],input[type="email"],input[type="password"],input[type="search"],input[type="tel"],input[type="url"],input[type="number"],textarea,[contenteditable="true"],[contenteditable=""]','checkbox':'input[type="checkbox"]','radio':'input[type="radio"]','combobox':'select','listbox':'select[multiple]','heading':'h1,h2,h3,h4,h5,h6','img':'img','list':'ul,ol','listitem':'li','navigation':'nav','main':'main','form':'form','table':'table','row':'tr','cell':'td','columnheader':'th','spinbutton':'input[type="number"]','switch':'input[type="checkbox"]'}};
             \\function queryAll(r,sel){{var res=Array.from(r.querySelectorAll(sel));r.querySelectorAll('*').forEach(function(e){{if(e.shadowRoot)res=res.concat(queryAll(e.shadowRoot,sel))}});return res}}
-            \\function getLabel(e){{var a=e.getAttribute('aria-label');if(a)return a;var p=e.getAttribute('placeholder');if(p)return p;var id=e.id;if(id){{var doc=root.ownerDocument||root;var l=doc.querySelector('label[for="'+id+'"]');if(l)return l.textContent.trim()}}return e.textContent.trim()}}
+            \\function getLabel(e){{var a=e.getAttribute('aria-label');if(a)return a;var p=e.getAttribute('placeholder');if(p)return p;var id=e.id;if(id){{var doc=root.ownerDocument||root;var l=doc.querySelector('label[for="'+id+'"]');if(l)return l.textContent.trim()}}if(e.type==='checkbox'||e.type==='radio'){{var par=e.closest('label');if(par)return par.textContent.trim()}}return e.textContent.trim()}}
             \\var els=queryAll(root,'[role="'+role+'"]');
             \\if(IMPLICIT_ROLES[role]){{var implicit=queryAll(root,IMPLICIT_ROLES[role]).filter(function(e){{return !e.hasAttribute('role')}});els=els.concat(implicit)}}
-            \\if(name)els=els.filter(function(e){{return getLabel(e)===name}});
+            \\function matchesName(e,n){{if(getLabel(e)===n)return true;if(e.getAttribute('name')===n)return true;if(e.id===n)return true;return false}}
+            \\if(name)els=els.filter(function(e){{return matchesName(e,name)}});
             \\var el=els[nth||0];if(!el)return null;return {s}
             \\}})('{s}',{s},{d},{s})
         , .{ getter_expr, role, name_arg, nth, root_expr });

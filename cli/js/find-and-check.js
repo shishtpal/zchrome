@@ -1,8 +1,25 @@
 (function(role, name, nth, checked, root) {
   root = root || document;
   var IMPLICIT_ROLES = {
+    'link': 'a[href]',
+    'button': 'button, input[type="button"], input[type="submit"], input[type="reset"]',
+    'textbox': 'input:not([type]), input[type="text"], input[type="email"], input[type="password"], input[type="search"], input[type="tel"], input[type="url"], input[type="number"], textarea, [contenteditable="true"], [contenteditable=""]',
     'checkbox': 'input[type="checkbox"]',
     'radio': 'input[type="radio"]',
+    'combobox': 'select',
+    'listbox': 'select[multiple]',
+    'heading': 'h1, h2, h3, h4, h5, h6',
+    'img': 'img',
+    'list': 'ul, ol',
+    'listitem': 'li',
+    'navigation': 'nav',
+    'main': 'main',
+    'form': 'form',
+    'table': 'table',
+    'row': 'tr',
+    'cell': 'td',
+    'columnheader': 'th',
+    'spinbutton': 'input[type="number"]',
     'switch': 'input[type="checkbox"]'
   };
 
@@ -34,13 +51,9 @@
   }
 
   function matchesName(el, targetName) {
-    // First check the accessible label
     if (getLabel(el) === targetName) return true;
-    // For radio/checkbox, also match by name attribute or id
-    if (el.type === 'checkbox' || el.type === 'radio') {
-      if (el.getAttribute('name') === targetName) return true;
-      if (el.id === targetName) return true;
-    }
+    if (el.getAttribute('name') === targetName) return true;
+    if (el.id === targetName) return true;
     return false;
   }
 

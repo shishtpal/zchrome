@@ -18,7 +18,9 @@
     'table': 'table',
     'row': 'tr',
     'cell': 'td',
-    'columnheader': 'th'
+    'columnheader': 'th',
+    'spinbutton': 'input[type="number"]',
+    'switch': 'input[type="checkbox"]'
   };
 
   function queryAll(r, selector) {
@@ -39,6 +41,10 @@
       var doc = root.ownerDocument || root;
       var l = doc.querySelector('label[for="' + id + '"]');
       if (l) return l.textContent.trim();
+    }
+    if (el.type === 'checkbox' || el.type === 'radio') {
+      var parent = el.closest('label');
+      if (parent) return parent.textContent.trim();
     }
     return el.textContent.trim();
   }

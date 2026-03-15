@@ -7,10 +7,20 @@
     'checkbox': 'input[type="checkbox"]',
     'radio': 'input[type="radio"]',
     'combobox': 'select',
+    'listbox': 'select[multiple]',
     'heading': 'h1, h2, h3, h4, h5, h6',
     'img': 'img',
     'list': 'ul, ol',
-    'listitem': 'li'
+    'listitem': 'li',
+    'navigation': 'nav',
+    'main': 'main',
+    'form': 'form',
+    'table': 'table',
+    'row': 'tr',
+    'cell': 'td',
+    'columnheader': 'th',
+    'spinbutton': 'input[type="number"]',
+    'switch': 'input[type="checkbox"]'
   };
 
   function queryAll(r, selector) {
@@ -32,7 +42,18 @@
       var l = doc.querySelector('label[for="' + id + '"]');
       if (l) return l.textContent.trim();
     }
+    if (el.type === 'checkbox' || el.type === 'radio') {
+      var parent = el.closest('label');
+      if (parent) return parent.textContent.trim();
+    }
     return el.textContent.trim();
+  }
+
+  function matchesName(el, targetName) {
+    if (getLabel(el) === targetName) return true;
+    if (el.getAttribute('name') === targetName) return true;
+    if (el.id === targetName) return true;
+    return false;
   }
 
   var els = queryAll(root, '[role="' + role + '"]');
@@ -43,7 +64,7 @@
   }
 
   if (name) {
-    els = els.filter(function(el) { return getLabel(el) === name; });
+    els = els.filter(function(el) { return matchesName(el, name); });
   }
 
   var el = els[nth || 0];

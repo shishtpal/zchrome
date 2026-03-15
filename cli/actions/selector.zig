@@ -76,12 +76,10 @@ pub fn resolveSelector(allocator: std.mem.Allocator, io: std.Io, selector: []con
     }
 }
 
-/// Resolve a deep selector with >>> piercing syntax with full iframe + shadow DOM support
-/// Uses CDP session to detect element types and get iframe execution contexts
-fn resolveDeepSelectorWithSession(allocator: std.mem.Allocator, session: *cdp.Session, selector: []const u8) !ResolvedElement {
-    // Split by " >>> "
+/// Parse piercing selector segments split by " >>> "
+fn parsePiercingSegments(allocator: std.mem.Allocator, selector: []const u8) !std.ArrayList([]const u8) {
     var segments: std.ArrayList([]const u8) = .empty;
-    defer segments.deinit(allocator);
+    errdefer segments.deinit(allocator);
 
     var iter = std.mem.splitSequence(u8, selector, PIERCE_DELIMITER);
     while (iter.next()) |segment| {
@@ -93,26 +91,45 @@ fn resolveDeepSelectorWithSession(allocator: std.mem.Allocator, session: *cdp.Se
 
     if (segments.items.len < 2) {
         std.debug.print("Error: Invalid piercing selector syntax. Expected 'selector >>> selector'\n", .{});
+        segments.deinit(allocator);
         return error.InvalidSelector;
     }
 
-    var runtime = cdp.Runtime.init(session);
+    return segments;
+}
+
+/// Append a shadow root traversal step to the root expression
+fn appendShadowStep(root_expr: *std.ArrayList(u8), allocator: std.mem.Allocator, escaped: []const u8, is_first: bool) !void {
+    if (is_first and root_expr.items.len == 0) {
+        try root_expr.appendSlice(allocator, "document.querySelector(");
+    } else {
+        try root_expr.appendSlice(allocator, ".querySelector(");
+    }
+    try root_expr.appendSlice(allocator, escaped);
+    try root_expr.appendSlice(allocator, ").shadowRoot");
+}
+
+/// Resolve a deep selector with >>> piercing syntax with full iframe + shadow DOM support
+/// Uses CDP session to detect element types and get iframe execution contexts
+fn resolveDeepSelectorWithSession(allocator: std.mem.Allocator, session: *cdp.Session, selector: []const u8) !ResolvedElement {
+    var segments = try parsePiercingSegments(allocator, selector);
+    defer segments.deinit(allocator);
+
+    var active_session = session;
+    var runtime = cdp.Runtime.init(active_session);
     try runtime.enable();
 
-    // Track current context and root expression
-    const current_context_id: ?i64 = null;
     var root_expr: std.ArrayList(u8) = .empty;
     defer root_expr.deinit(allocator);
 
     var total_iframe_offset_x: f64 = 0;
     var total_iframe_offset_y: f64 = 0;
 
-    // OOP iframe session tracking (Phase 3)
+    // OOP iframe session tracking
     var oop_frame_session: ?*cdp.Session = null;
     var oop_frame_session_id: ?[]const u8 = null;
     var oop_connection: ?*cdp.Connection = null;
     errdefer {
-        // Clean up if we fail after attaching
         if (oop_frame_session_id) |sid| {
             if (oop_connection) |conn| {
                 var target = cdp.Target.init(conn);
@@ -122,12 +139,10 @@ fn resolveDeepSelectorWithSession(allocator: std.mem.Allocator, session: *cdp.Se
         }
     }
 
-    // Process all segments except the last one
     for (segments.items[0 .. segments.items.len - 1], 0..) |segment, i| {
         const escaped = try helpers.escapeJsString(allocator, segment);
         defer allocator.free(escaped);
 
-        // Build the current query expression
         var query_js: []const u8 = undefined;
         if (root_expr.items.len == 0) {
             query_js = try std.fmt.allocPrint(allocator, "document.querySelector({s})", .{escaped});
@@ -136,7 +151,6 @@ fn resolveDeepSelectorWithSession(allocator: std.mem.Allocator, session: *cdp.Se
         }
         defer allocator.free(query_js);
 
-        // Check what type of element this is (iframe or shadow host)
         const check_js = try std.fmt.allocPrint(allocator,
             \\(function(){{
             \\  var el = {s};
@@ -153,7 +167,6 @@ fn resolveDeepSelectorWithSession(allocator: std.mem.Allocator, session: *cdp.Se
 
         var result = try runtime.evaluate(allocator, check_js, .{
             .return_by_value = true,
-            .context_id = current_context_id,
         });
         defer result.deinit(allocator);
 
@@ -165,8 +178,6 @@ fn resolveDeepSelectorWithSession(allocator: std.mem.Allocator, session: *cdp.Se
                     std.debug.print("Error: Element not found for selector segment: {s}\n", .{segment});
                     return error.ElementNotFound;
                 } else if (std.mem.eql(u8, elem_type, "iframe")) {
-                    // It's an iframe - need to get its execution context
-                    // Accumulate iframe offset for coordinate adjustment
                     if (val.object.get("x")) |x| {
                         total_iframe_offset_x += helpers.getFloatFromJson(x) orelse 0;
                     }
@@ -174,7 +185,6 @@ fn resolveDeepSelectorWithSession(allocator: std.mem.Allocator, session: *cdp.Se
                         total_iframe_offset_y += helpers.getFloatFromJson(y) orelse 0;
                     }
 
-                    // Check if iframe is same-origin (contentDocument accessible)
                     const ctx_js = try std.fmt.allocPrint(allocator,
                         \\(function(){{
                         \\  var el = {s};
@@ -189,12 +199,13 @@ fn resolveDeepSelectorWithSession(allocator: std.mem.Allocator, session: *cdp.Se
 
                     var ctx_result = try runtime.evaluate(allocator, ctx_js, .{
                         .return_by_value = true,
-                        .context_id = current_context_id,
                     });
                     defer ctx_result.deinit(allocator);
 
                     var is_accessible = false;
-                    var iframe_src: ?[]const u8 = null;
+                    var iframe_src_owned: ?[]const u8 = null;
+                    defer if (iframe_src_owned) |s| allocator.free(s);
+
                     if (ctx_result.value) |ctx_val| {
                         if (ctx_val == .object) {
                             if (ctx_val.object.get("accessible")) |acc| {
@@ -203,7 +214,7 @@ fn resolveDeepSelectorWithSession(allocator: std.mem.Allocator, session: *cdp.Se
                             if (!is_accessible) {
                                 if (ctx_val.object.get("src")) |src| {
                                     if (src == .string and src.string.len > 0) {
-                                        iframe_src = src.string;
+                                        iframe_src_owned = try allocator.dupe(u8, src.string);
                                     }
                                 }
                             }
@@ -211,79 +222,60 @@ fn resolveDeepSelectorWithSession(allocator: std.mem.Allocator, session: *cdp.Se
                     }
 
                     if (is_accessible) {
-                        // Same-origin iframe: use contentDocument
                         root_expr.clearRetainingCapacity();
                         try root_expr.appendSlice(allocator, query_js);
                         try root_expr.appendSlice(allocator, ".contentDocument");
                     } else {
-                        // Cross-origin (OOP) iframe: need to attach to iframe target
-                        // This requires finding the iframe's target and creating a session
-                        if (iframe_src) |src| {
-                            std.debug.print("Note: Cross-origin iframe detected (src: {s}). Attempting to attach...\n", .{src});
-
-                            // Find the iframe's target by URL
-                            var target = cdp.Target.init(session.connection);
-                            const targets = try target.getTargets(allocator);
-                            defer {
-                                for (targets) |*t| t.deinit(allocator);
-                                allocator.free(targets);
-                            }
-
-                            var iframe_target_id: ?[]const u8 = null;
-                            for (targets) |t| {
-                                if (std.mem.eql(u8, t.type, "iframe") and std.mem.indexOf(u8, t.url, src) != null) {
-                                    iframe_target_id = t.target_id;
-                                    break;
-                                }
-                            }
-
-                            if (iframe_target_id == null) {
-                                std.debug.print("Error: Could not find target for cross-origin iframe. The iframe may need to load first.\n", .{});
-                                return error.CrossOriginIframeNotFound;
-                            }
-
-                            // Attach to iframe target with flatten=true to get a session
-                            const frame_session_id = try target.attachToTarget(allocator, iframe_target_id.?, true);
-                            errdefer allocator.free(frame_session_id);
-
-                            // Get/create session for this target
-                            const frame_session = session.connection.getOrCreateSession(frame_session_id) catch |err| {
-                                std.debug.print("Error: Could not create session for iframe target: {}\n", .{err});
-                                allocator.free(frame_session_id);
-                                return error.CrossOriginIframeSessionFailed;
-                            };
-
-                            // Enable Runtime on the iframe session
-                            var frame_runtime = cdp.Runtime.init(frame_session);
-                            try frame_runtime.enable();
-
-                            // Store iframe session info for the result
-                            // Note: We'll need to return these and let the caller manage cleanup
-                            oop_frame_session = frame_session;
-                            oop_frame_session_id = frame_session_id;
-                            oop_connection = session.connection;
-
-                            // For OOP iframes, reset root expression to query from document
-                            root_expr.clearRetainingCapacity();
-                            try root_expr.appendSlice(allocator, "document");
-                        } else {
+                        const iframe_src = iframe_src_owned orelse {
                             std.debug.print("Error: Cross-origin iframe without src attribute\n", .{});
                             return error.CrossOriginIframe;
+                        };
+                        std.debug.print("Note: Cross-origin iframe detected (src: {s}). Attempting to attach...\n", .{iframe_src});
+
+                        var target = cdp.Target.init(active_session.connection);
+                        const targets = try target.getTargets(allocator);
+                        defer {
+                            for (targets) |*t| t.deinit(allocator);
+                            allocator.free(targets);
                         }
+
+                        var iframe_target_id: ?[]const u8 = null;
+                        for (targets) |t| {
+                            if (std.mem.eql(u8, t.type, "iframe") and std.mem.indexOf(u8, t.url, iframe_src) != null) {
+                                iframe_target_id = t.target_id;
+                                break;
+                            }
+                        }
+
+                        if (iframe_target_id == null) {
+                            std.debug.print("Error: Could not find target for cross-origin iframe. The iframe may need to load first.\n", .{});
+                            return error.CrossOriginIframeNotFound;
+                        }
+
+                        const frame_session_id = try target.attachToTarget(allocator, iframe_target_id.?, true);
+                        errdefer allocator.free(frame_session_id);
+
+                        const frame_session = active_session.connection.getOrCreateSession(frame_session_id) catch |err| {
+                            std.debug.print("Error: Could not create session for iframe target: {}\n", .{err});
+                            allocator.free(frame_session_id);
+                            return error.CrossOriginIframeSessionFailed;
+                        };
+
+                        oop_frame_session = frame_session;
+                        oop_frame_session_id = frame_session_id;
+                        oop_connection = active_session.connection;
+
+                        // Switch to iframe session for subsequent segments
+                        active_session = frame_session;
+                        runtime = cdp.Runtime.init(active_session);
+                        try runtime.enable();
+
+                        root_expr.clearRetainingCapacity();
+                        try root_expr.appendSlice(allocator, "document");
                     }
                 } else if (std.mem.eql(u8, elem_type, "shadow")) {
-                    // It's a shadow host
-                    if (i == 0 and root_expr.items.len == 0) {
-                        try root_expr.appendSlice(allocator, "document.querySelector(");
-                        try root_expr.appendSlice(allocator, escaped);
-                        try root_expr.appendSlice(allocator, ").shadowRoot");
-                    } else {
-                        try root_expr.appendSlice(allocator, ".querySelector(");
-                        try root_expr.appendSlice(allocator, escaped);
-                        try root_expr.appendSlice(allocator, ").shadowRoot");
-                    }
+                    try appendShadowStep(&root_expr, allocator, escaped, i == 0);
                 } else {
-                    // Element is neither iframe nor shadow host - error
                     std.debug.print("Error: Element '{s}' is not an iframe or shadow host (cannot pierce with >>>)\n", .{segment});
                     return error.InvalidPiercingTarget;
                 }
@@ -291,7 +283,6 @@ fn resolveDeepSelectorWithSession(allocator: std.mem.Allocator, session: *cdp.Se
         }
     }
 
-    // The final segment is the actual selector to query within the current context
     const final_selector = segments.items[segments.items.len - 1];
 
     var resolved = ResolvedElement{
@@ -300,26 +291,20 @@ fn resolveDeepSelectorWithSession(allocator: std.mem.Allocator, session: *cdp.Se
         .name = null,
         .nth = null,
         .allocator = allocator,
-        .context_id = current_context_id,
     };
 
-    // Set root expression if we have one
     if (root_expr.items.len > 0) {
         resolved.root_expression = try root_expr.toOwnedSlice(allocator);
     }
 
-    // Set iframe offsets if we traversed iframes
     if (total_iframe_offset_x != 0 or total_iframe_offset_y != 0) {
         resolved.iframe_offsets = .{ .x = total_iframe_offset_x, .y = total_iframe_offset_y };
     }
 
-    // Set OOP iframe session info (Phase 3)
-    // Transfer ownership to the result - caller must call deinit() to clean up
     if (oop_frame_session) |frame_session| {
         resolved.frame_session = frame_session;
         resolved.frame_session_id = oop_frame_session_id;
         resolved.connection = oop_connection;
-        // Clear our copies so errdefer doesn't double-free
         oop_frame_session_id = null;
     }
 
@@ -329,49 +314,18 @@ fn resolveDeepSelectorWithSession(allocator: std.mem.Allocator, session: *cdp.Se
 /// Resolve a deep selector with >>> piercing syntax (shadow DOM only, no iframe support)
 /// Example: "my-component >>> .inner-button" → query .inner-button inside my-component's shadow root
 fn resolveDeepSelectorShadowOnly(allocator: std.mem.Allocator, selector: []const u8) !ResolvedElement {
-    // Split by " >>> "
-    var segments: std.ArrayList([]const u8) = .empty;
+    var segments = try parsePiercingSegments(allocator, selector);
     defer segments.deinit(allocator);
 
-    var iter = std.mem.splitSequence(u8, selector, PIERCE_DELIMITER);
-    while (iter.next()) |segment| {
-        const trimmed = std.mem.trim(u8, segment, " ");
-        if (trimmed.len > 0) {
-            try segments.append(allocator, trimmed);
-        }
-    }
-
-    if (segments.items.len < 2) {
-        std.debug.print("Error: Invalid piercing selector syntax. Expected 'selector >>> selector'\n", .{});
-        return error.InvalidSelector;
-    }
-
-    // Build root_expression by chaining shadow root traversals
-    // For "a >>> b >>> c":
-    //   root = document.querySelector('a').shadowRoot.querySelector('b').shadowRoot
-    //   final selector = c
     var root_expr: std.ArrayList(u8) = .empty;
     errdefer root_expr.deinit(allocator);
 
-    // Process all segments except the last one to build the root expression
     for (segments.items[0 .. segments.items.len - 1], 0..) |segment, i| {
         const escaped = try helpers.escapeJsString(allocator, segment);
         defer allocator.free(escaped);
-
-        if (i == 0) {
-            // First segment: document.querySelector('segment').shadowRoot
-            try root_expr.appendSlice(allocator, "document.querySelector(");
-            try root_expr.appendSlice(allocator, escaped);
-            try root_expr.appendSlice(allocator, ").shadowRoot");
-        } else {
-            // Subsequent segments: .querySelector('segment').shadowRoot
-            try root_expr.appendSlice(allocator, ".querySelector(");
-            try root_expr.appendSlice(allocator, escaped);
-            try root_expr.appendSlice(allocator, ").shadowRoot");
-        }
+        try appendShadowStep(&root_expr, allocator, escaped, i == 0);
     }
 
-    // The final segment is the actual selector to query within the shadow root
     const final_selector = segments.items[segments.items.len - 1];
 
     return ResolvedElement{

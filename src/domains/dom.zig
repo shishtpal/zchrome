@@ -33,10 +33,11 @@ pub const DOM = struct {
 
     /// Get document
     pub fn getDocument(self: *Self, allocator: std.mem.Allocator, options: GetDocumentOptions) !Node {
-        const result = try self.session.sendCommand("DOM.getDocument", .{
+        var result = try self.session.sendCommand("DOM.getDocument", .{
             .depth = options.depth,
             .pierce = options.pierce,
         });
+        defer result.deinit(allocator);
 
         const root = result.get("root") orelse return error.MissingField;
         return try parseNode(allocator, root);
@@ -310,8 +311,14 @@ fn parseNode(allocator: std.mem.Allocator, obj: json.Value) !Node {
     if (obj.get("children")) |children_arr| {
         const items = children_arr.asArray() orelse return error.TypeMismatch;
         var nodes = try allocator.alloc(Node, items.len);
+        var parsed_count: usize = 0;
+        errdefer {
+            for (nodes[0..parsed_count]) |*n| n.deinit(allocator);
+            allocator.free(nodes);
+        }
         for (items, 0..) |child, i| {
             nodes[i] = try parseNode(allocator, child);
+            parsed_count += 1;
         }
         children = nodes;
     }
@@ -332,7 +339,7 @@ fn parseNode(allocator: std.mem.Allocator, obj: json.Value) !Node {
 fn parseBoxModel(allocator: std.mem.Allocator, obj: json.Value) !BoxModel {
     _ = allocator;
 
-    var model: BoxModel = undefined;
+    var model: BoxModel = std.mem.zeroes(BoxModel);
 
     if (obj.get("content")) |content| {
         const arr = content.asArray() orelse return error.TypeMismatch;
@@ -408,9 +415,14 @@ fn parseNodeDescription(allocator: std.mem.Allocator, obj: json.Value) !NodeDesc
     if (obj.get("shadowRoots")) |roots_arr| {
         if (roots_arr.asArray()) |items| {
             var roots = try allocator.alloc(NodeDescription, items.len);
-            errdefer allocator.free(roots);
+            var roots_parsed: usize = 0;
+            errdefer {
+                for (roots[0..roots_parsed]) |*r| r.deinit(allocator);
+                allocator.free(roots);
+            }
             for (items, 0..) |item, i| {
                 roots[i] = try parseNodeDescription(allocator, item);
+                roots_parsed += 1;
             }
             shadow_roots = roots;
         }

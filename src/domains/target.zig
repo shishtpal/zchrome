@@ -63,7 +63,7 @@ pub const Target = struct {
     /// Close a target
     pub fn closeTarget(self: *Self, target_id: []const u8) !bool {
         const result = try self.connection.sendCommand("Target.closeTarget", .{
-            .target_id = target_id,
+            .targetId = target_id,
         }, null);
 
         return try result.getBool("success");
@@ -85,14 +85,14 @@ pub const Target = struct {
     /// Detach from a target
     pub fn detachFromTarget(self: *Self, session_id: []const u8) !void {
         try self.connection.sendCommandIgnoreResult("Target.detachFromTarget", .{
-            .session_id = session_id,
+            .sessionId = session_id,
         }, null);
     }
 
     /// Activate a target
     pub fn activateTarget(self: *Self, target_id: []const u8) !void {
         try self.connection.sendCommandIgnoreResult("Target.activateTarget", .{
-            .target_id = target_id,
+            .targetId = target_id,
         }, null);
     }
 
@@ -104,15 +104,16 @@ pub const Target = struct {
     }
 
     /// Create a browser context
-    pub fn createBrowserContext(self: *Self) ![]const u8 {
-        const result = try self.connection.sendCommand("Target.createBrowserContext", .{}, null);
-        return try result.getString("browserContextId");
+    pub fn createBrowserContext(self: *Self, allocator: std.mem.Allocator) ![]const u8 {
+        var result = try self.connection.sendCommand("Target.createBrowserContext", .{}, null);
+        defer result.deinit(allocator);
+        return try allocator.dupe(u8, try result.getString("browserContextId"));
     }
 
     /// Dispose a browser context
     pub fn disposeBrowserContext(self: *Self, context_id: []const u8) !void {
         try self.connection.sendCommandIgnoreResult("Target.disposeBrowserContext", .{
-            .browser_context_id = context_id,
+            .browserContextId = context_id,
         }, null);
     }
 

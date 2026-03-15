@@ -256,11 +256,12 @@ pub const Page = struct {
     }
 
     /// Add a script to evaluate on new document
-    pub fn addScriptToEvaluateOnNewDocument(self: *Self, source: []const u8) ![]const u8 {
-        const result = try self.session.sendCommand("Page.addScriptToEvaluateOnNewDocument", .{
+    pub fn addScriptToEvaluateOnNewDocument(self: *Self, allocator: std.mem.Allocator, source: []const u8) ![]const u8 {
+        var result = try self.session.sendCommand("Page.addScriptToEvaluateOnNewDocument", .{
             .source = source,
         });
-        return try result.getString("identifier");
+        defer result.deinit(allocator);
+        return try allocator.dupe(u8, try result.getString("identifier"));
     }
 
     /// Remove script to evaluate on new document
@@ -283,9 +284,10 @@ pub const Page = struct {
         });
     }
 
-    /// Set document content
-    pub fn setDocumentContent(self: *Self, html: []const u8) !void {
+    /// Set document content for a frame
+    pub fn setDocumentContent(self: *Self, frame_id: FrameId, html: []const u8) !void {
         try self.session.sendCommandIgnoreResult("Page.setDocumentContent", .{
+            .frameId = frame_id,
             .html = html,
         });
     }
@@ -309,7 +311,7 @@ pub const Page = struct {
     /// Get all frames in the frame tree
     pub fn getAllFrames(self: *Self, allocator: std.mem.Allocator) ![]Frame {
         var result = try self.session.sendCommand("Page.getFrameTree", .{});
-        defer result.deinit(self.session.allocator);
+        defer result.deinit(allocator);
 
         var frames: std.ArrayList(Frame) = .empty;
         errdefer {

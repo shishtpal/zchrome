@@ -88,7 +88,8 @@ pub fn cursorRecord(session: *cdp.Session, allocator: std.mem.Allocator, io: std
     // Inject on page navigation
     var page = cdp.Page.init(session);
     try page.enable();
-    _ = try page.addScriptToEvaluateOnNewDocument(recording_js);
+    const script_id = try page.addScriptToEvaluateOnNewDocument(allocator, recording_js);
+    defer allocator.free(script_id);
 
     // Start recording server and wait for stop
     var server = try record_server.RecordServer.init(allocator, io, port);

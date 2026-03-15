@@ -8,7 +8,19 @@
     'radio': 'input[type="radio"]',
     'combobox': 'select',
     'listbox': 'select[multiple]',
-    'heading': 'h1, h2, h3, h4, h5, h6'
+    'heading': 'h1, h2, h3, h4, h5, h6',
+    'img': 'img',
+    'list': 'ul, ol',
+    'listitem': 'li',
+    'navigation': 'nav',
+    'main': 'main',
+    'form': 'form',
+    'table': 'table',
+    'row': 'tr',
+    'cell': 'td',
+    'columnheader': 'th',
+    'spinbutton': 'input[type="number"]',
+    'switch': 'input[type="checkbox"]'
   };
 
   function queryAll(r, selector) {
@@ -29,6 +41,10 @@
       var doc = root.ownerDocument || root;
       var l = doc.querySelector('label[for="' + id + '"]');
       if (l) return l.textContent.trim();
+    }
+    if (el.type === 'checkbox' || el.type === 'radio') {
+      var parent = el.closest('label');
+      if (parent) return parent.textContent.trim();
     }
     return el.textContent.trim();
   }

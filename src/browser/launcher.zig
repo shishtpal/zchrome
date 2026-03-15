@@ -179,7 +179,7 @@ pub const Browser = struct {
     /// Close a page
     pub fn closePage(self: *Self, target_id: []const u8) !void {
         var result = try self.connection.sendCommand("Target.closeTarget", .{
-            .target_id = target_id,
+            .targetId = target_id,
         }, null);
         result.deinit(self.allocator);
     }

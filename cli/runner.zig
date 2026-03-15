@@ -66,6 +66,7 @@ fn buildCtx(args: Args, allocator: std.mem.Allocator) impl.CommandCtx {
         .replay_fallback = args.replay_fallback,
         .replay_resume = args.replay_resume,
         .replay_from = args.replay_from,
+        .extract_all = args.extract_all,
     };
 }
 
@@ -329,139 +330,21 @@ pub fn cmdEvaluate(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocat
 }
 
 pub fn cmdTab(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
-    for (args.positional) |arg| {
-        if (std.mem.eql(u8, arg, "--help")) {
-            impl.printTabHelp();
-            return;
-        }
-    }
+    const ctx = buildCtx(args, allocator);
+    const result = try impl.cmdTab(browser, allocator, ctx, null);
 
-    var target = cdp.Target.init(browser.connection);
-
-    if (args.positional.len >= 1 and std.mem.eql(u8, args.positional[0], "new")) {
-        const url = if (args.positional.len >= 2) args.positional[1] else "about:blank";
-        const target_id = try target.createTarget(url);
-        std.debug.print("New tab: {s}\n", .{target_id});
-        saveTargetToConfig(target_id, args);
-        return;
+    // Save target to config if we created or switched tabs
+    if (result.target_id) |tid| {
+        saveTargetToConfig(tid, args);
+        // Free allocated strings
+        allocator.free(tid);
     }
-
-    if (args.positional.len >= 1 and std.mem.eql(u8, args.positional[0], "close")) {
-        const page_tabs = try browser.pages();
-        defer {
-            for (page_tabs) |*p| {
-                var pi = p.*;
-                pi.deinit(allocator);
-            }
-            allocator.free(page_tabs);
-        }
-        if (page_tabs.len == 0) {
-            std.debug.print("No tabs open\n", .{});
-            return;
-        }
-        var close_idx: usize = page_tabs.len - 1;
-        if (args.positional.len >= 2) {
-            close_idx = std.fmt.parseInt(usize, args.positional[1], 10) catch {
-                std.debug.print("Invalid tab number: {s}\n", .{args.positional[1]});
-                return;
-            };
-            if (close_idx == 0 or close_idx > page_tabs.len) {
-                std.debug.print("Tab number out of range (1-{})\n", .{page_tabs.len});
-                return;
-            }
-            close_idx -= 1;
-        }
-        const success = try target.closeTarget(page_tabs[close_idx].target_id);
-        if (success) {
-            std.debug.print("Closed tab {}: {s}\n", .{ close_idx + 1, page_tabs[close_idx].title });
-        } else {
-            std.debug.print("Failed to close tab\n", .{});
-        }
-        return;
-    }
-
-    if (args.positional.len >= 1) {
-        const tab_num = std.fmt.parseInt(usize, args.positional[0], 10) catch {
-            std.debug.print("Unknown subcommand: {s}\n", .{args.positional[0]});
-            printTabUsage();
-            return;
-        };
-        const page_tabs = try browser.pages();
-        defer {
-            for (page_tabs) |*p| {
-                var pi = p.*;
-                pi.deinit(allocator);
-            }
-            allocator.free(page_tabs);
-        }
-        if (tab_num == 0 or tab_num > page_tabs.len) {
-            std.debug.print("Tab number out of range (1-{})\n", .{page_tabs.len});
-            return;
-        }
-        const selected = page_tabs[tab_num - 1];
-        try target.activateTarget(selected.target_id);
-        saveTargetToConfig(selected.target_id, args);
-        std.debug.print("Switched to tab {}: {s} ({s})\n", .{ tab_num, selected.title, selected.url });
-        return;
-    }
-
-    const page_tabs = try browser.pages();
-    defer {
-        for (page_tabs) |*p| {
-            var pi = p.*;
-            pi.deinit(allocator);
-        }
-        allocator.free(page_tabs);
-    }
-    if (page_tabs.len == 0) {
-        std.debug.print("No tabs open\n", .{});
-        return;
-    }
-    for (page_tabs, 1..) |t, i| {
-        std.debug.print("  {}: {s:<30} {s}\n", .{ i, t.title, t.url });
-    }
-    std.debug.print("\nTotal: {} tab(s)\n", .{page_tabs.len});
-}
-
-fn printTabUsage() void {
-    std.debug.print(
-        \\Usage: tab [subcommand]
-        \\
-        \\Subcommands:
-        \\  tab                  List open tabs
-        \\  tab new [url]        Open new tab (optionally navigate to URL)
-        \\  tab <n>              Switch to tab n
-        \\  tab close [n]        Close tab n (default: current)
-        \\
-    , .{});
+    if (result.session_id) |sid| allocator.free(sid);
 }
 
 pub fn cmdWindow(browser: *cdp.Browser, args: Args, allocator: std.mem.Allocator) !void {
-    _ = allocator;
-
-    for (args.positional) |arg| {
-        if (std.mem.eql(u8, arg, "--help")) {
-            impl.printWindowHelp();
-            return;
-        }
-    }
-
-    if (args.positional.len >= 1 and std.mem.eql(u8, args.positional[0], "new")) {
-        _ = try browser.connection.sendCommand("Target.createTarget", .{
-            .url = "about:blank",
-            .newWindow = true,
-        }, null);
-        std.debug.print("New window opened\n", .{});
-        return;
-    }
-
-    std.debug.print(
-        \\Usage: window <subcommand>
-        \\
-        \\Subcommands:
-        \\  window new           Open new browser window
-        \\
-    , .{});
+    const ctx = buildCtx(args, allocator);
+    try impl.cmdWindow(browser, ctx);
 }
 
 pub fn cmdVersion(browser: *cdp.Browser, allocator: std.mem.Allocator) !void {
@@ -615,6 +498,14 @@ fn findFirstRealPage(pages: []cdp.TargetInfo) ?*cdp.TargetInfo {
 }
 
 pub fn cmdOpen(args: Args, allocator: std.mem.Allocator, io: std.Io, config: *config_mod.Config) !void {
+    // Check for --help
+    for (args.positional) |arg| {
+        if (std.mem.eql(u8, arg, "--help")) {
+            printOpenHelp();
+            return;
+        }
+    }
+
     const port = args.port orelse 9222;
 
     if (http_mod.isChromeRunning(io, port)) {
@@ -884,6 +775,14 @@ pub fn cmdOpen(args: Args, allocator: std.mem.Allocator, io: std.Io, config: *co
 }
 
 pub fn cmdConnect(args: Args, allocator: std.mem.Allocator, io: std.Io) !void {
+    // Check for --help
+    for (args.positional) |arg| {
+        if (std.mem.eql(u8, arg, "--help")) {
+            printConnectHelp();
+            return;
+        }
+    }
+
     const port = args.port orelse 9222;
 
     if (args.verbose) {
@@ -945,4 +844,56 @@ pub fn cmdConnect(args: Args, allocator: std.mem.Allocator, io: std.Io) !void {
     if (args.verbose) {
         std.debug.print("Config saved successfully.\n", .{});
     }
+}
+
+fn printOpenHelp() void {
+    std.debug.print(
+        \\Usage: zchrome open [options]
+        \\
+        \\Launch a new Chrome instance with remote debugging enabled.
+        \\
+        \\Options:
+        \\  --port <port>        Remote debugging port (default: 9222)
+        \\  --chrome <path>      Path to Chrome executable
+        \\  --data-dir <dir>     Chrome user data directory
+        \\  --headless [mode]    Run headless (new, old, or off)
+        \\  --via <mode>         Communication mode: port or pipe (default: port)
+        \\  --verbose            Show detailed output
+        \\  --help               Show this help message
+        \\
+        \\Examples:
+        \\  zchrome open                          # Launch with defaults
+        \\  zchrome open --port 9333              # Use custom port
+        \\  zchrome open --headless new           # Run headless
+        \\  zchrome open --chrome /path/to/chrome # Use specific Chrome
+        \\
+        \\Notes:
+        \\  - If Chrome is already running on the port, shows connection info
+        \\  - Session config (port, data-dir) is saved for future commands
+        \\  - Extensions configured in zchrome.yaml are auto-loaded
+        \\
+    , .{});
+}
+
+fn printConnectHelp() void {
+    std.debug.print(
+        \\Usage: zchrome connect [options]
+        \\
+        \\Connect to an existing Chrome instance and save WebSocket URL.
+        \\
+        \\Options:
+        \\  --port <port>        Remote debugging port (default: 9222)
+        \\  --use <target-id>    Set default target ID
+        \\  --verbose            Show detailed output
+        \\  --help               Show this help message
+        \\
+        \\Examples:
+        \\  zchrome connect                       # Connect on default port
+        \\  zchrome connect --port 9333           # Connect on custom port
+        \\
+        \\Notes:
+        \\  - Chrome must already be running with --remote-debugging-port
+        \\  - Saves WebSocket URL to session config for future commands
+        \\
+    , .{});
 }

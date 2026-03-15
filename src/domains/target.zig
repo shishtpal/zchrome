@@ -49,12 +49,15 @@ pub const Target = struct {
     }
 
     /// Create a new target
-    pub fn createTarget(self: *Self, url: []const u8) ![]const u8 {
-        const result = try self.connection.sendCommand("Target.createTarget", .{
+    /// Returns owned target ID string (caller must free)
+    pub fn createTarget(self: *Self, allocator: std.mem.Allocator, url: []const u8) ![]const u8 {
+        var result = try self.connection.sendCommand("Target.createTarget", .{
             .url = url,
         }, null);
+        defer result.deinit(allocator);
 
-        return try result.getString("targetId");
+        const target_id = try result.getString("targetId");
+        return try allocator.dupe(u8, target_id);
     }
 
     /// Close a target

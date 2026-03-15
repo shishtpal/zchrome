@@ -38,6 +38,7 @@ const provider_mod = @import("provider.zig");
 const clipboard_mod = @import("clipboard.zig");
 const extensions_mod = @import("extensions.zig");
 const media_mod = @import("media.zig");
+const tabs_mod = @import("tabs.zig");
 
 // ─── Type Re-exports ─────────────────────────────────────────────────────────
 
@@ -154,10 +155,13 @@ pub const deinitDialogAction = dialog_mod.deinitDialogAction;
 
 pub const dispatchSessionCommand = dispatch_mod.dispatchSessionCommand;
 
-// ─── Help Re-exports ─────────────────────────────────────────────────────────
+// ─── Tab/Window Re-exports ────────────────────────────────────────────────────
 
-pub const printTabHelp = help_mod.printTabHelp;
-pub const printWindowHelp = help_mod.printWindowHelp;
+pub const cmdTab = tabs_mod.cmdTab;
+pub const cmdWindow = tabs_mod.cmdWindow;
+pub const TabResult = tabs_mod.TabResult;
+pub const printTabHelp = tabs_mod.printTabHelp;
+pub const printWindowHelp = tabs_mod.printWindowHelp;
 
 // ─── Network Re-exports ──────────────────────────────────────────────────────
 

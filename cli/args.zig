@@ -49,6 +49,7 @@ pub const Args = struct {
     replay_fallback: ?[]const u8 = null,
     replay_resume: bool = false,
     replay_from: ?usize = null,
+    extract_all: bool = false,
 
     pub const Command = enum {
         open,
@@ -168,6 +169,7 @@ pub fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
     var replay_fallback: ?[]const u8 = null;
     var replay_resume: bool = false;
     var replay_from: ?usize = null;
+    var extract_all: bool = false;
     var provider_arg: ?[]const u8 = null;
     var cleanup_session: bool = false;
     var via_mode: ?ViaMode = null;
@@ -189,6 +191,11 @@ pub fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
                 snap_selector = try allocator.dupe(u8, val);
             } else if (std.mem.eql(u8, arg, "-m")) {
                 snap_mark = true;
+            } else if (std.mem.eql(u8, arg, "-a")) {
+                extract_all = true;
+            } else if (std.mem.eql(u8, arg, "-o")) {
+                const val = iter.next() orelse return error.MissingArgument;
+                output = try allocator.dupe(u8, val);
             }
         } else if (std.mem.startsWith(u8, arg, "--")) {
             if (std.mem.eql(u8, arg, "--url")) {
@@ -311,6 +318,8 @@ pub fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
                     std.debug.print("Error: Invalid --via value '{s}'. Use 'port' or 'pipe'.\n", .{val});
                     return error.InvalidArgument;
                 }
+            } else if (std.mem.eql(u8, arg, "--all")) {
+                extract_all = true;
             } else {
                 try positional.append(allocator, try allocator.dupe(u8, arg));
             }
@@ -364,6 +373,7 @@ pub fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
         .replay_fallback = replay_fallback,
         .replay_resume = replay_resume,
         .replay_from = replay_from,
+        .extract_all = extract_all,
         .provider = provider_arg,
         .cleanup_session = cleanup_session,
         .via = via_mode,

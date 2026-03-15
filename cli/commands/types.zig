@@ -37,6 +37,8 @@ pub const CommandCtx = struct {
     replay_fallback: ?[]const u8 = null,
     replay_resume: bool = false,
     replay_from: ?usize = null,
+    // DOM options
+    extract_all: bool = false,
 
     /// Load config using session context if available, otherwise fallback to global
     pub fn loadConfig(self: CommandCtx) config_mod.Config {

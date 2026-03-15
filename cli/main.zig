@@ -162,6 +162,13 @@ pub fn main(init: std.process.Init) !void {
         }
     }
 
+    // Early --help check for commands that require browser connection
+    // This prevents "Failed to connect" errors when user just wants help
+    if (hasHelpFlag(args.positional)) {
+        printCommandHelp(args.command);
+        return;
+    }
+
     switch (args.command) {
         .open => {
             if (is_cloud_provider) {
@@ -275,5 +282,36 @@ pub fn main(init: std.process.Init) !void {
                 });
             }
         }
+    }
+}
+
+fn hasHelpFlag(positional: []const []const u8) bool {
+    for (positional) |arg| {
+        if (std.mem.eql(u8, arg, "--help")) return true;
+    }
+    return false;
+}
+
+fn printCommandHelp(command: Args.Command) void {
+    switch (command) {
+        .snapshot => impl.printSnapshotHelp(),
+        .wait => impl.printWaitHelp(),
+        .dom => impl.printDomHelp(),
+        .cookies => impl.printCookiesHelp(),
+        .storage => impl.printStorageHelp(),
+        .get => impl.printGetHelp(),
+        .set => impl.printSetHelp(),
+        .mouse => impl.printMouseHelp(),
+        .cursor => impl.printCursorHelp(),
+        .network => impl.printNetworkHelp(),
+        .dev => impl.printDevHelp(),
+        .diff => impl.printDiffHelp(),
+        .tab => impl.printTabHelp(),
+        .window => impl.printWindowHelp(),
+        .clipboard => impl.printClipboardHelp(),
+        .media => impl.printMediaHelp(),
+        .session => impl.printSessionHelp(),
+        .extensions => impl.printExtensionsHelp(),
+        else => args_mod.printUsage(),
     }
 }

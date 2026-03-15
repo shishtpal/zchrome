@@ -343,28 +343,16 @@ pub fn dom(session: *cdp.Session, ctx: CommandCtx) !void {
 
     const selector = ctx.positional[0];
 
-    // Scan all positional args: collect non-flag args for selector/mode,
-    // and detect --all / -a regardless of position.
-    var extract_all = false;
-    var non_flag_count: usize = 0;
-    var mode_str: ?[]const u8 = null;
-    for (ctx.positional) |arg| {
-        if (std.mem.eql(u8, arg, "--all") or std.mem.eql(u8, arg, "-a")) {
-            extract_all = true;
-        } else {
-            non_flag_count += 1;
-            // Second non-flag arg (after selector) is the mode
-            if (non_flag_count == 2) mode_str = arg;
-        }
-    }
+    // Use ctx.extract_all directly (parsed by flags_mod.parseCommandFlags)
+    const extract_all = ctx.extract_all;
 
-    // Parse mode from the second non-flag positional arg
+    // Parse mode from the second positional arg (if present)
     var mode: ExtractMode = .dom;
-    if (mode_str) |ms| {
-        if (ExtractMode.fromString(ms)) |m| {
+    if (ctx.positional.len >= 2) {
+        if (ExtractMode.fromString(ctx.positional[1])) |m| {
             mode = m;
         } else {
-            std.debug.print("Unknown mode: {s}\n", .{ms});
+            std.debug.print("Unknown mode: {s}\n", .{ctx.positional[1]});
             std.debug.print("Valid modes: dom, text, html, attrs, table, form, links, images, macro\n", .{});
             return;
         }

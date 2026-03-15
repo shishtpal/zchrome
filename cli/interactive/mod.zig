@@ -6,6 +6,7 @@
 const std = @import("std");
 const cdp = @import("cdp");
 const commands = @import("commands.zig");
+const flags_mod = @import("../flags.zig");
 const session_mod = @import("../session.zig");
 
 /// State maintained throughout the interactive session
@@ -19,8 +20,20 @@ pub const InteractiveState = struct {
     mouse_x: ?f64 = null,
     mouse_y: ?f64 = null,
     session_ctx: ?*const session_mod.SessionContext = null,
+    /// Pending cleanup from the last buildCtx/parseCommandFlags call.
+    /// Freed at the start of the next buildCtx call or in deinit.
+    _pending_flags: ?flags_mod.ParsedFlags = null,
+
+    /// Free pending flag allocations from a previous buildCtx call.
+    pub fn freePendingFlags(self: *InteractiveState) void {
+        if (self._pending_flags) |*pf| {
+            pf.deinit(self.allocator);
+            self._pending_flags = null;
+        }
+    }
 
     pub fn deinit(self: *InteractiveState) void {
+        self.freePendingFlags();
         if (self.session) |s| s.deinit();
         if (self.target_id) |t| self.allocator.free(t);
     }

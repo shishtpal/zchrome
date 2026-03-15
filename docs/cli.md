@@ -109,6 +109,7 @@ Launch Chrome with remote debugging enabled.
 
 ```bash
 zchrome open [--chrome <path>] [--data-dir <path>] [--port <port>] [--headless] [--via <mode>]
+zchrome open --help    # Show command help
 ```
 
 **Example:**
@@ -151,6 +152,7 @@ Connect to a running Chrome instance and save the WebSocket URL.
 
 ```bash
 zchrome connect [--port <port>]
+zchrome connect --help    # Show command help
 ```
 
 **Example:**
@@ -465,6 +467,7 @@ zchrome tab                     # List tabs (numbered)
 zchrome tab new [url]           # Open new tab (optionally with URL)
 zchrome tab <n>                 # Switch to tab n
 zchrome tab close [n]           # Close tab n (default: current)
+zchrome tab --help              # Show command help
 ```
 
 **Examples:**
@@ -493,6 +496,7 @@ Manage browser windows.
 
 ```bash
 zchrome window new              # Open new browser window
+zchrome window --help           # Show command help
 ```
 
 **Example:**
@@ -618,6 +622,7 @@ Capture the accessibility tree of the active page and save it to `zsnap.json`. T
 
 ```bash
 zchrome snapshot [options]
+zchrome snapshot --help         # Show command help
 ```
 
 **Options:**
@@ -1293,6 +1298,10 @@ See the [Cursor Commands](/cli/cursor) page for full documentation including:
 
 Wait for various conditions before proceeding. All wait commands have a default timeout of 30 seconds (configurable with `--timeout`).
 
+```bash
+zchrome wait --help             # Show command help
+```
+
 ### wait (selector)
 
 Wait for an element to be visible on the page.
@@ -1402,6 +1411,7 @@ Extract DOM elements as JSON with various modes.
 
 ```bash
 zchrome dom <selector> [mode] [options]
+zchrome dom --help              # Show command help
 ```
 
 **Modes:**

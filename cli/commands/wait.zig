@@ -97,10 +97,11 @@ fn waitForSelector(session: *cdp.Session, allocator: std.mem.Allocator, io: std.
 }
 
 fn waitForText(session: *cdp.Session, allocator: std.mem.Allocator, text: []const u8, timeout_ms: u32) !void {
+    // escapeJsString returns a quoted string like "Example", so use it directly
     const escaped = try actions_mod.helpers.escapeJsString(allocator, text);
     defer allocator.free(escaped);
 
-    const js = try std.fmt.allocPrint(allocator, "document.body.innerText.includes('{s}')", .{escaped});
+    const js = try std.fmt.allocPrint(allocator, "document.body.innerText.includes({s})", .{escaped});
     defer allocator.free(js);
 
     if (try pollUntil(session, allocator, js, timeout_ms)) {
@@ -176,7 +177,7 @@ fn waitForMediaPlaying(session: *cdp.Session, allocator: std.mem.Allocator, sele
     else blk: {
         const escaped = try actions_mod.helpers.escapeJsString(allocator, selector);
         defer allocator.free(escaped);
-        break :blk try std.fmt.allocPrint(allocator, "(() => {{ const el = document.querySelector('{s}'); return el && !el.paused && !el.ended; }})()", .{escaped});
+        break :blk try std.fmt.allocPrint(allocator, "(() => {{ const el = document.querySelector({s}); return el && !el.paused && !el.ended; }})()", .{escaped});
     };
     defer if (selector.len > 0) allocator.free(js);
 
@@ -200,7 +201,7 @@ fn waitForMediaEnded(session: *cdp.Session, allocator: std.mem.Allocator, select
     else blk: {
         const escaped = try actions_mod.helpers.escapeJsString(allocator, selector);
         defer allocator.free(escaped);
-        break :blk try std.fmt.allocPrint(allocator, "(() => {{ const el = document.querySelector('{s}'); return el && el.ended; }})()", .{escaped});
+        break :blk try std.fmt.allocPrint(allocator, "(() => {{ const el = document.querySelector({s}); return el && el.ended; }})()", .{escaped});
     };
     defer if (selector.len > 0) allocator.free(js);
 
@@ -225,7 +226,7 @@ fn waitForMediaReady(session: *cdp.Session, allocator: std.mem.Allocator, select
     else blk: {
         const escaped = try actions_mod.helpers.escapeJsString(allocator, selector);
         defer allocator.free(escaped);
-        break :blk try std.fmt.allocPrint(allocator, "(() => {{ const el = document.querySelector('{s}'); return el && el.readyState >= 3; }})()", .{escaped});
+        break :blk try std.fmt.allocPrint(allocator, "(() => {{ const el = document.querySelector({s}); return el && el.readyState >= 3; }})()", .{escaped});
     };
     defer if (selector.len > 0) allocator.free(js);
 
@@ -249,7 +250,7 @@ fn waitForMediaError(session: *cdp.Session, allocator: std.mem.Allocator, select
     else blk: {
         const escaped = try actions_mod.helpers.escapeJsString(allocator, selector);
         defer allocator.free(escaped);
-        break :blk try std.fmt.allocPrint(allocator, "(() => {{ const el = document.querySelector('{s}'); return el && el.error !== null; }})()", .{escaped});
+        break :blk try std.fmt.allocPrint(allocator, "(() => {{ const el = document.querySelector({s}); return el && el.error !== null; }})()", .{escaped});
     };
     defer if (selector.len > 0) allocator.free(js);
 

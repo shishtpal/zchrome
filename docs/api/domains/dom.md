@@ -33,23 +33,31 @@ pub fn disable(self: *DOM) !void
 Get the document root node.
 
 ```zig
-pub fn getDocument(self: *DOM, allocator: Allocator, depth: ?i32) !Node
+pub fn getDocument(self: *DOM, allocator: Allocator, options: GetDocumentOptions) !Node
 ```
 
-**Parameters:**
-- `depth` - Maximum depth of children to return (null = all)
+**Options:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `depth` | `?i32` | Maximum depth of children to return (null = all) |
+| `pierce` | `bool` | Whether to pierce shadow DOM and include shadow roots (default: false) |
 
 **Returns:** `Node` (caller must deinit)
 
 **Example:**
 
 ```zig
-const doc = try dom.getDocument(allocator, 1);
+// Basic usage
+const doc = try dom.getDocument(allocator, .{ .depth = 1 });
 defer {
     var d = doc;
     d.deinit(allocator);
 }
 std.debug.print("Document node ID: {}\n", .{doc.node_id});
+
+// With shadow DOM piercing
+const full_doc = try dom.getDocument(allocator, .{ .depth = -1, .pierce = true });
 ```
 
 ### querySelector
@@ -222,6 +230,84 @@ Resolve a node to a Runtime remote object.
 pub fn resolveNode(self: *DOM, allocator: Allocator, node_id: i64) !RemoteObject
 ```
 
+### describeNode
+
+Get detailed information about a node, including shadow roots and content documents.
+
+```zig
+pub fn describeNode(self: *DOM, allocator: Allocator, options: DescribeNodeOptions) !NodeDescription
+```
+
+**Options:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `node_id` | `?i64` | Node ID to describe |
+| `backend_node_id` | `?i64` | Backend node ID |
+| `object_id` | `?[]const u8` | Remote object ID |
+| `depth` | `?i32` | Maximum depth (-1 for entire subtree) |
+| `pierce` | `bool` | Whether to pierce shadow DOM (default: false) |
+
+**Returns:** `NodeDescription` (caller must deinit)
+
+**Example:**
+
+```zig
+var desc = try dom.describeNode(allocator, .{
+    .node_id = element_id,
+    .depth = 1,
+    .pierce = true,
+});
+defer desc.deinit(allocator);
+
+// Check shadow root type
+if (desc.shadow_root_type) |srt| {
+    switch (srt) {
+        .open => std.debug.print("Open shadow root\n", .{}),
+        .closed => std.debug.print("Closed shadow root\n", .{}),
+        .user_agent => std.debug.print("User-agent shadow root\n", .{}),
+    }
+}
+
+// Access shadow roots
+if (desc.shadow_roots) |roots| {
+    for (roots) |root| {
+        std.debug.print("Shadow root node: {}\n", .{root.node_id});
+    }
+}
+```
+
+### getShadowRoot
+
+Get the shadow root of a node (if it has one). This is a convenience wrapper around `describeNode`.
+
+```zig
+pub fn getShadowRoot(self: *DOM, allocator: Allocator, node_id: i64) !?NodeDescription
+```
+
+**Returns:** `?NodeDescription` - The shadow root, or null if the node has no shadow root.
+
+**Example:**
+
+```zig
+if (try dom.getShadowRoot(allocator, host_node_id)) |shadow| {
+    defer {
+        var s = shadow;
+        s.deinit(allocator);
+    }
+    // Query within shadow root
+    const inner_id = try dom.querySelector(shadow.node_id, ".inner-element");
+}
+```
+
+### requestNode
+
+Get a node ID from a remote object ID.
+
+```zig
+pub fn requestNode(self: *DOM, object_id: []const u8) !i64
+```
+
 ## Types
 
 ### Node
@@ -251,6 +337,40 @@ pub const BoxModel = struct {
     margin: [8]f64,
     width: i64,
     height: i64,
+};
+```
+
+### ShadowRootType
+
+```zig
+pub const ShadowRootType = enum {
+    user_agent,  // Browser internal shadow DOM (e.g., <input>, <video>)
+    open,        // Accessible via element.shadowRoot
+    closed,      // Not accessible via JavaScript
+};
+```
+
+### NodeDescription
+
+Detailed node information returned by `describeNode`.
+
+```zig
+pub const NodeDescription = struct {
+    node_id: i64,
+    backend_node_id: i64,
+    node_type: i64,
+    node_name: []const u8,
+    local_name: ?[]const u8 = null,
+    node_value: []const u8,
+    frame_id: ?[]const u8 = null,
+    /// Shadow root type (if this is a shadow root)
+    shadow_root_type: ?ShadowRootType = null,
+    /// Shadow roots of this element
+    shadow_roots: ?[]NodeDescription = null,
+    /// Content document for iframes
+    content_document: ?*NodeDescription = null,
+
+    pub fn deinit(self: *NodeDescription, allocator: Allocator) void;
 };
 ```
 

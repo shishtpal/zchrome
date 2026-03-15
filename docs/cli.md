@@ -877,6 +877,47 @@ Diff image saved to: url-diff.png
 All element action commands accept a `<selector>` which can be:
 - **CSS selector**: `#login-btn`, `.submit`, `input[name="email"]`
 - **Snapshot ref**: `@e3`, `@e15` (from the last `zchrome snapshot`)
+- **Deep selector**: Use `>>>` to pierce shadow DOM and iframe boundaries
+
+### Deep Selectors (`>>>`)
+
+The `>>>` operator allows you to target elements inside shadow DOM and iframes:
+
+```bash
+# Shadow DOM piercing
+zchrome click "my-component >>> .inner-button"
+zchrome get text "custom-card >>> .title"
+
+# Iframe piercing (same-origin)
+zchrome click "iframe#payment >>> #submit-btn"
+zchrome fill "iframe.login >>> #email" "user@test.com"
+
+# Chained: iframe → shadow DOM → element
+zchrome click "iframe#app >>> my-widget >>> button.save"
+
+# Nested iframes
+zchrome click "iframe#outer >>> iframe#inner >>> .target"
+
+# Mixed: shadow → iframe → shadow → element
+zchrome click "app-shell >>> iframe#content >>> card-component >>> .action"
+```
+
+**How it works:**
+
+1. The selector is split on `>>>`
+2. Each segment (except the last) is resolved and the boundary is pierced:
+   - If the element is an `<iframe>`: enters the iframe's document
+   - If the element has a shadow root: enters the shadow DOM
+3. The final segment is queried within the resulting context
+
+**Supported boundaries:**
+- **Shadow DOM**: Both open and closed shadow roots
+- **Same-origin iframes**: Via `contentDocument`
+- **Cross-origin (OOP) iframes**: Via CDP target attachment
+
+::: tip
+For cross-origin iframes, zchrome automatically attaches to the iframe's target and manages the session lifecycle.
+:::
 
 ### click
 

@@ -171,6 +171,65 @@ pub fn setDocumentContent(self: *Page, html: []const u8) !void
 try page.setDocumentContent("<html><body><h1>Hello</h1></body></html>");
 ```
 
+### createIsolatedWorld
+
+Create an isolated JavaScript execution context for a frame. Useful for running scripts without interfering with the page's context.
+
+```zig
+pub fn createIsolatedWorld(self: *Page, allocator: Allocator, frame_id: FrameId, world_name: ?[]const u8) !i64
+```
+
+**Parameters:**
+- `frame_id` - ID of the frame to create the world in
+- `world_name` - Optional name for the world (for debugging)
+
+**Returns:** Execution context ID for use with `Runtime.evaluate`
+
+**Example:**
+
+```zig
+const frame = try page.getMainFrame(allocator);
+defer {
+    var f = frame;
+    f.deinit(allocator);
+}
+
+const context_id = try page.createIsolatedWorld(allocator, frame.id, "MyIsolatedWorld");
+
+// Use the context for evaluation
+var runtime = cdp.Runtime.init(session);
+_ = try runtime.evaluate(allocator, "console.log('In isolated world')", .{
+    .context_id = context_id,
+});
+```
+
+### getAllFrames
+
+Get all frames in the frame tree (including iframes).
+
+```zig
+pub fn getAllFrames(self: *Page, allocator: Allocator) ![]Frame
+```
+
+**Returns:** Slice of `Frame` (caller must deinit each and free slice)
+
+**Example:**
+
+```zig
+const frames = try page.getAllFrames(allocator);
+defer {
+    for (frames) |*f| f.deinit(allocator);
+    allocator.free(frames);
+}
+
+for (frames) |frame| {
+    std.debug.print("Frame: {s} - {s}\n", .{frame.id, frame.url});
+    if (frame.parent_id) |parent| {
+        std.debug.print("  Parent: {s}\n", .{parent});
+    }
+}
+```
+
 ### bringToFront
 
 Bring the page to front.

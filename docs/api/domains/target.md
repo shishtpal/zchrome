@@ -113,6 +113,49 @@ Enable/disable target discovery events.
 pub fn setDiscoverTargets(self: *Target, discover: bool) !void
 ```
 
+### setAutoAttach
+
+Enable auto-attach to new targets (iframes, workers, etc.). This is essential for working with out-of-process (OOP) iframes.
+
+```zig
+pub fn setAutoAttach(self: *Target, auto_attach: bool, wait_for_debugger_on_start: bool, flatten: bool) !void
+```
+
+**Parameters:**
+- `auto_attach` - Whether to automatically attach to new targets
+- `wait_for_debugger_on_start` - Whether to pause new targets for debugger
+- `flatten` - Whether to use flatten mode (recommended: true)
+
+**Example:**
+
+```zig
+var target = cdp.Target.init(browser.connection);
+
+// Enable auto-attach for iframe support
+try target.setAutoAttach(true, false, true);
+```
+
+### getTargetInfo
+
+Get information about a specific target by ID.
+
+```zig
+pub fn getTargetInfo(self: *Target, allocator: Allocator, target_id: []const u8) !TargetInfo
+```
+
+**Returns:** `TargetInfo` (caller must deinit)
+
+**Example:**
+
+```zig
+const info = try target.getTargetInfo(allocator, iframe_target_id);
+defer {
+    var i = info;
+    i.deinit(allocator);
+}
+std.debug.print("Target type: {s}, URL: {s}\n", .{info.type, info.url});
+```
+
 ## Types
 
 ### TargetInfo

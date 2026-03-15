@@ -1,0 +1,26 @@
+{
+  "version": 2,
+  "commands": [
+    {
+      "action": "navigate",
+      "value": "https://www.youtube.com/@mehulmpt"
+    },
+    {
+      "action": "assert",
+      "url": "**/@mehulmpt"
+    },
+    {
+      "action": "assert",
+      "text": "Subscribe"
+    },
+    {
+      "action": "click",
+      "selector": "yt-animated-action button",
+      "selectors": [
+        "button[aria-label=\"Subscribe to Mehul Mohan.\"]",
+        "button[aria-label=\"Subscribe to Mehul Mohan.\"] > yt-touch-feedback-shape:nth-of-type(1) > div:nth-of-type(2)"
+      ]
+    }
+  ]
+}
+

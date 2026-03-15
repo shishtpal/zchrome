@@ -167,6 +167,163 @@ The macro file contains semantic commands:
 | `capture` | `selector`, capture fields | Capture values into variables |
 | `goto` | `file` | Chain to another macro JSON file |
 
+## Wait Action
+
+The `wait` action pauses macro execution until a condition is met. It supports multiple wait types for different scenarios.
+
+### Wait for Element
+
+Wait for an element to be visible on the page:
+
+```json
+{"action": "wait", "selector": "#login-form"}
+```
+
+The element must be visible (not hidden via CSS `visibility: hidden` or `display: none`).
+
+### Wait for Time
+
+Wait for a fixed duration in milliseconds:
+
+```json
+{"action": "wait", "value": 2000}
+```
+
+This pauses execution for 2 seconds (2000ms).
+
+### Wait for Text
+
+Wait for specific text to appear anywhere on the page:
+
+```json
+{"action": "wait", "text": "Welcome"}
+```
+
+### Wait for URL Pattern
+
+Wait for the page URL to match a glob pattern:
+
+```json
+{"action": "wait", "url": "**/dashboard"}
+```
+
+**Glob Patterns:**
+- `**` matches any characters (including `/`)
+- `*` matches any characters except `/`
+- `?` matches a single character
+
+**Examples:**
+```json
+{"action": "wait", "url": "**/login"}           // Any path ending with /login
+{"action": "wait", "url": "https://example.com/**"}  // Any URL on example.com
+{"action": "wait", "url": "**/users/*/profile"} // Dynamic user profiles
+```
+
+### Wait for Load State
+
+Wait for the page to reach a specific load state:
+
+```json
+{"action": "wait", "load": "networkidle"}
+```
+
+**Load States:**
+
+| State | Description |
+|-------|-------------|
+| `load` | Page has finished loading (window.onload fired) |
+| `domcontentloaded` | DOM is ready (DOMContentLoaded event fired) |
+| `networkidle` | Page loaded and no network requests for 500ms |
+
+### Wait for JavaScript Condition
+
+Wait for a JavaScript expression to return truthy:
+
+```json
+{"action": "wait", "fn": "window.myApp.ready"}
+```
+
+**Examples:**
+```json
+{"action": "wait", "fn": "document.querySelector('#spinner').style.display === 'none'"}
+{"action": "wait", "fn": "window.dataLoaded === true"}
+{"action": "wait", "fn": "document.querySelectorAll('.item').length > 0"}
+```
+
+### Wait for Media
+
+Wait for audio/video media elements to reach specific states. The selector is optional—omit it to wait for any media element on the page.
+
+**Wait for media to start playing:**
+```json
+{"action": "wait", "media_playing": "#video-player"}
+{"action": "wait", "media_playing": ""}  // Any media
+```
+
+**Wait for media to end:**
+```json
+{"action": "wait", "media_ended": "#video-player"}
+{"action": "wait", "media_ended": ""}  // Any media
+```
+
+**Wait for media to be ready (have enough data):**
+```json
+{"action": "wait", "media_ready": "#video-player"}
+{"action": "wait", "media_ready": ""}  // Any media
+```
+
+**Wait for media error:**
+```json
+{"action": "wait", "media_error": "#video-player"}
+{"action": "wait", "media_error": ""}  // Any media
+```
+
+### Timeout
+
+All wait actions have a default timeout of 30 seconds. If the condition is not met within the timeout, the macro fails with a `Timeout` error.
+
+### Examples
+
+**Login flow with waits:**
+```json
+{
+  "version": 2,
+  "commands": [
+    {"action": "fill", "selector": "#email", "value": "user@example.com"},
+    {"action": "fill", "selector": "#password", "value": "secret"},
+    {"action": "click", "selector": "#login-btn"},
+    {"action": "wait", "url": "**/dashboard"},
+    {"action": "wait", "selector": "#welcome-message"},
+    {"action": "wait", "text": "Welcome back"}
+  ]
+}
+```
+
+**Wait for dynamic content:**
+```json
+{
+  "version": 2,
+  "commands": [
+    {"action": "click", "selector": "#load-more"},
+    {"action": "wait", "fn": "document.querySelectorAll('.item').length >= 10"},
+    {"action": "assert", "selector": ".item", "count_min": 10}
+  ]
+}
+```
+
+**Wait for media playback:**
+```json
+{
+  "version": 2,
+  "commands": [
+    {"action": "click", "selector": "#play-btn"},
+    {"action": "wait", "media_playing": "#video-player"},
+    {"action": "wait", "value": 5000},
+    {"action": "wait", "media_ended": "#video-player"}
+  ]
+}
+```
+
 ## cursor replay
 
 Replay commands from a macro file with support for assertions, automatic retry on failure, and video recording.

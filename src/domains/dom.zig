@@ -23,10 +23,19 @@ pub const DOM = struct {
         try self.session.sendCommandIgnoreResult("DOM.disable", .{});
     }
 
+    /// Options for getDocument
+    pub const GetDocumentOptions = struct {
+        /// Maximum depth to traverse (-1 for entire subtree)
+        depth: ?i32 = null,
+        /// Whether to pierce shadow DOM and include shadow roots
+        pierce: bool = false,
+    };
+
     /// Get document
-    pub fn getDocument(self: *Self, allocator: std.mem.Allocator, depth: ?i32) !Node {
+    pub fn getDocument(self: *Self, allocator: std.mem.Allocator, options: GetDocumentOptions) !Node {
         const result = try self.session.sendCommand("DOM.getDocument", .{
-            .depth = depth,
+            .depth = options.depth,
+            .pierce = options.pierce,
         });
 
         const root = result.get("root") orelse return error.MissingField;
@@ -160,6 +169,64 @@ pub const DOM = struct {
         const obj = result.get("object") orelse return error.MissingField;
         return parseRemoteObject(allocator, obj);
     }
+
+    /// Options for describeNode
+    pub const DescribeNodeOptions = struct {
+        node_id: ?i64 = null,
+        backend_node_id: ?i64 = null,
+        object_id: ?[]const u8 = null,
+        /// Maximum depth to traverse (-1 for entire subtree)
+        depth: ?i32 = null,
+        /// Whether to pierce shadow DOM
+        pierce: bool = false,
+    };
+
+    /// Describe node - returns detailed node info including shadow roots
+    pub fn describeNode(self: *Self, allocator: std.mem.Allocator, options: DescribeNodeOptions) !NodeDescription {
+        var result = try self.session.sendCommand("DOM.describeNode", .{
+            .nodeId = options.node_id,
+            .backendNodeId = options.backend_node_id,
+            .objectId = options.object_id,
+            .depth = options.depth,
+            .pierce = options.pierce,
+        });
+        defer result.deinit(allocator);
+
+        const node = result.get("node") orelse return error.MissingField;
+        return try parseNodeDescription(allocator, node);
+    }
+
+    /// Request node by backend ID (useful for shadow root traversal)
+    pub fn requestNode(self: *Self, object_id: []const u8) !i64 {
+        const result = try self.session.sendCommand("DOM.requestNode", .{
+            .objectId = object_id,
+        });
+        return try result.getInt("nodeId");
+    }
+
+    /// Get the shadow root of a node (if it has one)
+    pub fn getShadowRoot(self: *Self, allocator: std.mem.Allocator, node_id: i64) !?NodeDescription {
+        var desc = try self.describeNode(allocator, .{
+            .node_id = node_id,
+            .depth = 1,
+            .pierce = true,
+        });
+
+        if (desc.shadow_roots) |roots| {
+            if (roots.len > 0) {
+                // Return the first shadow root, free the rest
+                const first = roots[0];
+                for (roots[1..]) |*r| r.deinit(allocator);
+                allocator.free(roots);
+                desc.shadow_roots = null;
+                const result = first;
+                desc.deinit(allocator);
+                return result;
+            }
+        }
+        desc.deinit(allocator);
+        return null;
+    }
 };
 
 /// DOM node
@@ -196,6 +263,45 @@ pub const BoxModel = struct {
     margin: [8]f64,
     width: i64,
     height: i64,
+};
+
+/// Shadow root type
+pub const ShadowRootType = enum {
+    user_agent,
+    open,
+    closed,
+};
+
+/// Node description (from describeNode)
+pub const NodeDescription = struct {
+    node_id: i64,
+    backend_node_id: i64,
+    node_type: i64,
+    node_name: []const u8,
+    local_name: ?[]const u8 = null,
+    node_value: []const u8,
+    frame_id: ?[]const u8 = null,
+    /// Shadow root type (if this is a shadow root)
+    shadow_root_type: ?ShadowRootType = null,
+    /// Shadow roots of this element
+    shadow_roots: ?[]NodeDescription = null,
+    /// Content document for iframes
+    content_document: ?*NodeDescription = null,
+
+    pub fn deinit(self: *NodeDescription, allocator: std.mem.Allocator) void {
+        allocator.free(self.node_name);
+        allocator.free(self.node_value);
+        if (self.local_name) |n| allocator.free(n);
+        if (self.frame_id) |f| allocator.free(f);
+        if (self.shadow_roots) |roots| {
+            for (roots) |*r| r.deinit(allocator);
+            allocator.free(roots);
+        }
+        if (self.content_document) |doc| {
+            doc.deinit(allocator);
+            allocator.destroy(doc);
+        }
+    }
 };
 
 /// Parse node from JSON
@@ -293,5 +399,57 @@ fn parseRemoteObject(allocator: std.mem.Allocator, obj: json.Value) !RemoteObjec
     _ = allocator;
     return RemoteObject{
         .type = "object",
+    };
+}
+
+/// Parse node description from JSON
+fn parseNodeDescription(allocator: std.mem.Allocator, obj: json.Value) !NodeDescription {
+    var shadow_roots: ?[]NodeDescription = null;
+    if (obj.get("shadowRoots")) |roots_arr| {
+        if (roots_arr.asArray()) |items| {
+            var roots = try allocator.alloc(NodeDescription, items.len);
+            errdefer allocator.free(roots);
+            for (items, 0..) |item, i| {
+                roots[i] = try parseNodeDescription(allocator, item);
+            }
+            shadow_roots = roots;
+        }
+    }
+
+    var content_document: ?*NodeDescription = null;
+    if (obj.get("contentDocument")) |doc| {
+        const doc_ptr = try allocator.create(NodeDescription);
+        errdefer allocator.destroy(doc_ptr);
+        doc_ptr.* = try parseNodeDescription(allocator, doc);
+        content_document = doc_ptr;
+    }
+
+    var shadow_root_type: ?ShadowRootType = null;
+    if (obj.get("shadowRootType")) |srt| {
+        if (srt == .string) {
+            if (std.mem.eql(u8, srt.string, "open")) {
+                shadow_root_type = .open;
+            } else if (std.mem.eql(u8, srt.string, "closed")) {
+                shadow_root_type = .closed;
+            } else if (std.mem.eql(u8, srt.string, "user-agent")) {
+                shadow_root_type = .user_agent;
+            }
+        }
+    }
+
+    return .{
+        .node_id = try obj.getInt("nodeId"),
+        .backend_node_id = if (obj.get("backendNodeId")) |v| switch (v) {
+            .integer => |i| i,
+            else => 0,
+        } else 0,
+        .node_type = try obj.getInt("nodeType"),
+        .node_name = try allocator.dupe(u8, try obj.getString("nodeName")),
+        .local_name = if (obj.get("localName")) |v| try allocator.dupe(u8, v.string) else null,
+        .node_value = try allocator.dupe(u8, try obj.getString("nodeValue")),
+        .frame_id = if (obj.get("frameId")) |v| try allocator.dupe(u8, v.string) else null,
+        .shadow_root_type = shadow_root_type,
+        .shadow_roots = shadow_roots,
+        .content_document = content_document,
     };
 }

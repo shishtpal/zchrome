@@ -70,17 +70,26 @@ pub fn getElementPosition(
     return error.ElementNotFound;
 }
 
-/// Get element center position
+/// Get element center position (applies iframe offsets for correct viewport coordinates)
 pub fn getElementCenter(
     session: *cdp.Session,
     allocator: std.mem.Allocator,
     resolved: *const ResolvedElement,
 ) !struct { x: f64, y: f64 } {
     const pos = try getElementPosition(session, allocator, resolved);
-    return .{
-        .x = pos.x + pos.width / 2,
-        .y = pos.y + pos.height / 2,
-    };
+
+    // Calculate center
+    var center_x = pos.x + pos.width / 2;
+    var center_y = pos.y + pos.height / 2;
+
+    // Apply iframe offsets if element is inside an iframe
+    // CDP Input events need viewport-relative coordinates
+    if (resolved.iframe_offsets) |offsets| {
+        center_x += offsets.x;
+        center_y += offsets.y;
+    }
+
+    return .{ .x = center_x, .y = center_y };
 }
 
 /// Click an element.

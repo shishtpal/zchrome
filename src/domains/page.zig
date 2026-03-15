@@ -290,6 +290,63 @@ pub const Page = struct {
         });
     }
 
+    /// Create an isolated world for a frame (returns execution context ID)
+    pub fn createIsolatedWorld(self: *Self, allocator: std.mem.Allocator, frame_id: FrameId, world_name: ?[]const u8) !i64 {
+        var result = try self.session.sendCommand("Page.createIsolatedWorld", .{
+            .frameId = frame_id,
+            .worldName = world_name,
+        });
+        defer result.deinit(allocator);
+
+        const ctx_id = result.get("executionContextId") orelse return error.MissingField;
+        return switch (ctx_id) {
+            .integer => |i| i,
+            .float => |f| @as(i64, @intFromFloat(f)),
+            else => return error.TypeMismatch,
+        };
+    }
+
+    /// Get all frames in the frame tree
+    pub fn getAllFrames(self: *Self, allocator: std.mem.Allocator) ![]Frame {
+        var result = try self.session.sendCommand("Page.getFrameTree", .{});
+        defer result.deinit(self.session.allocator);
+
+        var frames: std.ArrayList(Frame) = .empty;
+        errdefer {
+            for (frames.items) |*f| f.deinit(allocator);
+            frames.deinit(allocator);
+        }
+
+        // Recursive helper to collect frames
+        const collectFrames = struct {
+            fn collect(alloc: std.mem.Allocator, frame_tree: json.Value, list: *std.ArrayList(Frame)) !void {
+                const frame = frame_tree.get("frame") orelse return;
+                try list.append(alloc, .{
+                    .id = try alloc.dupe(u8, try frame.getString("id")),
+                    .parent_id = if (frame.get("parentId")) |v| try alloc.dupe(u8, v.string) else null,
+                    .loader_id = try alloc.dupe(u8, try frame.getString("loaderId")),
+                    .name = if (frame.get("name")) |v| try alloc.dupe(u8, v.string) else null,
+                    .url = try alloc.dupe(u8, try frame.getString("url")),
+                    .security_origin = if (frame.get("securityOrigin")) |v| try alloc.dupe(u8, v.string) else null,
+                    .mime_type = if (frame.get("mimeType")) |v| try alloc.dupe(u8, v.string) else null,
+                });
+
+                // Process child frames
+                if (frame_tree.get("childFrames")) |children| {
+                    if (children.asArray()) |arr| {
+                        for (arr) |child| {
+                            try collect(alloc, child, list);
+                        }
+                    }
+                }
+            }
+        }.collect;
+
+        const frame_tree = result.get("frameTree") orelse return error.MissingField;
+        try collectFrames(allocator, frame_tree, &frames);
+        return frames.toOwnedSlice(allocator);
+    }
+
     /// Wait for a JavaScript dialog to open (alert/confirm/prompt/beforeunload).
     /// Returns the dialog information including the message.
     /// Must call Page.enable() first to receive events.

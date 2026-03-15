@@ -20,6 +20,7 @@ pub const ElementPosition = types.ElementPosition;
 
 // Re-export selector functions
 pub const resolveSelector = selector.resolveSelector;
+pub const resolveSelectorWithCdp = selector.resolveSelectorWithCdp;
 
 // Re-export element action functions
 pub const getElementPosition = element.getElementPosition;

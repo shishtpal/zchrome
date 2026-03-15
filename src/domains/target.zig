@@ -115,6 +115,34 @@ pub const Target = struct {
             .browser_context_id = context_id,
         }, null);
     }
+
+    /// Enable auto-attach to new targets (iframes, workers, etc.)
+    pub fn setAutoAttach(self: *Self, auto_attach: bool, wait_for_debugger_on_start: bool, flatten: bool) !void {
+        try self.connection.sendCommandIgnoreResult("Target.setAutoAttach", .{
+            .autoAttach = auto_attach,
+            .waitForDebuggerOnStart = wait_for_debugger_on_start,
+            .flatten = flatten,
+        }, null);
+    }
+
+    /// Get target info by target ID
+    pub fn getTargetInfo(self: *Self, allocator: std.mem.Allocator, target_id: []const u8) !TargetInfo {
+        var result = try self.connection.sendCommand("Target.getTargetInfo", .{
+            .targetId = target_id,
+        }, null);
+        defer result.deinit(allocator);
+
+        const info = result.get("targetInfo") orelse return error.MissingField;
+        return .{
+            .target_id = try allocator.dupe(u8, try info.getString("targetId")),
+            .type = try allocator.dupe(u8, try info.getString("type")),
+            .title = try allocator.dupe(u8, try info.getString("title")),
+            .url = try allocator.dupe(u8, try info.getString("url")),
+            .attached = try info.getBool("attached"),
+            .opener_id = if (info.object.get("openerId")) |v| try allocator.dupe(u8, v.string) else null,
+            .browser_context_id = if (info.object.get("browserContextId")) |v| try allocator.dupe(u8, v.string) else null,
+        };
+    }
 };
 
 /// Target information

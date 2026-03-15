@@ -1,4 +1,5 @@
-(function(role, name, nth) {
+(function(role, name, nth, root) {
+  root = root || document;
   // Mapping of ARIA roles to native HTML element selectors
   var IMPLICIT_ROLES = {
     'link': 'a[href]',
@@ -22,9 +23,9 @@
   };
 
   // Query all elements including shadow DOM
-  function queryAll(root, selector) {
-    var results = Array.from(root.querySelectorAll(selector));
-    root.querySelectorAll('*').forEach(function(el) {
+  function queryAll(r, selector) {
+    var results = Array.from(r.querySelectorAll(selector));
+    r.querySelectorAll('*').forEach(function(el) {
       if (el.shadowRoot) {
         results = results.concat(queryAll(el.shadowRoot, selector));
       }
@@ -40,18 +41,19 @@
     if (p) return p;
     var id = el.id;
     if (id) {
-      var l = document.querySelector('label[for="' + id + '"]');
+      var doc = root.ownerDocument || root;
+      var l = doc.querySelector('label[for="' + id + '"]');
       if (l) return l.textContent.trim();
     }
     return el.textContent.trim();
   }
 
   // Find elements with explicit role attribute
-  var els = queryAll(document, '[role="' + role + '"]');
+  var els = queryAll(root, '[role="' + role + '"]');
 
   // Also find elements with implicit roles (native HTML)
   if (IMPLICIT_ROLES[role]) {
-    var implicit = queryAll(document, IMPLICIT_ROLES[role]);
+    var implicit = queryAll(root, IMPLICIT_ROLES[role]);
     implicit = implicit.filter(function(el) {
       return !el.hasAttribute('role');
     });

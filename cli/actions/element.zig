@@ -18,13 +18,16 @@ pub fn getElementPosition(
     var js: []const u8 = undefined;
     defer allocator.free(js);
 
+    // Get root expression for shadow DOM piercing (defaults to "document")
+    const root_expr = resolved.root_expression orelse "document";
+
     if (resolved.css_selector) |css| {
-        // CSS selector path
+        // CSS selector path with optional shadow root
         const escaped_css = try helpers.escapeJsString(allocator, css);
         defer allocator.free(escaped_css);
-        js = try std.fmt.allocPrint(allocator, "{s}({s})", .{ helpers.FIND_BY_CSS_JS, escaped_css });
+        js = try std.fmt.allocPrint(allocator, "{s}({s}, {s})", .{ helpers.FIND_BY_CSS_JS, escaped_css, root_expr });
     } else {
-        // Role-based path
+        // Role-based path with optional shadow root
         const role = resolved.role orelse return error.InvalidSelector;
         const name_arg = if (resolved.name) |n|
             try helpers.escapeJsString(allocator, n)
@@ -38,10 +41,10 @@ pub fn getElementPosition(
             try allocator.dupe(u8, "0");
         defer allocator.free(nth_arg);
 
-        js = try std.fmt.allocPrint(allocator, "{s}('{s}', {s}, {s})", .{ helpers.FIND_BY_ROLE_JS, role, name_arg, nth_arg });
+        js = try std.fmt.allocPrint(allocator, "{s}('{s}', {s}, {s}, {s})", .{ helpers.FIND_BY_ROLE_JS, role, name_arg, nth_arg, root_expr });
     }
 
-    var result = try runtime.evaluate(allocator, js, .{ .return_by_value = true });
+    var result = try runtime.evaluate(allocator, js, .{ .return_by_value = true, .context_id = resolved.context_id });
     defer result.deinit(allocator);
 
     // Parse the result object
@@ -104,12 +107,16 @@ pub fn clickElement(
         var js: []const u8 = undefined;
         defer allocator.free(js);
 
+        // Get root expression for shadow DOM piercing
+        const root_expr = resolved.root_expression orelse "document";
+
         if (resolved.css_selector) |css| {
             const escaped_css = try helpers.escapeJsString(allocator, css);
             defer allocator.free(escaped_css);
             js = try std.fmt.allocPrint(allocator,
-                \\(function(s) {{
-                \\  var el = document.querySelector(s);
+                \\(function(s, root) {{
+                \\  root = root || document;
+                \\  var el = root.querySelector(s);
                 \\  if (!el) return false;
                 \\  if (el.tagName === 'A' && el.href) {{
                 \\    window.location.href = el.href;
@@ -117,8 +124,8 @@ pub fn clickElement(
                 \\  }}
                 \\  el.dispatchEvent(new MouseEvent('click', {{bubbles: true, cancelable: true, view: window}}));
                 \\  return true;
-                \\}})({s})
-            , .{escaped_css});
+                \\}})({s}, {s})
+            , .{ escaped_css, root_expr });
         } else {
             const role = resolved.role orelse return error.InvalidSelector;
             const name_arg = if (resolved.name) |n|
@@ -133,10 +140,10 @@ pub fn clickElement(
                 try allocator.dupe(u8, "0");
             defer allocator.free(nth_arg);
 
-            js = try std.fmt.allocPrint(allocator, "{s}('{s}', {s}, {s})", .{ helpers.FIND_AND_CLICK_JS, role, name_arg, nth_arg });
+            js = try std.fmt.allocPrint(allocator, "{s}('{s}', {s}, {s}, {s})", .{ helpers.FIND_AND_CLICK_JS, role, name_arg, nth_arg, root_expr });
         }
 
-        var eval_result = try runtime.evaluate(allocator, js, .{ .return_by_value = true });
+        var eval_result = try runtime.evaluate(allocator, js, .{ .return_by_value = true, .context_id = resolved.context_id });
         eval_result.deinit(allocator);
     } else {
         // Real CDP mouse event path: isTrusted: true, works with all frameworks.
@@ -158,10 +165,13 @@ pub fn focusElement(
     var js: []const u8 = undefined;
     defer allocator.free(js);
 
+    // Get root expression for shadow DOM piercing
+    const root_expr = resolved.root_expression orelse "document";
+
     if (resolved.css_selector) |css| {
         const escaped = try helpers.escapeJsString(allocator, css);
         defer allocator.free(escaped);
-        js = try std.fmt.allocPrint(allocator, "(function(s){{var e=document.querySelector(s);if(e)e.focus();}})({s})", .{escaped});
+        js = try std.fmt.allocPrint(allocator, "(function(s,root){{root=root||document;var e=root.querySelector(s);if(e)e.focus();}})({s},{s})", .{ escaped, root_expr });
     } else {
         const role = resolved.role orelse return error.InvalidSelector;
         const name_arg = if (resolved.name) |n| try helpers.escapeJsString(allocator, n) else try allocator.dupe(u8, "null");
@@ -169,10 +179,10 @@ pub fn focusElement(
         const nth = resolved.nth orelse 0;
 
         // Use helper that handles both explicit roles and native elements
-        js = try std.fmt.allocPrint(allocator, "{s}('{s}',{s},{});", .{ helpers.FIND_AND_FOCUS_JS, role, name_arg, nth });
+        js = try std.fmt.allocPrint(allocator, "{s}('{s}',{s},{},{s});", .{ helpers.FIND_AND_FOCUS_JS, role, name_arg, nth, root_expr });
     }
 
-    var eval_result = try runtime.evaluate(allocator, js, .{});
+    var eval_result = try runtime.evaluate(allocator, js, .{ .context_id = resolved.context_id });
     eval_result.deinit(allocator);
 }
 
@@ -201,12 +211,16 @@ pub fn fillElement(
     var js: []const u8 = undefined;
     defer allocator.free(js);
 
+    // Get root expression for shadow DOM piercing
+    const root_expr = resolved.root_expression orelse "document";
+
     if (resolved.css_selector) |css| {
         const escaped_css = try helpers.escapeJsString(allocator, css);
         defer allocator.free(escaped_css);
         js = try std.fmt.allocPrint(allocator,
-            \\(function(sel, val) {{
-            \\  var el = document.querySelector(sel);
+            \\(function(sel, val, root) {{
+            \\  root = root || document;
+            \\  var el = root.querySelector(sel);
             \\  if (!el) return false;
             \\  el.focus();
             \\  el.value = '';
@@ -215,18 +229,18 @@ pub fn fillElement(
             \\  el.dispatchEvent(new Event('input', {{bubbles: true}}));
             \\  el.dispatchEvent(new Event('change', {{bubbles: true}}));
             \\  return true;
-            \\}})({s}, {s})
-        , .{ escaped_css, escaped_text });
+            \\}})({s}, {s}, {s})
+        , .{ escaped_css, escaped_text, root_expr });
     } else {
         const role = resolved.role orelse return error.InvalidSelector;
         const name_arg = if (resolved.name) |n| try helpers.escapeJsString(allocator, n) else try allocator.dupe(u8, "null");
         defer allocator.free(name_arg);
         const nth = resolved.nth orelse 0;
 
-        js = try std.fmt.allocPrint(allocator, "{s}('{s}',{s},{},{s});", .{ helpers.FIND_AND_FILL_JS, role, name_arg, nth, escaped_text });
+        js = try std.fmt.allocPrint(allocator, "{s}('{s}',{s},{},{s},{s});", .{ helpers.FIND_AND_FILL_JS, role, name_arg, nth, escaped_text, root_expr });
     }
 
-    var eval_result = try runtime.evaluate(allocator, js, .{});
+    var eval_result = try runtime.evaluate(allocator, js, .{ .context_id = resolved.context_id });
     eval_result.deinit(allocator);
 }
 
@@ -258,22 +272,25 @@ pub fn selectOption(
     var js: []const u8 = undefined;
     defer allocator.free(js);
 
+    // Get root expression for shadow DOM piercing
+    const root_expr = resolved.root_expression orelse "document";
+
     if (resolved.css_selector) |css| {
         const escaped_css = try helpers.escapeJsString(allocator, css);
         defer allocator.free(escaped_css);
         js = try std.fmt.allocPrint(allocator,
-            \\(function(s,v){{var e=document.querySelector(s);if(!e)return false;e.value=v;e.dispatchEvent(new Event('change',{{bubbles:true}}));return true}})({s},{s})
-        , .{ escaped_css, escaped_val });
+            \\(function(s,v,root){{root=root||document;var e=root.querySelector(s);if(!e)return false;e.value=v;e.dispatchEvent(new Event('change',{{bubbles:true}}));return true}})({s},{s},{s})
+        , .{ escaped_css, escaped_val, root_expr });
     } else {
         const role = resolved.role orelse return error.InvalidSelector;
         const name_arg = if (resolved.name) |n| try helpers.escapeJsString(allocator, n) else try allocator.dupe(u8, "null");
         defer allocator.free(name_arg);
         const nth = resolved.nth orelse 0;
 
-        js = try std.fmt.allocPrint(allocator, "{s}('{s}',{s},{},{s});", .{ helpers.FIND_AND_SELECT_JS, role, name_arg, nth, escaped_val });
+        js = try std.fmt.allocPrint(allocator, "{s}('{s}',{s},{},{s},{s});", .{ helpers.FIND_AND_SELECT_JS, role, name_arg, nth, escaped_val, root_expr });
     }
 
-    var result = try runtime.evaluate(allocator, js, .{ .return_by_value = true });
+    var result = try runtime.evaluate(allocator, js, .{ .return_by_value = true, .context_id = resolved.context_id });
     defer result.deinit(allocator);
 
     // Check if the function returned false (element not found)
@@ -300,19 +317,23 @@ pub fn multiselectOptions(
     var js: []const u8 = undefined;
     defer allocator.free(js);
 
+    // Get root expression for shadow DOM piercing
+    const root_expr = resolved.root_expression orelse "document";
+
     if (resolved.css_selector) |css| {
         const escaped_css = try helpers.escapeJsString(allocator, css);
         defer allocator.free(escaped_css);
         js = try std.fmt.allocPrint(allocator,
-            \\(function(s,v){{
-            \\  var e=document.querySelector(s);
+            \\(function(s,v,root){{
+            \\  root=root||document;
+            \\  var e=root.querySelector(s);
             \\  if(!e)return false;
             \\  var vals=JSON.parse(v);
             \\  Array.from(e.options).forEach(function(o){{o.selected=vals.includes(o.value);}});
             \\  e.dispatchEvent(new Event('change',{{bubbles:true}}));
             \\  return true;
-            \\}})({s},{s})
-        , .{ escaped_css, escaped_val });
+            \\}})({s},{s},{s})
+        , .{ escaped_css, escaped_val, root_expr });
     } else {
         // Role-based selector path (fallback to simple implementation)
         const role = resolved.role orelse return error.InvalidSelector;
@@ -321,19 +342,20 @@ pub fn multiselectOptions(
         const nth = resolved.nth orelse 0;
 
         js = try std.fmt.allocPrint(allocator,
-            \\(function(role,name,nth,v){{
-            \\  var els=document.querySelectorAll('select[multiple]');
+            \\(function(role,name,nth,v,root){{
+            \\  root=root||document;
+            \\  var els=root.querySelectorAll('select[multiple]');
             \\  var el=els[nth||0];
             \\  if(!el)return false;
             \\  var vals=JSON.parse(v);
             \\  Array.from(el.options).forEach(function(o){{o.selected=vals.includes(o.value);}});
             \\  el.dispatchEvent(new Event('change',{{bubbles:true}}));
             \\  return true;
-            \\}})('{s}',{s},{},{s});
-        , .{ role, name_arg, nth, escaped_val });
+            \\}})('{s}',{s},{},{s},{s});
+        , .{ role, name_arg, nth, escaped_val, root_expr });
     }
 
-    var result = try runtime.evaluate(allocator, js, .{ .return_by_value = true });
+    var result = try runtime.evaluate(allocator, js, .{ .return_by_value = true, .context_id = resolved.context_id });
     defer result.deinit(allocator);
 
     // Check if the function returned false (element not found)
@@ -359,22 +381,25 @@ pub fn setChecked(
     var js: []const u8 = undefined;
     defer allocator.free(js);
 
+    // Get root expression for shadow DOM piercing
+    const root_expr = resolved.root_expression orelse "document";
+
     if (resolved.css_selector) |css| {
         const escaped_css = try helpers.escapeJsString(allocator, css);
         defer allocator.free(escaped_css);
         js = try std.fmt.allocPrint(allocator,
-            \\(function(s,c){{var e=document.querySelector(s);if(!e)return false;if(e.checked!==c)e.click();return true}})({s},{s})
-        , .{ escaped_css, check_str });
+            \\(function(s,c,root){{root=root||document;var e=root.querySelector(s);if(!e)return false;if(e.checked!==c)e.click();return true}})({s},{s},{s})
+        , .{ escaped_css, check_str, root_expr });
     } else {
         const role = resolved.role orelse return error.InvalidSelector;
         const name_arg = if (resolved.name) |n| try helpers.escapeJsString(allocator, n) else try allocator.dupe(u8, "null");
         defer allocator.free(name_arg);
         const nth = resolved.nth orelse 0;
 
-        js = try std.fmt.allocPrint(allocator, "{s}('{s}',{s},{},{s});", .{ helpers.FIND_AND_CHECK_JS, role, name_arg, nth, check_str });
+        js = try std.fmt.allocPrint(allocator, "{s}('{s}',{s},{},{s},{s});", .{ helpers.FIND_AND_CHECK_JS, role, name_arg, nth, check_str, root_expr });
     }
 
-    var result = try runtime.evaluate(allocator, js, .{ .return_by_value = true });
+    var result = try runtime.evaluate(allocator, js, .{ .return_by_value = true, .context_id = resolved.context_id });
     defer result.deinit(allocator);
 
     // Check if the function returned false (element not found)
@@ -413,22 +438,25 @@ pub fn scrollIntoView(
     var js: []const u8 = undefined;
     defer allocator.free(js);
 
+    // Get root expression for shadow DOM piercing
+    const root_expr = resolved.root_expression orelse "document";
+
     if (resolved.css_selector) |css| {
         const escaped_css = try helpers.escapeJsString(allocator, css);
         defer allocator.free(escaped_css);
         js = try std.fmt.allocPrint(allocator,
-            \\(function(s){{var e=document.querySelector(s);if(e)e.scrollIntoView({{block:'center',behavior:'smooth'}})}}({s})
-        , .{escaped_css});
+            \\(function(s,root){{root=root||document;var e=root.querySelector(s);if(e)e.scrollIntoView({{block:'center',behavior:'smooth'}})}}({s},{s})
+        , .{ escaped_css, root_expr });
     } else {
         const role = resolved.role orelse return error.InvalidSelector;
         const name_arg = if (resolved.name) |n| try helpers.escapeJsString(allocator, n) else try allocator.dupe(u8, "null");
         defer allocator.free(name_arg);
         const nth = resolved.nth orelse 0;
 
-        js = try std.fmt.allocPrint(allocator, "{s}('{s}',{s},{});", .{ helpers.FIND_AND_SCROLL_JS, role, name_arg, nth });
+        js = try std.fmt.allocPrint(allocator, "{s}('{s}',{s},{},{s});", .{ helpers.FIND_AND_SCROLL_JS, role, name_arg, nth, root_expr });
     }
 
-    var eval_result = try runtime.evaluate(allocator, js, .{});
+    var eval_result = try runtime.evaluate(allocator, js, .{ .context_id = resolved.context_id });
     eval_result.deinit(allocator);
 }
 

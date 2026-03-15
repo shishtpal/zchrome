@@ -12,9 +12,11 @@ pub const FIND_AND_SCROLL_JS = @embedFile("../js/find-and-scroll.js");
 pub const FIND_AND_CLICK_JS = @embedFile("../js/find-and-click.js");
 
 /// JavaScript to find element by CSS selector, returns bounding rect
+/// Accepts optional root parameter for shadow DOM piercing
 pub const FIND_BY_CSS_JS =
-    \\(function(selector) {
-    \\  var el = document.querySelector(selector);
+    \\(function(selector, root) {
+    \\  root = root || document;
+    \\  var el = root.querySelector(selector);
     \\  if (!el) return null;
     \\  var rect = el.getBoundingClientRect();
     \\  return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
@@ -53,15 +55,18 @@ pub fn getFloatFromJson(val: ?json.Value) ?f64 {
 }
 
 /// JavaScript to find element and get property (handles both CSS and role-based)
+/// Supports optional root_expression for shadow DOM piercing
 pub fn buildGetterJs(
     allocator: std.mem.Allocator,
     resolved: *const types.ResolvedElement,
     getter_expr: []const u8,
 ) ![]const u8 {
+    const root_expr = resolved.root_expression orelse "document";
+
     if (resolved.css_selector) |css| {
         const escaped_css = try escapeJsString(allocator, css);
         defer allocator.free(escaped_css);
-        return try std.fmt.allocPrint(allocator, "(function(s){{var el=document.querySelector(s);if(!el)return null;return {s}}})({s})", .{ getter_expr, escaped_css });
+        return try std.fmt.allocPrint(allocator, "(function(s,root){{root=root||document;var el=root.querySelector(s);if(!el)return null;return {s}}})({s},{s})", .{ getter_expr, escaped_css, root_expr });
     } else {
         const role = resolved.role orelse return error.InvalidSelector;
         const name_arg = if (resolved.name) |n| try escapeJsString(allocator, n) else try allocator.dupe(u8, "null");
@@ -69,16 +74,18 @@ pub fn buildGetterJs(
         const nth = resolved.nth orelse 0;
 
         // Build getter using embedded find-by-role logic with getter expression
+        // Now accepts root parameter for shadow DOM piercing
         return try std.fmt.allocPrint(allocator,
-            \\(function(role,name,nth){{
+            \\(function(role,name,nth,root){{
+            \\root=root||document;
             \\var IMPLICIT_ROLES={{'link':'a[href]','button':'button,input[type="button"],input[type="submit"],input[type="reset"]','textbox':'input:not([type]),input[type="text"],input[type="email"],input[type="password"],input[type="search"],input[type="tel"],input[type="url"],input[type="number"],textarea,[contenteditable="true"],[contenteditable=""]','checkbox':'input[type="checkbox"]','radio':'input[type="radio"]','combobox':'select','heading':'h1,h2,h3,h4,h5,h6'}};
-            \\function queryAll(root,sel){{var r=Array.from(root.querySelectorAll(sel));root.querySelectorAll('*').forEach(function(e){{if(e.shadowRoot)r=r.concat(queryAll(e.shadowRoot,sel))}});return r}}
-            \\function getLabel(e){{var a=e.getAttribute('aria-label');if(a)return a;var p=e.getAttribute('placeholder');if(p)return p;var id=e.id;if(id){{var l=document.querySelector('label[for="'+id+'"]');if(l)return l.textContent.trim()}}return e.textContent.trim()}}
-            \\var els=queryAll(document,'[role="'+role+'"]');
-            \\if(IMPLICIT_ROLES[role]){{var implicit=queryAll(document,IMPLICIT_ROLES[role]).filter(function(e){{return !e.hasAttribute('role')}});els=els.concat(implicit)}}
+            \\function queryAll(r,sel){{var res=Array.from(r.querySelectorAll(sel));r.querySelectorAll('*').forEach(function(e){{if(e.shadowRoot)res=res.concat(queryAll(e.shadowRoot,sel))}});return res}}
+            \\function getLabel(e){{var a=e.getAttribute('aria-label');if(a)return a;var p=e.getAttribute('placeholder');if(p)return p;var id=e.id;if(id){{var doc=root.ownerDocument||root;var l=doc.querySelector('label[for="'+id+'"]');if(l)return l.textContent.trim()}}return e.textContent.trim()}}
+            \\var els=queryAll(root,'[role="'+role+'"]');
+            \\if(IMPLICIT_ROLES[role]){{var implicit=queryAll(root,IMPLICIT_ROLES[role]).filter(function(e){{return !e.hasAttribute('role')}});els=els.concat(implicit)}}
             \\if(name)els=els.filter(function(e){{return getLabel(e)===name}});
             \\var el=els[nth||0];if(!el)return null;return {s}
-            \\}})('{s}',{s},{d})
-        , .{ getter_expr, role, name_arg, nth });
+            \\}})('{s}',{s},{d},{s})
+        , .{ getter_expr, role, name_arg, nth, root_expr });
     }
 }

@@ -1,4 +1,5 @@
-(function(role, name, nth) {
+(function(role, name, nth, root) {
+  root = root || document;
   var IMPLICIT_ROLES = {
     'link': 'a[href]',
     'button': 'button, input[type="button"], input[type="submit"], input[type="reset"]',
@@ -10,9 +11,9 @@
     'heading': 'h1, h2, h3, h4, h5, h6'
   };
 
-  function queryAll(root, selector) {
-    var results = Array.from(root.querySelectorAll(selector));
-    root.querySelectorAll('*').forEach(function(el) {
+  function queryAll(r, selector) {
+    var results = Array.from(r.querySelectorAll(selector));
+    r.querySelectorAll('*').forEach(function(el) {
       if (el.shadowRoot) results = results.concat(queryAll(el.shadowRoot, selector));
     });
     return results;
@@ -25,7 +26,8 @@
     if (p) return p;
     var id = el.id;
     if (id) {
-      var l = document.querySelector('label[for="' + id + '"]');
+      var doc = root.ownerDocument || root;
+      var l = doc.querySelector('label[for="' + id + '"]');
       if (l) return l.textContent.trim();
     }
     return el.textContent.trim();
@@ -38,9 +40,9 @@
     return false;
   }
 
-  var els = queryAll(document, '[role="' + role + '"]');
+  var els = queryAll(root, '[role="' + role + '"]');
   if (IMPLICIT_ROLES[role]) {
-    var implicit = queryAll(document, IMPLICIT_ROLES[role]);
+    var implicit = queryAll(root, IMPLICIT_ROLES[role]);
     implicit = implicit.filter(function(el) { return !el.hasAttribute('role'); });
     els = els.concat(implicit);
   }

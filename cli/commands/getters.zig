@@ -121,7 +121,9 @@ pub fn get(session: *cdp.Session, ctx: CommandCtx) !void {
             std.debug.print("(null)\n", .{});
         }
     } else if (std.mem.eql(u8, subcommand, "count")) {
-        const count = try actions_mod.getCount(session, ctx.allocator, selector);
+        var resolved = try actions_mod.resolveSelector(ctx.allocator, ctx.io, selector, ctx.session);
+        defer resolved.deinit();
+        const count = try actions_mod.getCount(session, ctx.allocator, &resolved);
         std.debug.print("{}\n", .{count});
     } else if (std.mem.eql(u8, subcommand, "box")) {
         var resolved = try actions_mod.resolveSelector(ctx.allocator, ctx.io, selector, ctx.session);

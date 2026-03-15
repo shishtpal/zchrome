@@ -17,7 +17,7 @@ pub fn getText(
     const js = try helpers.buildGetterJs(allocator, resolved, "el.textContent.trim()");
     defer allocator.free(js);
 
-    var result = try runtime.evaluate(allocator, js, .{ .return_by_value = true });
+    var result = try runtime.evaluate(allocator, js, .{ .return_by_value = true, .context_id = resolved.context_id });
     defer result.deinit(allocator);
 
     if (result.asString()) |s| {
@@ -38,7 +38,7 @@ pub fn getHtml(
     const js = try helpers.buildGetterJs(allocator, resolved, "el.innerHTML");
     defer allocator.free(js);
 
-    var result = try runtime.evaluate(allocator, js, .{ .return_by_value = true });
+    var result = try runtime.evaluate(allocator, js, .{ .return_by_value = true, .context_id = resolved.context_id });
     defer result.deinit(allocator);
 
     if (result.asString()) |s| {
@@ -59,7 +59,7 @@ pub fn getValue(
     const js = try helpers.buildGetterJs(allocator, resolved, "el.value||''");
     defer allocator.free(js);
 
-    var result = try runtime.evaluate(allocator, js, .{ .return_by_value = true });
+    var result = try runtime.evaluate(allocator, js, .{ .return_by_value = true, .context_id = resolved.context_id });
     defer result.deinit(allocator);
 
     if (result.asString()) |s| {
@@ -87,7 +87,7 @@ pub fn getAttribute(
     const js = try helpers.buildGetterJs(allocator, resolved, getter_expr);
     defer allocator.free(js);
 
-    var result = try runtime.evaluate(allocator, js, .{ .return_by_value = true });
+    var result = try runtime.evaluate(allocator, js, .{ .return_by_value = true, .context_id = resolved.context_id });
     defer result.deinit(allocator);
 
     if (result.asString()) |s| {
@@ -130,22 +130,24 @@ pub fn getPageUrl(
     return try allocator.dupe(u8, "");
 }
 
-/// Count matching elements
+/// Count matching elements (supports shadow DOM via root_expression)
 pub fn getCount(
     session: *cdp.Session,
     allocator: std.mem.Allocator,
-    selector: []const u8,
+    resolved: *const ResolvedElement,
 ) !usize {
     var runtime = cdp.Runtime.init(session);
     try runtime.enable();
 
+    const selector = resolved.css_selector orelse return 0;
     const escaped_sel = try helpers.escapeJsString(allocator, selector);
     defer allocator.free(escaped_sel);
 
-    const js = try std.fmt.allocPrint(allocator, "document.querySelectorAll({s}).length", .{escaped_sel});
+    const root_expr = resolved.root_expression orelse "document";
+    const js = try std.fmt.allocPrint(allocator, "(function(s,root){{root=root||document;return root.querySelectorAll(s).length}})({s},{s})", .{ escaped_sel, root_expr });
     defer allocator.free(js);
 
-    var result = try runtime.evaluate(allocator, js, .{ .return_by_value = true });
+    var result = try runtime.evaluate(allocator, js, .{ .return_by_value = true, .context_id = resolved.context_id });
     defer result.deinit(allocator);
 
     if (result.value) |val| {
@@ -170,7 +172,7 @@ pub fn getStyles(
     const js = try helpers.buildGetterJs(allocator, resolved, getter_expr);
     defer allocator.free(js);
 
-    var result = try runtime.evaluate(allocator, js, .{ .return_by_value = true });
+    var result = try runtime.evaluate(allocator, js, .{ .return_by_value = true, .context_id = resolved.context_id });
     defer result.deinit(allocator);
 
     if (result.asString()) |s| {

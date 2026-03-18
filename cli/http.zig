@@ -1,5 +1,6 @@
 const std = @import("std");
 const json = @import("json");
+const cdp = @import("cdp");
 
 /// Simple HTTP GET request result
 pub const HttpResponse = struct {
@@ -108,25 +109,54 @@ pub fn get(allocator: std.mem.Allocator, io: std.Io, host: []const u8, port: u16
 
 /// Query Chrome's /json/version endpoint to get WebSocket URL
 pub fn getChromeWsUrl(allocator: std.mem.Allocator, io: std.Io, port: u16) ![]const u8 {
-    var response = try get(allocator, io, "127.0.0.1", port, "/json/version");
-    defer response.deinit();
+    // Try HTTP /json/version endpoint first (standard Chrome launch)
+    if (get(allocator, io, "127.0.0.1", port, "/json/version")) |response_val| {
+        var response = response_val;
+        defer response.deinit();
 
-    if (response.status_code != 200) {
+        if (response.status_code == 200) {
+            // Parse JSON response
+            if (json.parse(allocator, response.body, .{})) |parsed_val| {
+                var parsed = parsed_val;
+                defer parsed.deinit(allocator);
+
+                // Extract webSocketDebuggerUrl
+                if (parsed.get("webSocketDebuggerUrl")) |ws_url| {
+                    if (ws_url == .string) {
+                        return allocator.dupe(u8, ws_url.string);
+                    }
+                }
+            } else |_| {}
+        }
+    } else |_| {}
+
+    // Fallback: Try direct WebSocket connection (Chrome 136+ inspect-based debugging)
+    // This handles chrome://inspect/#remote-debugging which doesn't expose HTTP endpoints
+    return tryDirectWsConnection(allocator, io, port);
+}
+
+/// Try direct WebSocket connection to Chrome's devtools/browser endpoint
+/// Used as fallback for Chrome 136+ inspect-based debugging where /json/version returns 404
+pub fn tryDirectWsConnection(allocator: std.mem.Allocator, io: std.Io, port: u16) ![]const u8 {
+    const ws_url = try std.fmt.allocPrint(allocator, "ws://127.0.0.1:{}/devtools/browser", .{port});
+    errdefer allocator.free(ws_url);
+
+    // Try to connect and verify with Browser.getVersion
+    var browser = cdp.Browser.connect(ws_url, allocator, io, .{}) catch {
         return error.ChromeNotResponding;
-    }
+    };
+    defer browser.disconnect();
 
-    // Parse JSON response
-    var parsed = json.parse(allocator, response.body, .{}) catch
-        return error.InvalidJson;
-    defer parsed.deinit(allocator);
+    // Verify it's a valid CDP endpoint by getting version
+    var version = browser.version() catch {
+        return error.ChromeNotResponding;
+    };
+    version.deinit(allocator);
 
-    // Extract webSocketDebuggerUrl
-    const ws_url = parsed.get("webSocketDebuggerUrl") orelse
-        return error.NoWebSocketUrl;
+    std.debug.print("Note: Using direct WebSocket fallback (inspect-based debugging).\n", .{});
+    std.debug.print("      For automation without prompts, use: chrome --remote-debugging-port={}\n", .{port});
 
-    if (ws_url != .string) return error.InvalidJson;
-
-    return allocator.dupe(u8, ws_url.string);
+    return ws_url;
 }
 
 /// Check if Chrome is running on the specified port

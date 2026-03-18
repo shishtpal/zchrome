@@ -2340,6 +2340,22 @@ Then connect:
 zchrome --url ws://127.0.0.1:9222/devtools/browser/... navigate https://example.com
 ```
 
+#### Chrome Inspect-Based Debugging (Chrome 136+)
+
+Alternatively, you can use Chrome's built-in inspect page without the `--remote-debugging-port` flag:
+
+1. Open `chrome://inspect/#remote-debugging` in Chrome
+2. Enable "Discover network targets" and add `localhost:9222`
+3. Use `zchrome connect`:
+
+```bash
+zchrome connect --port 9222
+```
+
+::: warning
+**Not recommended for automation**: Inspect-based debugging shows an "Allow Remote Debugging" prompt on each connection. For automation, use `--remote-debugging-port` instead.
+:::
+
 ### Longer Timeout
 
 For slow pages:

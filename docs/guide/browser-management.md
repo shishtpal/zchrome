@@ -156,6 +156,33 @@ defer browser.close();
 Get the WebSocket URL from `http://127.0.0.1:9222/json/version`
 :::
 
+### Chrome Inspect-Based Debugging (Chrome 136+)
+
+Chrome 136+ supports debugging via `chrome://inspect/#remote-debugging`. This method exposes CDP over WebSocket without the standard HTTP endpoints (`/json/version` and `/json/list` return 404).
+
+zchrome automatically handles this by falling back to a direct WebSocket connection when HTTP endpoints are unavailable:
+
+```bash
+# 1. Open chrome://inspect in your browser
+# 2. Enable "Discover network targets" and configure the port
+# 3. Connect with zchrome
+zchrome connect --port 9222
+```
+
+The CLI will:
+1. Try the standard `/json/version` endpoint
+2. If that fails (404), attempt direct WebSocket connection to `ws://127.0.0.1:<port>/devtools/browser`
+3. Verify the connection by sending a CDP command
+
+::: warning
+**Prompt Limitation**: Inspect-based debugging shows an "Allow Remote Debugging" prompt on each connection. This is a Chrome security feature that cannot be bypassed.
+
+For automation without prompts, use `--remote-debugging-port` instead:
+```bash
+chrome --remote-debugging-port=9222
+```
+:::
+
 ## Browser Information
 
 ### Version Info

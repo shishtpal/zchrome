@@ -698,6 +698,36 @@ The `--mark` flag injects unique `id` attributes into interactive DOM elements t
 - You want stable CSS selectors (`#zc-1`) instead of transient snapshot refs (`@e1`)
 - You need to reference elements without re-taking snapshots after data changes
 
+### layout
+
+Display the DOM as a tree of bounding boxes and work with layout-based selectors (`@L` paths).
+
+```bash
+zchrome layout                   # Display layout tree
+zchrome layout -s "#main" -d 3   # Scoped with depth limit
+zchrome layout --json            # Output as JSON
+
+# Subcommands
+zchrome layout xpath "/html/body/div[1]"  # XPath to @L path
+zchrome layout css "#main > .header"      # CSS to @L path
+zchrome layout find "Submit"              # Find by text
+zchrome layout at 400 200                 # Find at coordinates
+zchrome layout save layout.json           # Export to file
+zchrome layout diff before.json           # Compare with saved
+zchrome layout screenshot                 # Annotated screenshot
+zchrome layout highlight -d 3 -t 10       # Visual overlay (3 deep, 10s)
+zchrome layout pick                       # Interactive picker
+```
+
+Layout paths (`@L0`, `@L0/2/1`) can be used as selectors in other commands:
+
+```bash
+zchrome click @L0/2/1
+zchrome get text @L1/0
+```
+
+See the [Layout Commands](/cli/layout) page for full documentation on path format, all subcommands, and examples.
+
 ### diff
 
 Compare pages using text-based (snapshot) or visual (pixel) diffing. Useful for detecting changes between page versions, regression testing, or A/B comparison.
@@ -877,6 +907,7 @@ Diff image saved to: url-diff.png
 All element action commands accept a `<selector>` which can be:
 - **CSS selector**: `#login-btn`, `.submit`, `input[name="email"]`
 - **Snapshot ref**: `@e3`, `@e15` (from the last `zchrome snapshot`)
+- **Layout path**: `@L0`, `@L0/2/1` (DOM tree path from `layout` command)
 - **Deep selector**: Use `>>>` to pierce shadow DOM and iframe boundaries
 
 ### Deep Selectors (`>>>`)

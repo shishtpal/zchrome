@@ -4,10 +4,11 @@ This guide covers using the CLI for browser automation with element interactions
 
 ## Overview
 
-zchrome provides two ways to target elements:
+zchrome provides multiple ways to target elements:
 
 1. **CSS Selectors**: Standard CSS selectors like `#id`, `.class`, `button[type="submit"]`
 2. **Snapshot Refs**: References from `zchrome snapshot` like `@e1`, `@e2`, `@e15`
+3. **Layout Paths**: DOM tree paths from `zchrome layout` like `@L0`, `@L0/2/1`
 
 ## Basic Workflow
 
@@ -439,7 +440,8 @@ zchrome get styles "#button"
 
 - **CSS selectors** are more stable if element IDs/classes don't change
 - **Snapshot refs** are great for quick automation but change if page structure changes
-- **Combine both**: Use snapshot to discover, then CSS selectors in scripts
+- **Layout paths** (`@L0/2/1`) are stable based on visual DOM structure, useful when class/id attributes are volatile
+- **Combine all three**: Use snapshot/layout to discover, then the most stable selector type in scripts
 
 ### Debugging
 

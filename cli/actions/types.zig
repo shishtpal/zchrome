@@ -11,6 +11,8 @@ pub const ResolvedElement = struct {
     name: ?[]const u8,
     /// Nth index for disambiguation
     nth: ?usize,
+    /// Layout path for @L selectors (e.g., "0/2/1")
+    layout_path: ?[]const u8 = null,
     allocator: std.mem.Allocator,
 
     // Deep selector context (for >>> piercing)
@@ -33,6 +35,7 @@ pub const ResolvedElement = struct {
         if (self.css_selector) |s| self.allocator.free(s);
         if (self.role) |r| self.allocator.free(r);
         if (self.name) |n| self.allocator.free(n);
+        if (self.layout_path) |l| self.allocator.free(l);
         if (self.root_expression) |r| self.allocator.free(r);
 
         // Detach from OOP iframe session if we own it

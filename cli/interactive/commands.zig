@@ -206,6 +206,11 @@ pub fn cmdSnapshot(state: *InteractiveState, args: []const []const u8) !void {
     try impl.snapshot(session, try buildCtx(state, args));
 }
 
+pub fn cmdLayout(state: *InteractiveState, args: []const []const u8) !void {
+    const session = try requireSession(state);
+    try impl.layout(session, try buildCtx(state, args));
+}
+
 // Element action commands - all delegate to shared impl
 pub fn cmdClick(state: *InteractiveState, args: []const []const u8) !void {
     const session = try requireSession(state);

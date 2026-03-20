@@ -39,6 +39,7 @@ const clipboard_mod = @import("clipboard.zig");
 const extensions_mod = @import("extensions.zig");
 const media_mod = @import("media.zig");
 const tabs_mod = @import("tabs.zig");
+const layout_mod = @import("layout/mod.zig");
 
 // ─── Type Re-exports ─────────────────────────────────────────────────────────
 
@@ -218,3 +219,8 @@ pub const printExtensionsHelp = extensions_mod.printExtensionsHelp;
 
 pub const media = media_mod.media;
 pub const printMediaHelp = media_mod.printMediaHelp;
+
+// ─── Layout Re-exports ────────────────────────────────────────────────────────
+
+pub const layout = layout_mod.layout;
+pub const printLayoutHelp = layout_mod.printLayoutHelp;

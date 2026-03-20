@@ -7,6 +7,7 @@ const helpers = @import("helpers.zig");
 const network_cmd = @import("network.zig");
 const navigation = @import("navigation.zig");
 const capture = @import("capture.zig");
+const layout_cmd = @import("layout/mod.zig");
 const cookies_cmd = @import("cookies.zig");
 const storage_cmd = @import("storage.zig");
 const evaluate_cmd = @import("evaluate.zig");
@@ -40,6 +41,7 @@ pub fn dispatchSessionCommand(session: *cdp.Session, command: anytype, ctx: Comm
         .cookies => try cookies_cmd.cookies(session, ctx),
         .storage => try storage_cmd.webStorage(session, ctx),
         .snapshot => try capture.snapshot(session, ctx),
+        .layout => try layout_cmd.layout(session, ctx),
         .click => try elements.click(session, ctx),
         .dblclick => try elements.dblclick(session, ctx),
         .focus => try elements.focus(session, ctx),

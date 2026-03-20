@@ -21,6 +21,7 @@ COMMANDS:
   pdf [url]                Generate PDF
   evaluate [url] <expr>    Evaluate JS expression
   snapshot                 Capture accessibility tree of active page, save to zsnap.json
+  layout                   Display DOM as a tree of bounding boxes (use @L paths)
   diff <subcommand>        Compare snapshots or screenshots (snapshot/screenshot/url)
   version                  Print browser version info
   help                     Show this help message

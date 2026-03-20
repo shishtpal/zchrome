@@ -68,6 +68,7 @@ pub const Args = struct {
         pages,
         interactive,
         snapshot,
+        layout,
         click,
         dblclick,
         focus,
@@ -196,6 +197,9 @@ pub fn parseArgs(allocator: std.mem.Allocator, args: std.process.Args) !Args {
             } else if (std.mem.eql(u8, arg, "-o")) {
                 const val = iter.next() orelse return error.MissingArgument;
                 output = try allocator.dupe(u8, val);
+            } else {
+                // Unknown short flag - pass to positional for subcommand handling
+                try positional.append(allocator, try allocator.dupe(u8, arg));
             }
         } else if (std.mem.startsWith(u8, arg, "--")) {
             if (std.mem.eql(u8, arg, "--url")) {

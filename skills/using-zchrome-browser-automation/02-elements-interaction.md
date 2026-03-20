@@ -21,10 +21,38 @@ Output example:
 
 ## Element Selectors
 
-zchrome supports two selector types:
+zchrome supports multiple selector types:
 - **CSS selectors**: `#id`, `.class`, `[data-testid="x"]`, `button[type="submit"]`
 - **Snapshot refs**: `@e1`, `@e2` (from `snapshot` output — quick but change if page structure changes)
+- **Layout paths**: `@L0`, `@L0/2/1` (from `layout` output — based on visual DOM tree structure)
 - **Marked IDs**: `#zc-1`, `#zc-2` (from `snapshot --mark` — stable across data updates)
+
+## Layout-Based Selectors
+
+Use `layout` to see the DOM as a tree of bounding boxes:
+
+```bash
+zchrome layout                    # Full page layout tree
+zchrome layout -s "#main"         # Scoped to element
+zchrome layout --depth 3          # Limit depth
+```
+
+Output example:
+```
+Layout tree
+[@L] <body>
+  [@L0] 1920x80 @ (0,0) <header>
+    [@L0/0] 200x60 @ (10,10) <div>
+    [@L0/1] 800x60 @ (400,10) <nav>
+  [@L1] 1920x900 @ (0,80) <main>
+```
+
+Use `@L` paths in any command:
+```bash
+zchrome click @L0/1               # Click nav
+zchrome get text @L1/0            # Get text from first child of main
+zchrome snapshot -s @L1           # Scope snapshot to main
+```
 
 ## Element Actions
 

@@ -10,6 +10,7 @@ pub const FIND_AND_SELECT_JS = @embedFile("../js/find-and-select.js");
 pub const FIND_AND_CHECK_JS = @embedFile("../js/find-and-check.js");
 pub const FIND_AND_SCROLL_JS = @embedFile("../js/find-and-scroll.js");
 pub const FIND_AND_CLICK_JS = @embedFile("../js/find-and-click.js");
+pub const LAYOUT_JS = @embedFile("../js/layout.js");
 
 /// JavaScript to find element by CSS selector, returns bounding rect
 /// Accepts optional root parameter for shadow DOM piercing
@@ -54,7 +55,7 @@ pub fn getFloatFromJson(val: ?json.Value) ?f64 {
     return null;
 }
 
-/// JavaScript to find element and get property (handles both CSS and role-based)
+/// JavaScript to find element and get property (handles CSS, role-based, and layout path)
 /// Supports optional root_expression for shadow DOM piercing
 pub fn buildGetterJs(
     allocator: std.mem.Allocator,
@@ -63,7 +64,21 @@ pub fn buildGetterJs(
 ) ![]const u8 {
     const root_expr = resolved.root_expression orelse "document";
 
-    if (resolved.css_selector) |css| {
+    if (resolved.layout_path) |path| {
+        const escaped_path = try escapeJsString(allocator, path);
+        defer allocator.free(escaped_path);
+        // Inline the path resolution logic for getters
+        return try std.fmt.allocPrint(allocator,
+            \\(function(pathStr){{
+            \\  function getVisibleChildren(el){{return Array.from(el.children).filter(function(c){{var r=c.getBoundingClientRect();return r.width>0&&r.height>0}})}}
+            \\  if(!pathStr||pathStr===''){{var el=document.body;return {s}}}
+            \\  var indices=pathStr.split('/').map(Number);
+            \\  var el=document.body;
+            \\  for(var i=0;i<indices.length;i++){{var idx=indices[i];var children=getVisibleChildren(el);if(idx>=children.length)return null;el=children[idx]}}
+            \\  return {s}
+            \\}})({s})
+        , .{ getter_expr, getter_expr, escaped_path });
+    } else if (resolved.css_selector) |css| {
         const escaped_css = try escapeJsString(allocator, css);
         defer allocator.free(escaped_css);
         return try std.fmt.allocPrint(allocator, "(function(s,root){{root=root||document;var el=root.querySelector(s);if(!el)return null;return {s}}})({s},{s})", .{ getter_expr, escaped_css, root_expr });

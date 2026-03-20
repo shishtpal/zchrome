@@ -300,6 +300,19 @@ zchrome snapshot --mark
 zchrome click "#zc-3"
 ```
 
+**Tip:** Use `layout` to discover elements by their visual position:
+
+```bash
+zchrome layout
+# Shows DOM as a tree of bounding boxes with paths
+# [@L0] 1920x80 @ (0,0) <header>
+# [@L1] 1920x900 @ (0,80) <main>
+
+# Use @L paths as selectors
+zchrome click @L0/1          # Click second child of header
+zchrome get text @L1/0       # Get text from first child of main
+```
+
 **Available element actions:**
 
 | Command | Description |

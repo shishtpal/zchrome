@@ -233,6 +233,8 @@ fn executeCommand(state: *InteractiveState, line: []const u8) !void {
         try commands.cmdStorage(state, args);
     } else if (eql(cmd, "snapshot") or eql(cmd, "snap")) {
         try commands.cmdSnapshot(state, args);
+    } else if (eql(cmd, "layout")) {
+        try commands.cmdLayout(state, args);
     } else if (eql(cmd, "click")) {
         try commands.cmdClick(state, args);
     } else if (eql(cmd, "dblclick")) {

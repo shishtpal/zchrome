@@ -32,6 +32,19 @@ pub fn resolveSelector(allocator: std.mem.Allocator, io: std.Io, selector: []con
     }
 
     if (selector.len > 0 and selector[0] == '@') {
+        // Check for layout path: @L0/2/1
+        if (selector.len > 1 and selector[1] == 'L') {
+            const path = selector[2..]; // "0/2/1" or "" for body
+            return ResolvedElement{
+                .css_selector = null,
+                .role = null,
+                .name = null,
+                .nth = null,
+                .layout_path = try allocator.dupe(u8, path),
+                .allocator = allocator,
+            };
+        }
+
         // Ref-based selector: load from snapshot
         const ref_id = selector[1..];
         const snapshot_path = if (session_ctx) |ctx| try ctx.snapshotPath() else try config_mod.getSnapshotPath(allocator, io);

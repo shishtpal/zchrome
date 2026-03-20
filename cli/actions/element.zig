@@ -23,7 +23,12 @@ pub fn getElementPosition(
     // Get root expression for shadow DOM piercing (defaults to "document")
     const root_expr = resolved.root_expression orelse "document";
 
-    if (resolved.css_selector) |css| {
+    if (resolved.layout_path) |path| {
+        // Layout path selector: @L0/2/1
+        const escaped_path = try helpers.escapeJsString(allocator, path);
+        defer allocator.free(escaped_path);
+        js = try std.fmt.allocPrint(allocator, "{s}('resolve', {s}, null)", .{ helpers.LAYOUT_JS, escaped_path });
+    } else if (resolved.css_selector) |css| {
         // CSS selector path with optional shadow root
         const escaped_css = try helpers.escapeJsString(allocator, css);
         defer allocator.free(escaped_css);

@@ -21,7 +21,7 @@ pub const assertions = @import("assertions.zig");
 pub const actions = @import("actions.zig");
 pub const display = @import("display.zig");
 pub const record = @import("record.zig");
-pub const replay = @import("replay.zig");
+pub const replay = @import("replay/mod.zig");
 
 // Re-export commonly used types
 pub const MacroCommand = macro.MacroCommand;

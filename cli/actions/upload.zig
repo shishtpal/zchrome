@@ -15,8 +15,9 @@ pub fn uploadFiles(
 ) !void {
     // Convert relative paths to absolute paths (CDP requires absolute paths)
     var absolute_files = try allocator.alloc([]const u8, files.len);
+    var allocated_count: usize = 0;
     defer {
-        for (absolute_files) |f| allocator.free(f);
+        for (absolute_files[0..allocated_count]) |f| allocator.free(f);
         allocator.free(absolute_files);
     }
 
@@ -34,8 +35,13 @@ pub fn uploadFiles(
             absolute_files[i] = try allocator.dupe(u8, file);
         } else {
             // Convert to absolute path using realpath
-            absolute_files[i] = try cwd.realPathFileAlloc(io, file, allocator);
+            std.debug.print("    Resolving relative path: {s}\n", .{file});
+            absolute_files[i] = cwd.realPathFileAlloc(io, file, allocator) catch |err| {
+                std.debug.print("    Failed to resolve path: {s} ({})\n", .{ file, err });
+                return err;
+            };
         }
+        allocated_count += 1;
     }
 
     // Debug: print files being uploaded

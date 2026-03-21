@@ -21,6 +21,7 @@ pub const js = @import("js.zig");
 pub const ActionType = command.ActionType;
 pub const MacroCommand = command.MacroCommand;
 pub const CommandMacro = command.CommandMacro;
+pub const FieldConfig = command.FieldConfig;
 pub const saveCommandMacro = command.save;
 pub const loadCommandMacro = command.load;
 

@@ -250,6 +250,21 @@ zchrome cursor replay form.json --fallback error-handler.json
 
 Macros use semantic commands (click, fill, press, **assert**) with CSS selectors, making them human-readable and editable. The `assert` action tests application state during replay with automatic retry on failure. See [Macro Guide](docs/examples/macros.md).
 
+### Data-Driven Automation
+
+Process lists of items with automatic tracking and reporting:
+
+```bash
+# Run automation over a list of items (e.g., subscribe to channels)
+zchrome cursor replay subscribe-all.json --interval=500
+
+# Output:
+#   foreach complete: 28/31 succeeded, 3 failed
+#   Report saved: subscribe-all.report.json
+```
+
+Use `load` to import JSON data, `foreach` to iterate with variable interpolation (`$item.field`), and `mark` to explicitly set success/failed/skipped status. Reports track each iteration with status, duration, and error details.
+
 ## CDP Domains
 
 The library supports the following Chrome DevTools Protocol domains:

@@ -36,6 +36,10 @@
     {
       "action": "wait",
       "value": "1500"
+    },
+    {
+      "action": "mark",
+      "value": "success"
     }
   ]
 }

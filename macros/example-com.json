@@ -1,0 +1,30 @@
+{
+  "version": 2,
+  "description": "Example macro for extracting data from a webpage",
+  "commands": [
+    {
+      "action": "navigate",
+      "value": "https://example.com"
+    },
+    {
+      "action": "wait",
+      "value": 2000
+    },
+    {
+      "action": "extract",
+      "fields": {
+        "title": "body > div > h1",
+        "description": {
+          "selector": "body > div > p:nth-child(2)",
+          "type": "html"
+        },
+        "link": {
+          "selector": "body > div > p:nth-child(3) > a",
+          "type": "attr",
+          "attr": "href"
+        }
+      },
+      "output": "example.json"
+    }
+  ]
+}

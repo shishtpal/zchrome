@@ -363,7 +363,7 @@ The `cursor record` command uses a WebSocket-based architecture to capture event
 | `cli/cursor/replay.zig` | `cursor` entry point, `cursorReplay`, command dispatch |
 | `cli/cursor/record.zig` | `cursorRecord` entry point |
 | `cli/cursor/assertions.zig` | `executeAssertion`, variable resolution |
-| `cli/cursor/state.zig` | `VarValue`, `ReplayState` persistence for `--resume` |
+| `cli/cursor/state.zig` | `VarValue`, `ReplayState`, `IterationResult`, `ForeachReport` |
 
 ### Event Types
 
@@ -393,6 +393,38 @@ pub const EventType = enum {
   ]
 }
 ```
+
+**Data-Driven Commands:**
+```json
+{
+  "version": 2,
+  "commands": [
+    {"action": "load", "file": "users.json", "as": "users"},
+    {"action": "foreach", "source": "$users", "as": "user", "file": "process-user.json", "on_error": "continue"}
+  ]
+}
+```
+
+**Mark Action (explicit status):**
+```json
+{"action": "mark", "value": "success"}
+{"action": "mark", "value": "failed"}
+{"action": "mark", "value": "skipped"}
+```
+
+**Fields Extraction (multi-selector):**
+```json
+{
+  "action": "extract",
+  "fields": {
+    "name": ".profile-name",
+    "email": {"selector": ".email-link", "type": "attr", "attr": "href"},
+    "bio": {"selector": ".bio", "type": "html"}
+  },
+  "output": "profile.json"
+}
+```
+Field types: `text` (default), `html`, `attr`, `value`
 
 **Version 1 (Raw Events - Legacy):**
 ```json
@@ -445,6 +477,32 @@ Replay progress is saved to `replay-state.json` in the session directory for `--
   "failure_reason": "Assertion failed after max retries"
 }
 ```
+
+### Foreach Reporting
+
+When `foreach` completes, a report is auto-generated at `{macro}.report.json`:
+
+```json
+{
+  "source": "$users",
+  "macro_file": "subscribe-all.json",
+  "nested_macro": "subscribe-single.json",
+  "total": 31,
+  "succeeded": 28,
+  "failed": 2,
+  "skipped": 1,
+  "results": [
+    {"index": 0, "item_id": "/@channel1", "status": "success", "duration_ms": 1500},
+    {"index": 5, "item_id": "/@channel6", "status": "failed", "error": "Element not found"}
+  ]
+}
+```
+
+Key structs in `state.zig`:
+- `IterationResult` - Per-item result (index, item_id, status, error, duration)
+- `ForeachReport` - Full report (source, files, totals, results array)
+- `extractItemId()` - Auto-detects identifier from item (checks href, id, name, url)
+- `MarkError` - Error set for mark action signals (MarkSuccess, MarkFailed, MarkSkipped)
 
 ## Common Tasks
 

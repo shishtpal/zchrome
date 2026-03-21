@@ -129,17 +129,9 @@ fn serializeValueInto(allocator: std.mem.Allocator, buf: *std.ArrayList(u8), val
         },
         .string => |s| {
             try buf.append(allocator, '"');
-            // Simple escape - for full safety use json.escapeString
-            for (s) |c| {
-                switch (c) {
-                    '"' => try buf.appendSlice(allocator, "\\\""),
-                    '\\' => try buf.appendSlice(allocator, "\\\\"),
-                    '\n' => try buf.appendSlice(allocator, "\\n"),
-                    '\r' => try buf.appendSlice(allocator, "\\r"),
-                    '\t' => try buf.appendSlice(allocator, "\\t"),
-                    else => try buf.append(allocator, c),
-                }
-            }
+            const escaped = try json.escapeString(allocator, s);
+            defer allocator.free(escaped);
+            try buf.appendSlice(allocator, escaped);
             try buf.append(allocator, '"');
         },
         .array => |arr| {
@@ -451,16 +443,210 @@ pub fn clearState(allocator: std.mem.Allocator, io: std.Io, session_ctx: ?*const
     }
 }
 
-/// Escape a string for JSON
+/// Escape a string for JSON and append to buffer
 fn appendEscaped(buf: *std.ArrayList(u8), allocator: std.mem.Allocator, str: []const u8) !void {
-    for (str) |c| {
-        switch (c) {
-            '\\' => try buf.appendSlice(allocator, "\\\\"),
-            '"' => try buf.appendSlice(allocator, "\\\""),
-            '\n' => try buf.appendSlice(allocator, "\\n"),
-            '\r' => try buf.appendSlice(allocator, "\\r"),
-            '\t' => try buf.appendSlice(allocator, "\\t"),
-            else => try buf.append(allocator, c),
+    const escaped = try json.escapeString(allocator, str);
+    defer allocator.free(escaped);
+    try buf.appendSlice(allocator, escaped);
+}
+
+// ============================================================================
+// Foreach Execution Tracking & Reporting
+// ============================================================================
+
+/// Result of a single iteration in foreach
+pub const IterationResult = struct {
+    index: usize, // 0-based index in source array
+    item_id: ?[]const u8 = null, // Auto-detected identifier (href, id, name, url)
+    status: Status,
+    failed_at_step: ?usize = null, // Which command failed (1-based)
+    failed_action: ?[]const u8 = null, // Action name (navigate, click, etc.)
+    error_message: ?[]const u8 = null,
+    duration_ms: u64 = 0, // How long this iteration took
+
+    pub const Status = enum {
+        success,
+        failed,
+        skipped,
+
+        pub fn toString(self: Status) []const u8 {
+            return switch (self) {
+                .success => "success",
+                .failed => "failed",
+                .skipped => "skipped",
+            };
+        }
+    };
+
+    pub fn deinit(self: *IterationResult, allocator: std.mem.Allocator) void {
+        if (self.item_id) |id| allocator.free(id);
+        if (self.failed_action) |a| allocator.free(a);
+        if (self.error_message) |m| allocator.free(m);
+    }
+};
+
+/// Report for a foreach execution
+pub const ForeachReport = struct {
+    source_var: ?[]const u8 = null, // The source variable name
+    macro_file: ?[]const u8 = null, // The main macro file
+    nested_macro: ?[]const u8 = null, // The per-item macro
+    started_at: ?[]const u8 = null, // ISO timestamp
+    completed_at: ?[]const u8 = null,
+    total_items: usize = 0,
+    succeeded: usize = 0,
+    failed: usize = 0,
+    skipped: usize = 0,
+    results: std.ArrayListUnmanaged(IterationResult) = .{ .items = &.{}, .capacity = 0 },
+
+    pub fn deinit(self: *ForeachReport, allocator: std.mem.Allocator) void {
+        if (self.source_var) |s| allocator.free(s);
+        if (self.macro_file) |m| allocator.free(m);
+        if (self.nested_macro) |n| allocator.free(n);
+        if (self.started_at) |s| allocator.free(s);
+        if (self.completed_at) |c| allocator.free(c);
+        for (self.results.items) |*r| {
+            r.deinit(allocator);
+        }
+        self.results.deinit(allocator);
+    }
+
+    pub fn addResult(self: *ForeachReport, allocator: std.mem.Allocator, result: IterationResult) !void {
+        try self.results.append(allocator, result);
+        switch (result.status) {
+            .success => self.succeeded += 1,
+            .failed => self.failed += 1,
+            .skipped => self.skipped += 1,
         }
     }
+};
+
+/// Extract an identifier from item JSON (auto-detect href, id, name, url)
+pub fn extractItemId(allocator: std.mem.Allocator, item_json: []const u8) ?[]const u8 {
+    const fields = [_][]const u8{ "href", "id", "name", "url" };
+
+    var parsed = json.parse(allocator, item_json, .{}) catch return null;
+    defer parsed.deinit(allocator);
+
+    if (parsed != .object) return null;
+
+    for (fields) |field| {
+        if (parsed.object.get(field)) |val| {
+            if (val == .string) return allocator.dupe(u8, val.string) catch null;
+        }
+    }
+    return null;
+}
+
+/// Get current timestamp as string (unix seconds)
+pub fn getTimestamp(allocator: std.mem.Allocator, io: std.Io) ?[]const u8 {
+    const now = std.Io.Timestamp.now(io, .real);
+    const secs = @divTrunc(now.nanoseconds, std.time.ns_per_s);
+    return std.fmt.allocPrint(allocator, "{}", .{secs}) catch null;
+}
+
+/// Save foreach report to JSON file
+pub fn saveForeachReport(report: *const ForeachReport, allocator: std.mem.Allocator, io: std.Io, output_path: []const u8) !void {
+    var json_buf: std.ArrayList(u8) = .empty;
+    defer json_buf.deinit(allocator);
+
+    try json_buf.appendSlice(allocator, "{\n");
+
+    // Source var
+    if (report.source_var) |sv| {
+        try json_buf.appendSlice(allocator, "  \"source\": \"");
+        try appendEscaped(&json_buf, allocator, sv);
+        try json_buf.appendSlice(allocator, "\",\n");
+    }
+
+    // Macro file
+    if (report.macro_file) |mf| {
+        try json_buf.appendSlice(allocator, "  \"macro_file\": \"");
+        try appendEscaped(&json_buf, allocator, mf);
+        try json_buf.appendSlice(allocator, "\",\n");
+    }
+
+    // Nested macro
+    if (report.nested_macro) |nm| {
+        try json_buf.appendSlice(allocator, "  \"nested_macro\": \"");
+        try appendEscaped(&json_buf, allocator, nm);
+        try json_buf.appendSlice(allocator, "\",\n");
+    }
+
+    // Timestamps
+    if (report.started_at) |sa| {
+        try json_buf.appendSlice(allocator, "  \"started_at\": \"");
+        try appendEscaped(&json_buf, allocator, sa);
+        try json_buf.appendSlice(allocator, "\",\n");
+    }
+    if (report.completed_at) |ca| {
+        try json_buf.appendSlice(allocator, "  \"completed_at\": \"");
+        try appendEscaped(&json_buf, allocator, ca);
+        try json_buf.appendSlice(allocator, "\",\n");
+    }
+
+    // Summary stats
+    const stats = try std.fmt.allocPrint(allocator,
+        \\  "total": {},
+        \\  "succeeded": {},
+        \\  "failed": {},
+        \\  "skipped": {},
+        \\  "results": [
+    , .{ report.total_items, report.succeeded, report.failed, report.skipped });
+    defer allocator.free(stats);
+    try json_buf.appendSlice(allocator, stats);
+
+    // Results array
+    for (report.results.items, 0..) |result, i| {
+        if (i > 0) try json_buf.appendSlice(allocator, ",");
+        try json_buf.appendSlice(allocator, "\n    {");
+
+        // Index
+        const idx_str = try std.fmt.allocPrint(allocator, "\"index\": {}", .{result.index});
+        defer allocator.free(idx_str);
+        try json_buf.appendSlice(allocator, idx_str);
+
+        // Item ID
+        if (result.item_id) |id| {
+            try json_buf.appendSlice(allocator, ", \"item_id\": \"");
+            try appendEscaped(&json_buf, allocator, id);
+            try json_buf.appendSlice(allocator, "\"");
+        }
+
+        // Status
+        try json_buf.appendSlice(allocator, ", \"status\": \"");
+        try json_buf.appendSlice(allocator, result.status.toString());
+        try json_buf.appendSlice(allocator, "\"");
+
+        // Duration
+        const dur_str = try std.fmt.allocPrint(allocator, ", \"duration_ms\": {}", .{result.duration_ms});
+        defer allocator.free(dur_str);
+        try json_buf.appendSlice(allocator, dur_str);
+
+        // Error details (only for failed)
+        if (result.status == .failed) {
+            if (result.failed_at_step) |step| {
+                const step_str = try std.fmt.allocPrint(allocator, ", \"failed_at_step\": {}", .{step});
+                defer allocator.free(step_str);
+                try json_buf.appendSlice(allocator, step_str);
+            }
+            if (result.failed_action) |action| {
+                try json_buf.appendSlice(allocator, ", \"failed_action\": \"");
+                try appendEscaped(&json_buf, allocator, action);
+                try json_buf.appendSlice(allocator, "\"");
+            }
+            if (result.error_message) |msg| {
+                try json_buf.appendSlice(allocator, ", \"error\": \"");
+                try appendEscaped(&json_buf, allocator, msg);
+                try json_buf.appendSlice(allocator, "\"");
+            }
+        }
+
+        try json_buf.appendSlice(allocator, "}");
+    }
+
+    try json_buf.appendSlice(allocator, "\n  ]\n}\n");
+
+    // Write file
+    const dir = std.Io.Dir.cwd();
+    try dir.writeFile(io, .{ .sub_path = output_path, .data = json_buf.items });
 }

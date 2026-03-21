@@ -163,9 +163,12 @@ The macro file contains semantic commands:
 | `upload` | `selector`, `selectors`?, `files` | Upload files to a file input |
 | `dialog` | `accept`, `value`? | Handle JavaScript dialog |
 | `assert` | See below | Test conditions with retry on failure |
-| `extract` | `selector`, `mode`?, `output` | Extract DOM data as JSON |
+| `extract` | `selector` or `fields`, `mode`?, `output` | Extract DOM data as JSON |
 | `capture` | `selector`, capture fields | Capture values into variables |
 | `goto` | `file` | Chain to another macro JSON file |
+| `load` | `file`, `as` | Load JSON file into a variable |
+| `foreach` | `source`, `as`, `file` | Iterate over array, run macro per item |
+| `mark` | `value` | Explicit status (success/failed/skipped) |
 
 ## Wait Action
 
@@ -566,6 +569,60 @@ Extract DOM data during macro replay:
 | `table` | HTML table to objects |
 | `form` | Form field values |
 
+### Fields Extraction (Multi-Selector)
+
+Extract multiple values from different parts of a page into a single JSON object:
+
+**Simple syntax (selector strings):**
+```json
+{
+  "action": "extract",
+  "fields": {
+    "name": ".profile-name",
+    "email": ".contact-email",
+    "phone": ".contact-phone"
+  },
+  "output": "profile.json"
+}
+```
+
+**Advanced syntax (per-field configuration):**
+```json
+{
+  "action": "extract",
+  "fields": {
+    "title": ".product-title",
+    "price": ".price-value",
+    "description": {"selector": ".product-desc", "type": "html"},
+    "image": {"selector": ".product-img img", "type": "attr", "attr": "src"},
+    "sku": {"selector": "[data-sku]", "type": "attr", "attr": "data-sku"}
+  },
+  "output": "product.json"
+}
+```
+
+**Field types:**
+
+| Type | Description |
+|------|-------------|
+| `text` | innerText (default) |
+| `html` | innerHTML |
+| `attr` | Attribute value (requires `attr` field) |
+| `value` | Input/select element value |
+
+**Output:**
+```json
+{
+  "title": "Wireless Headphones",
+  "price": "$99.99",
+  "description": "<p>High quality...</p>",
+  "image": "https://cdn.example.com/img.jpg",
+  "sku": "WH-12345"
+}
+```
+
+If a selector doesn't match, the field is set to `null`.
+
 ## Dialog Handling
 
 Handle JavaScript dialogs during replay:
@@ -590,6 +647,153 @@ Upload files during macro replay:
   "files": ["document.pdf", "image.png"]
 }
 ```
+
+## Data-Driven Automation
+
+zchrome supports data-driven automation workflows where you load data from JSON files and iterate over records, with automatic tracking and reporting.
+
+### Load Action
+
+Load a JSON file into a variable for use in automation:
+
+```json
+{"action": "load", "file": "users.json", "as": "users"}
+```
+
+The loaded data can be an array or object. Arrays can be iterated with `foreach`.
+
+### Foreach Action
+
+Iterate over an array variable, executing a nested macro for each item:
+
+```json
+{
+  "action": "foreach",
+  "source": "$users",
+  "as": "user",
+  "file": "process-user.json",
+  "on_error": "continue"
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `source` | Variable containing the array (prefix with `$`) |
+| `as` | Name for the loop variable |
+| `file` | Macro file to execute for each item |
+| `on_error` | `"continue"` (default) or `"stop"` on error |
+
+**Variable Interpolation:**
+
+In the nested macro, use `$user.field` to access item fields:
+
+```json
+{"action": "navigate", "value": "https://example.com$user.href"}
+{"action": "fill", "selector": "#name", "value": "$user.name"}
+```
+
+**Example: Subscribe to YouTube channels**
+
+`subscribe-all.json`:
+```json
+{
+  "version": 2,
+  "commands": [
+    {"action": "load", "file": "channels.json", "as": "channels"},
+    {"action": "foreach", "source": "$channels", "as": "channel", "file": "subscribe-single.json"}
+  ]
+}
+```
+
+`subscribe-single.json`:
+```json
+{
+  "version": 2,
+  "commands": [
+    {"action": "navigate", "value": "https://www.youtube.com$channel.href"},
+    {"action": "wait", "selector": "ytd-subscribe-button-renderer button", "timeout": 5000},
+    {"action": "click", "selector": "ytd-subscribe-button-renderer button"},
+    {"action": "mark", "value": "success"}
+  ]
+}
+```
+
+### Foreach Reporting
+
+When a foreach completes, zchrome automatically generates a report file with detailed results for each iteration.
+
+**Report Location:** `{macro-file}.report.json` (same directory as the macro)
+
+**Example Report:**
+```json
+{
+  "source": "$channels",
+  "macro_file": "subscribe-all.json",
+  "nested_macro": "subscribe-single.json",
+  "total": 31,
+  "succeeded": 28,
+  "failed": 2,
+  "skipped": 1,
+  "results": [
+    {"index": 0, "item_id": "/@channel1", "status": "success", "duration_ms": 1500},
+    {"index": 1, "item_id": "/@channel2", "status": "success", "duration_ms": 1200},
+    {"index": 5, "item_id": "/@channel6", "status": "failed", "duration_ms": 800, "error": "Element not found"},
+    {"index": 12, "item_id": "/@channel13", "status": "skipped", "duration_ms": 500}
+  ]
+}
+```
+
+**Item ID Auto-Detection:**
+
+The report automatically extracts an identifier from each item by checking these fields in order:
+1. `href`
+2. `id`
+3. `name`
+4. `url`
+
+**Console Output:**
+```
+  foreach complete: 28/31 succeeded, 2 failed
+  Report saved: subscribe-all.report.json
+```
+
+### Mark Action
+
+Explicitly mark the iteration status and stop execution. Use this at the end of nested macros to signal success, or to handle special cases like "already processed".
+
+```json
+{"action": "mark", "value": "success"}
+{"action": "mark", "value": "failed"}
+{"action": "mark", "value": "skipped"}
+```
+
+| Value | Description |
+|-------|-------------|
+| `success` | Mark iteration as successful and stop |
+| `failed` | Mark iteration as failed and stop |
+| `skipped` | Mark iteration as skipped and stop (e.g., already processed) |
+
+**How it works:**
+
+1. When `mark` executes, the nested macro immediately stops
+2. The status is recorded in the foreach report
+3. The foreach continues to the next item (unless `on_error: "stop"` for failures)
+
+**Example: Handle already-subscribed channels**
+
+```json
+{
+  "version": 2,
+  "commands": [
+    {"action": "navigate", "value": "https://www.youtube.com$channel.href"},
+    {"action": "wait", "selector": "ytd-subscribe-button-renderer", "timeout": 5000},
+    {"action": "click", "selector": "ytd-subscribe-button-renderer button"},
+    {"action": "mark", "value": "success"}
+  ]
+}
+```
+
+If any command before `mark` fails (e.g., timeout, element not found), the iteration is automatically marked as **failed** with the error message. The `mark success` only executes if all prior commands succeed.
 
 ## Use Cases
 
@@ -632,6 +836,24 @@ zchrome cursor replay form.json --stream --port=8080
 ```bash
 # Allow remote viewers to interact
 zchrome cursor replay demo.json --stream --interactive
+```
+
+### Data-Driven Batch Processing
+
+```bash
+# Process a list of items from JSON file
+# 1. Scrape data to JSON
+zchrome dom "a.user-link" attrs --all > users.json
+
+# 2. Create automation that iterates over items
+# subscribe-all.json loads users.json and runs subscribe-single.json for each
+
+# 3. Run with tracking
+zchrome cursor replay subscribe-all.json --interval=500
+
+# 4. Check the report
+cat subscribe-all.report.json
+# Shows: total: 50, succeeded: 47, failed: 3
 ```
 
 ## See Also

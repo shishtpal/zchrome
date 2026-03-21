@@ -27,6 +27,13 @@ const session_mod = @import("../session.zig");
 
 pub const CommandCtx = types.CommandCtx;
 
+/// Mark action errors - used to signal explicit status from nested macros
+pub const MarkError = error{
+    MarkSuccess,
+    MarkFailed,
+    MarkSkipped,
+};
+
 /// Replay interval configuration
 pub const ReplayInterval = struct {
     min_ms: u32,
@@ -513,7 +520,10 @@ fn replayCommandsWithOptions(session: *cdp.Session, allocator: std.mem.Allocator
         }
 
         // Execute the command based on action type
-        executeCommand(session, allocator, io, cmd, variables, &page, filename, options, video_orch);
+        executeCommand(session, allocator, io, cmd, variables, &page, filename, options, video_orch) catch |err| {
+            // Mark errors bubble up to foreach handler
+            return err;
+        };
 
         // Capture video frame after command (if video mode is enabled)
         if (video_orch) |orch| {
@@ -553,7 +563,7 @@ fn executeCommand(
     macro_file: []const u8,
     options: ReplayOptions,
     video_orch: ?*video.Orchestrator,
-) void {
+) MarkError!void {
     switch (cmd.action) {
         .click => actions.tryWithFallbackSelectors(session, allocator, io, cmd, elements.click),
         .dblclick => actions.tryWithFallbackSelectors(session, allocator, io, cmd, elements.dblclick),
@@ -655,10 +665,6 @@ fn executeCommand(
         },
         .assert => {}, // Handled above
         .extract => {
-            const selector = cmd.selector orelse {
-                std.debug.print("    Error: extract requires selector\n", .{});
-                return;
-            };
             const raw_output = cmd.output orelse {
                 std.debug.print("    Error: extract requires output path\n", .{});
                 return;
@@ -669,6 +675,43 @@ fn executeCommand(
             const output = interpolated_output orelse raw_output;
 
             const dom_mod = @import("../commands/dom.zig");
+            const dir = std.Io.Dir.cwd();
+
+            // Check for fields extraction mode first
+            if (cmd.fields) |fields_map| {
+                const result_json = extractFields(session, allocator, fields_map, variables) catch |err| {
+                    std.debug.print("    Error extracting fields: {}\n", .{err});
+                    return;
+                };
+                defer allocator.free(result_json);
+
+                // Handle append mode
+                if (cmd.append orelse false) {
+                    const final_json = appendWithDedupe(allocator, io, output, result_json, cmd.dedupe_key) catch |err| {
+                        std.debug.print("    Error appending: {}\n", .{err});
+                        return;
+                    };
+                    defer allocator.free(final_json);
+                    dir.writeFile(io, .{ .sub_path = output, .data = final_json }) catch |err| {
+                        std.debug.print("    Error writing: {}\n", .{err});
+                        return;
+                    };
+                    std.debug.print(" -> {s} (appended)\n", .{output});
+                } else {
+                    dir.writeFile(io, .{ .sub_path = output, .data = result_json }) catch |err| {
+                        std.debug.print("    Error writing: {}\n", .{err});
+                        return;
+                    };
+                    std.debug.print(" -> {s}\n", .{output});
+                }
+                return;
+            }
+
+            // Standard single-selector extraction
+            const selector = cmd.selector orelse {
+                std.debug.print("    Error: extract requires selector or fields\n", .{});
+                return;
+            };
             const mode: dom_mod.ExtractMode = if (cmd.mode) |m|
                 std.meta.stringToEnum(dom_mod.ExtractMode, m) orelse .dom
             else
@@ -678,7 +721,6 @@ fn executeCommand(
                 return;
             };
             defer allocator.free(result_json);
-            const dir = std.Io.Dir.cwd();
 
             // Handle append mode with optional deduplication
             if (cmd.append orelse false) {
@@ -1033,17 +1075,46 @@ fn executeCommand(
             else
                 true; // default is continue
 
-            var success_count: usize = 0;
-            var error_count: usize = 0;
+            // Initialize report for tracking
+            var report = state.ForeachReport{
+                .source_var = allocator.dupe(u8, source_var) catch null,
+                .macro_file = allocator.dupe(u8, macro_file) catch null,
+                .nested_macro = allocator.dupe(u8, target_file) catch null,
+                .started_at = state.getTimestamp(allocator, io),
+                .total_items = array_len,
+            };
+            defer report.deinit(allocator);
 
             // Iterate over array items
             var idx: usize = 0;
             while (idx < array_len) : (idx += 1) {
-                const item_json = source_val.arrayGet(allocator, idx) orelse continue;
+                const item_json = source_val.arrayGet(allocator, idx) orelse {
+                    // Record skipped
+                    report.addResult(allocator, .{
+                        .index = idx,
+                        .status = .skipped,
+                        .error_message = allocator.dupe(u8, "Failed to get item from array") catch null,
+                    }) catch {};
+                    continue;
+                };
                 defer allocator.free(item_json);
 
+                // Extract item ID for reporting
+                const item_id = state.extractItemId(allocator, item_json);
+
+                // Record iteration start time
+                const start_ns = std.Io.Timestamp.now(io, .real).nanoseconds;
+
                 // Store item as loop variable
-                const loop_key = allocator.dupe(u8, loop_var_name) catch continue;
+                const loop_key = allocator.dupe(u8, loop_var_name) catch {
+                    report.addResult(allocator, .{
+                        .index = idx,
+                        .item_id = item_id,
+                        .status = .skipped,
+                        .error_message = allocator.dupe(u8, "Memory allocation failed") catch null,
+                    }) catch {};
+                    continue;
+                };
 
                 // Remove old loop variable if exists
                 if (variables.fetchRemove(loop_key)) |old| {
@@ -1055,12 +1126,24 @@ fn executeCommand(
                 // Parse to determine if object or other
                 var item_parsed = json.parse(allocator, item_json, .{}) catch {
                     allocator.free(loop_key);
+                    report.addResult(allocator, .{
+                        .index = idx,
+                        .item_id = item_id,
+                        .status = .skipped,
+                        .error_message = allocator.dupe(u8, "Failed to parse item JSON") catch null,
+                    }) catch {};
                     continue;
                 };
                 defer item_parsed.deinit(allocator);
 
                 const item_copy = allocator.dupe(u8, item_json) catch {
                     allocator.free(loop_key);
+                    report.addResult(allocator, .{
+                        .index = idx,
+                        .item_id = item_id,
+                        .status = .skipped,
+                        .error_message = allocator.dupe(u8, "Memory allocation failed") catch null,
+                    }) catch {};
                     continue;
                 };
 
@@ -1079,6 +1162,12 @@ fn executeCommand(
                         .string => |s| allocator.free(s),
                         else => {},
                     }
+                    report.addResult(allocator, .{
+                        .index = idx,
+                        .item_id = item_id,
+                        .status = .skipped,
+                        .error_message = allocator.dupe(u8, "Failed to store loop variable") catch null,
+                    }) catch {};
                     continue;
                 };
 
@@ -1110,20 +1199,228 @@ fn executeCommand(
                 nested_options.start_index = null;
                 nested_options.variables = variables; // Pass parent's variables to nested macro
 
+                const end_ns = std.Io.Timestamp.now(io, .real).nanoseconds;
+                const duration_ms: u64 = @intCast(@divTrunc(end_ns - start_ns, 1_000_000));
+
                 replayCommandsWithOptions(session, allocator, io, resolved_path, nested_options) catch |err| {
-                    std.debug.print("    Error in foreach iteration {}: {}\n", .{ idx + 1, err });
-                    error_count += 1;
-                    if (!on_error_continue) {
-                        std.debug.print("  foreach stopped due to error\n", .{});
-                        break;
+                    // Handle explicit mark signals vs actual errors
+                    switch (err) {
+                        error.MarkSuccess => {
+                            // Explicit success - record and continue
+                            report.addResult(allocator, .{
+                                .index = idx,
+                                .item_id = item_id,
+                                .status = .success,
+                                .duration_ms = duration_ms,
+                            }) catch {};
+                            continue;
+                        },
+                        error.MarkSkipped => {
+                            // Explicit skip - record and continue
+                            report.addResult(allocator, .{
+                                .index = idx,
+                                .item_id = item_id,
+                                .status = .skipped,
+                                .duration_ms = duration_ms,
+                            }) catch {};
+                            continue;
+                        },
+                        error.MarkFailed => {
+                            // Explicit failure
+                            report.addResult(allocator, .{
+                                .index = idx,
+                                .item_id = item_id,
+                                .status = .failed,
+                                .error_message = allocator.dupe(u8, "Marked as failed") catch null,
+                                .duration_ms = duration_ms,
+                            }) catch {};
+                            if (!on_error_continue) {
+                                std.debug.print("  foreach stopped due to mark failed\n", .{});
+                                break;
+                            }
+                            continue;
+                        },
+                        else => {
+                            // Actual error
+                            std.debug.print("    Error in foreach iteration {}: {}\n", .{ idx + 1, err });
+                            const err_msg = std.fmt.allocPrint(allocator, "{}", .{err}) catch null;
+                            report.addResult(allocator, .{
+                                .index = idx,
+                                .item_id = item_id,
+                                .status = .failed,
+                                .error_message = err_msg,
+                                .duration_ms = duration_ms,
+                            }) catch {};
+
+                            if (!on_error_continue) {
+                                std.debug.print("  foreach stopped due to error\n", .{});
+                                break;
+                            }
+                            continue;
+                        },
                     }
-                    continue;
                 };
-                success_count += 1;
+
+                // Record success (reached end without mark action)
+                report.addResult(allocator, .{
+                    .index = idx,
+                    .item_id = item_id,
+                    .status = .success,
+                    .duration_ms = duration_ms,
+                }) catch {};
             }
 
-            std.debug.print("  foreach complete: {} succeeded, {} failed\n", .{ success_count, error_count });
+            // Update completion timestamp
+            report.completed_at = state.getTimestamp(allocator, io);
+
+            // Generate report filename: macro_file.report.json
+            const report_path = blk: {
+                // Remove .json extension if present
+                const base = if (std.mem.endsWith(u8, macro_file, ".json"))
+                    macro_file[0 .. macro_file.len - 5]
+                else
+                    macro_file;
+                break :blk std.fmt.allocPrint(allocator, "{s}.report.json", .{base}) catch null;
+            };
+
+            if (report_path) |rp| {
+                defer allocator.free(rp);
+                state.saveForeachReport(&report, allocator, io, rp) catch |err| {
+                    std.debug.print("  Warning: failed to save report: {}\n", .{err});
+                };
+                std.debug.print("  foreach complete: {}/{} succeeded, {} failed\n", .{ report.succeeded, report.total_items, report.failed });
+                std.debug.print("  Report saved: {s}\n", .{rp});
+            } else {
+                std.debug.print("  foreach complete: {}/{} succeeded, {} failed\n", .{ report.succeeded, report.total_items, report.failed });
+            }
         },
+        .mark => {
+            // Explicit status marking - stops execution and signals status to parent foreach
+            const status_str = cmd.value orelse "success";
+            std.debug.print(" {s}\n", .{status_str});
+
+            if (std.mem.eql(u8, status_str, "success")) {
+                return error.MarkSuccess;
+            } else if (std.mem.eql(u8, status_str, "skipped")) {
+                return error.MarkSkipped;
+            } else {
+                return error.MarkFailed;
+            }
+        },
+    }
+}
+
+/// Extract multiple fields using selector map
+fn extractFields(
+    session: *cdp.Session,
+    allocator: std.mem.Allocator,
+    fields: std.StringArrayHashMapUnmanaged(macro.FieldConfig),
+    variables: *const std.StringHashMap(state.VarValue),
+) ![]const u8 {
+    var runtime = cdp.Runtime.init(session);
+    try runtime.enable();
+
+    var json_buf: std.ArrayList(u8) = .empty;
+    errdefer json_buf.deinit(allocator);
+
+    try json_buf.appendSlice(allocator, "{");
+
+    var first = true;
+    for (fields.keys(), fields.values()) |name, config| {
+        if (!first) try json_buf.appendSlice(allocator, ",");
+        first = false;
+
+        // Interpolate selector variables
+        const interpolated_selector = interpolateVariables(allocator, config.selector, variables);
+        defer if (interpolated_selector) |s| allocator.free(s);
+        const selector = interpolated_selector orelse config.selector;
+
+        // Build JavaScript based on extract type
+        const js_expr = switch (config.extract_type) {
+            .text => try std.fmt.allocPrint(allocator,
+                \\(function() {{
+                \\  var el = document.querySelector('{s}');
+                \\  return el ? el.innerText : null;
+                \\}})()
+            , .{selector}),
+            .html => try std.fmt.allocPrint(allocator,
+                \\(function() {{
+                \\  var el = document.querySelector('{s}');
+                \\  return el ? el.innerHTML : null;
+                \\}})()
+            , .{selector}),
+            .attr => blk: {
+                const attr_name = config.attr_name orelse "value";
+                break :blk try std.fmt.allocPrint(allocator,
+                    \\(function() {{
+                    \\  var el = document.querySelector('{s}');
+                    \\  return el ? el.getAttribute('{s}') : null;
+                    \\}})()
+                , .{ selector, attr_name });
+            },
+            .value => try std.fmt.allocPrint(allocator,
+                \\(function() {{
+                \\  var el = document.querySelector('{s}');
+                \\  return el ? el.value : null;
+                \\}})()
+            , .{selector}),
+        };
+        defer allocator.free(js_expr);
+
+        // Execute and get result
+        var result = runtime.evaluate(allocator, js_expr, .{ .return_by_value = true }) catch null;
+        defer if (result) |*r| r.deinit(allocator);
+
+        // Write field
+        try json_buf.appendSlice(allocator, "\n  \"");
+        try json_buf.appendSlice(allocator, name);
+        try json_buf.appendSlice(allocator, "\": ");
+
+        if (result) |r| {
+            if (r.value) |val| {
+                switch (val) {
+                    .string => |s| {
+                        try json_buf.appendSlice(allocator, "\"");
+                        try appendJsonEscaped(&json_buf, allocator, s);
+                        try json_buf.appendSlice(allocator, "\"");
+                    },
+                    .null => try json_buf.appendSlice(allocator, "null"),
+                    .integer => |i| {
+                        const num_str = try std.fmt.allocPrint(allocator, "{}", .{i});
+                        defer allocator.free(num_str);
+                        try json_buf.appendSlice(allocator, num_str);
+                    },
+                    .float => |f| {
+                        const num_str = try std.fmt.allocPrint(allocator, "{d}", .{f});
+                        defer allocator.free(num_str);
+                        try json_buf.appendSlice(allocator, num_str);
+                    },
+                    .bool => |b| try json_buf.appendSlice(allocator, if (b) "true" else "false"),
+                    else => try json_buf.appendSlice(allocator, "null"),
+                }
+            } else {
+                try json_buf.appendSlice(allocator, "null");
+            }
+        } else {
+            try json_buf.appendSlice(allocator, "null");
+        }
+    }
+
+    try json_buf.appendSlice(allocator, "\n}");
+    return try json_buf.toOwnedSlice(allocator);
+}
+
+/// Escape string for JSON output
+fn appendJsonEscaped(buf: *std.ArrayList(u8), allocator: std.mem.Allocator, str: []const u8) !void {
+    for (str) |c| {
+        switch (c) {
+            '\\' => try buf.appendSlice(allocator, "\\\\"),
+            '"' => try buf.appendSlice(allocator, "\\\""),
+            '\n' => try buf.appendSlice(allocator, "\\n"),
+            '\r' => try buf.appendSlice(allocator, "\\r"),
+            '\t' => try buf.appendSlice(allocator, "\\t"),
+            else => try buf.append(allocator, c),
+        }
     }
 }
 

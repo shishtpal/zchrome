@@ -15,7 +15,11 @@
     },
     {
       "action": "wait",
-      "value": "100"
+      "value": "1500"
+    },
+    {
+      "action": "mark", 
+      "value": "success"
     }
   ]
 }

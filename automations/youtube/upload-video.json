@@ -1,0 +1,97 @@
+{
+  "version": 2,
+  "commands": [
+    {
+      "action": "navigate",
+      "value": "https://studio.youtube.com/"
+    },
+    {
+      "description": "Click the upload video button",
+      "action": "wait",
+      "selector": "#page-title a ytcp-icon-button#upload-icon"
+    },
+    {
+      "action": "click",
+      "selector": "#page-title a ytcp-icon-button#upload-icon"
+    },
+    {
+      "description": "Click the select files button",
+      "action": "assert",
+      "text": "Drag and drop video files to upload"
+    },
+    {
+      "action": "upload",
+      "selector": "#ytcp-uploads-dialog-file-picker input[type=\"file\"]",
+      "files": [
+        "video.mp4"
+      ]
+    },
+    {
+      "action": "wait",
+      "selector": "ytcp-video-metadata-editor"
+    },
+    {
+      "action": "scroll",
+      "scrollY": 500
+    },
+    {
+      "description": "Select the audience for the video",
+      "action": "wait",
+      "selector": "#radioLabel"
+    },
+    {
+      "action": "check",
+      "selector": "#radioLabel"
+    },
+    {
+      "action": "wait",
+      "value": 2000
+    },
+    {
+      "action": "wait",
+      "text": "Upload complete ... Processing will begin shortly"
+    },
+    {
+      "action": "click",
+      "selector": "#next-button button"
+    },
+    {
+      "action": "assert",
+      "selector": "#scrollable-content > ytcp-uploads-video-elements > h1",
+      "contains": "Video elements"
+    },
+    {
+      "action": "click",
+      "selector": "#next-button > ytcp-button-shape > button"
+    },
+    {
+      "action": "assert",
+      "selector": "#scrollable-content > ytcp-uploads-checks > div.top-row.style-scope.ytcp-uploads-checks > h1",
+      "contains": "Checks"
+    },
+    {
+      "action": "click",
+      "selector": "#next-button > ytcp-button-shape > button"
+    },
+    {
+      "action": "assert",
+      "selector": "#scrollable-content > ytcp-uploads-review > div.top-row.style-scope.ytcp-uploads-review > h1",
+      "contains": "Visibility"
+    },
+    {
+      "action": "click",
+      "selector": "#done-button > ytcp-button-shape > button"
+    },
+    {
+      "description": "Make sure the video is Public"
+    },
+    {
+      "action": "assert",
+      "selector": "#done-button > ytcp-button-shape > button"
+    },
+    {
+      "action": "click",
+      "selector": "#done-button > ytcp-button-shape > button"
+    }
+  ]
+}

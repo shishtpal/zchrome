@@ -8,6 +8,33 @@ const json = @import("json");
 
 const escapeString = json.escapeString;
 
+/// Configuration for a single field extraction in "fields" mode
+pub const FieldConfig = struct {
+    selector: []const u8,
+    extract_type: ExtractType = .text,
+    attr_name: ?[]const u8 = null, // For type=attr
+
+    pub const ExtractType = enum {
+        text, // innerText (default)
+        html, // innerHTML
+        attr, // Attribute value (requires attr_name)
+        value, // Input/select value
+
+        pub fn fromString(s: []const u8) ?ExtractType {
+            if (std.mem.eql(u8, s, "text")) return .text;
+            if (std.mem.eql(u8, s, "html")) return .html;
+            if (std.mem.eql(u8, s, "attr")) return .attr;
+            if (std.mem.eql(u8, s, "value")) return .value;
+            return null;
+        }
+    };
+
+    pub fn deinit(self: *FieldConfig, allocator: std.mem.Allocator) void {
+        allocator.free(self.selector);
+        if (self.attr_name) |a| allocator.free(a);
+    }
+};
+
 /// Action types for semantic command recording
 pub const ActionType = enum {
     click,
@@ -31,6 +58,7 @@ pub const ActionType = enum {
     goto,
     load, // Load JSON file into variable
     foreach, // Iterate over array variable
+    mark, // Explicit status marking (stops execution, signals success/failed/skipped)
 
     pub fn toString(self: ActionType) []const u8 {
         return switch (self) {
@@ -55,6 +83,7 @@ pub const ActionType = enum {
             .goto => "goto",
             .load => "load",
             .foreach => "foreach",
+            .mark => "mark",
         };
     }
 
@@ -80,6 +109,7 @@ pub const ActionType = enum {
         if (std.mem.eql(u8, s, "goto")) return .goto;
         if (std.mem.eql(u8, s, "load")) return .load;
         if (std.mem.eql(u8, s, "foreach")) return .foreach;
+        if (std.mem.eql(u8, s, "mark")) return .mark;
         return null;
     }
 
@@ -88,7 +118,7 @@ pub const ActionType = enum {
     pub fn isActionCommand(self: ActionType) bool {
         return switch (self) {
             .click, .dblclick, .fill, .@"type", .check, .uncheck, .select, .multiselect, .hover, .navigate, .upload => true,
-            .press, .scroll, .wait, .assert, .extract, .dialog, .capture, .goto => false,
+            .press, .scroll, .wait, .assert, .extract, .dialog, .capture, .goto, .load, .foreach, .mark => false,
         };
     }
 };
@@ -119,6 +149,7 @@ pub const MacroCommand = struct {
     extract_all: ?bool = null, // Use querySelectorAll for extract
     append: ?bool = null, // Append to existing JSON array instead of overwrite
     dedupe_key: ?[]const u8 = null, // Path to unique key for deduplication (e.g., "attrs.data-user-id")
+    fields: ?std.StringArrayHashMapUnmanaged(FieldConfig) = null, // Multi-selector field extraction
     // Snapshot assertion field
     snapshot: ?[]const u8 = null, // Expected JSON file for snapshot comparison
     // Dialog-specific fields
@@ -166,6 +197,14 @@ pub const MacroCommand = struct {
         if (self.output) |o| allocator.free(o);
         if (self.dedupe_key) |dk| allocator.free(dk);
         if (self.snapshot) |sn| allocator.free(sn);
+        // Fields extraction
+        if (self.fields) |*flds| {
+            for (flds.keys(), flds.values()) |key, *val| {
+                allocator.free(key);
+                val.deinit(allocator);
+            }
+            flds.deinit(allocator);
+        }
         if (self.files) |f| {
             for (f) |file| allocator.free(file);
             allocator.free(f);
@@ -729,6 +768,82 @@ pub fn load(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !Command
                 }
                 if (obj.get("key")) |dk| {
                     if (dk == .string) cmd.dedupe_key = try allocator.dupe(u8, dk.string);
+                }
+                // Fields extraction (multi-selector)
+                if (obj.get("fields")) |fields_val| {
+                    if (fields_val == .object) {
+                        var fields_map: std.StringArrayHashMapUnmanaged(FieldConfig) = .{};
+                        errdefer {
+                            for (fields_map.keys(), fields_map.values()) |key, *val| {
+                                allocator.free(key);
+                                val.deinit(allocator);
+                            }
+                            fields_map.deinit(allocator);
+                        }
+
+                        var fields_iter = fields_val.object.iterator();
+                        while (fields_iter.next()) |entry| {
+                            const field_name = try allocator.dupe(u8, entry.key_ptr.*);
+                            errdefer allocator.free(field_name);
+
+                            var config: FieldConfig = undefined;
+
+                            // Simple syntax: "field": "selector" (string)
+                            if (entry.value_ptr.* == .string) {
+                                config = .{
+                                    .selector = try allocator.dupe(u8, entry.value_ptr.string),
+                                    .extract_type = .text,
+                                    .attr_name = null,
+                                };
+                            }
+                            // Advanced syntax: "field": {"selector": "...", "type": "...", "attr": "..."}
+                            else if (entry.value_ptr.* == .object) {
+                                const field_obj = entry.value_ptr.object;
+                                const sel = field_obj.get("selector") orelse {
+                                    std.debug.print("Warning: field '{s}' missing 'selector', skipping\n", .{field_name});
+                                    allocator.free(field_name);
+                                    continue;
+                                };
+                                if (sel != .string) {
+                                    std.debug.print("Warning: field '{s}' selector is not a string, skipping\n", .{field_name});
+                                    allocator.free(field_name);
+                                    continue;
+                                }
+
+                                var extract_type: FieldConfig.ExtractType = .text;
+                                if (field_obj.get("type")) |t| {
+                                    if (t == .string) {
+                                        extract_type = FieldConfig.ExtractType.fromString(t.string) orelse .text;
+                                    }
+                                }
+
+                                var attr_name: ?[]const u8 = null;
+                                if (field_obj.get("attr")) |a| {
+                                    if (a == .string) {
+                                        attr_name = try allocator.dupe(u8, a.string);
+                                    }
+                                }
+
+                                config = .{
+                                    .selector = try allocator.dupe(u8, sel.string),
+                                    .extract_type = extract_type,
+                                    .attr_name = attr_name,
+                                };
+                            } else {
+                                std.debug.print("Warning: field '{s}' value must be string or object, skipping\n", .{field_name});
+                                allocator.free(field_name);
+                                continue;
+                            }
+
+                            try fields_map.put(allocator, field_name, config);
+                        }
+
+                        if (fields_map.count() > 0) {
+                            cmd.fields = fields_map;
+                        } else {
+                            fields_map.deinit(allocator);
+                        }
+                    }
                 }
                 // Snapshot assertion field
                 if (obj.get("snapshot")) |sn| {

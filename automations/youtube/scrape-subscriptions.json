@@ -1,0 +1,27 @@
+{
+  "version": 2,
+  "commands": [
+    {
+      "action": "navigate",
+      "value": "https://www.youtube.com/feed/channels"
+    },
+    {
+      "action": "assert",
+      "text": "All subscriptions"
+    },
+    {
+      "description": "Wait for the first channel to load",
+      "action": "assert",
+      "selector": "ytd-expanded-shelf-contents-renderer ytd-channel-renderer"
+    },
+    {
+      "action": "extract",
+      "selector": "ytd-expanded-shelf-contents-renderer ytd-channel-renderer a#main-link",
+      "mode": "attrs",
+      "extract_all": true,
+      "output": "automations/youtube/data/yt-subscriptions.json",
+      "append": true,
+      "key": "href"
+    }
+  ]
+}

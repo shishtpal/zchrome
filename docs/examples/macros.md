@@ -1014,3 +1014,158 @@ Version 1 macros contain raw events (mouseMove, keyDown, etc.) and are still sup
 ```
 
 To convert to version 2, re-record the interaction - semantic commands are more maintainable.
+
+## Data Store Workflows
+
+For scraping and automation workflows that need to collect data across multiple runs and iterate over saved data.
+
+### Append Mode with Deduplication
+
+The `extract` action supports appending to existing JSON files with automatic deduplication:
+
+```json
+{
+  "action": "extract",
+  "selector": ".user-card",
+  "mode": "dom",
+  "extract_all": true,
+  "output": "data/users.json",
+  "append": true,
+  "key": "attrs.data-user-id"
+}
+```
+
+**Fields:**
+- `append`: When `true`, new items are added to existing JSON array instead of overwriting
+- `key`: Path to unique field for deduplication (e.g., `attrs.data-user-id`, `id`, `email`)
+
+If `key` is specified, items with duplicate key values are skipped.
+
+### Load Action
+
+Load a JSON file into a variable for later use:
+
+```json
+{"action": "load", "file": "data/users.json", "as": "users"}
+```
+
+**Fields:**
+- `file`: Path to JSON file (relative to CWD)
+- `as`: Variable name to store the data
+
+The loaded data is available as `$users` in subsequent commands.
+
+### Foreach Action
+
+Iterate over an array variable and run a macro for each item:
+
+```json
+{
+  "action": "foreach",
+  "source": "$users",
+  "as": "user",
+  "file": "check-user.json",
+  "on_error": "continue"
+}
+```
+
+**Fields:**
+- `source`: Variable containing array (with `$` prefix)
+- `as`: Loop variable name
+- `file`: Macro file to run for each item
+- `on_error`: `"continue"` (default) or `"stop"`
+
+### Variable Interpolation
+
+Use `$variable` and `$variable.field` syntax in values:
+
+```json
+{"action": "navigate", "value": "https://example.com/profile/$user.id"}
+{"action": "extract", "output": "data/activity-$user.id.json", ...}
+```
+
+Supported in:
+- `navigate` URL values
+- `extract` output paths
+
+### Complete Data Workflow Example
+
+**Step 1: Scrape users (scrape-users.json)**
+
+Run this daily to collect new users:
+
+```json
+{
+  "version": 2,
+  "commands": [
+    {"action": "navigate", "value": "https://example.com/users"},
+    {"action": "wait", "selector": ".user-list"},
+    {
+      "action": "extract",
+      "selector": ".user-card",
+      "mode": "dom",
+      "extract_all": true,
+      "output": "data/users.json",
+      "append": true,
+      "key": "attrs.data-user-id"
+    }
+  ]
+}
+```
+
+**Step 2: Check all users (check-users.json)**
+
+```json
+{
+  "version": 2,
+  "commands": [
+    {"action": "load", "file": "data/users.json", "as": "users"},
+    {
+      "action": "foreach",
+      "source": "$users",
+      "as": "user",
+      "file": "check-single-user.json",
+      "on_error": "continue"
+    }
+  ]
+}
+```
+
+**Step 3: Single user check (check-single-user.json)**
+
+```json
+{
+  "version": 2,
+  "commands": [
+    {"action": "navigate", "value": "https://example.com/user/$user.attrs.data-user-id"},
+    {"action": "wait", "selector": ".profile"},
+    {
+      "action": "extract",
+      "selector": ".activity",
+      "mode": "text",
+      "output": "data/activity-$user.attrs.data-user-id.json"
+    }
+  ]
+}
+```
+
+**Running the workflow:**
+
+```bash
+# Initial scrape
+zchrome cursor replay scrape-users.json
+
+# Check all users
+zchrome cursor replay check-users.json
+
+# Re-scrape (new users auto-appended, duplicates skipped)
+zchrome cursor replay scrape-users.json
+```
+
+### Supported Actions Summary
+
+| Action | Purpose | Key Fields |
+|--------|---------|------------|
+| `extract` | Extract DOM data | `selector`, `mode`, `output`, `append`, `key` |
+| `load` | Load JSON into variable | `file`, `as` |
+| `foreach` | Iterate over array | `source`, `as`, `file`, `on_error` |

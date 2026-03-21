@@ -1,0 +1,21 @@
+{
+  "version": 2,
+  "commands": [
+    {
+      "action": "navigate",
+      "value": "https://www.youtube.com$user.href"
+    },
+    {
+      "action": "assert",
+      "selector": "yt-subscribe-button-view-model button"
+    },
+    {
+      "action": "click",
+      "selector": "yt-subscribe-button-view-model button"
+    },
+    {
+      "action": "wait",
+      "value": "100"
+    }
+  ]
+}

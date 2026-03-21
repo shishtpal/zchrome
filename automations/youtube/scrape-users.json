@@ -1,0 +1,25 @@
+{
+  "version": 2,
+  "commands": [
+    { "action": "navigate", "value": "https://www.youtube.com" },
+    {
+      "action": "wait",
+      "selector": "yt-content-metadata-view-model",
+      "timeout": 10000
+    },
+    { "action": "scroll", "scrollY": 800 },
+    { "action": "wait", "value": "2000" },
+    { "action": "scroll", "scrollY": 800 },
+    { "action": "wait", "value": "2000" },
+    {
+      "action": "extract",
+      "selector": "yt-content-metadata-view-model a",
+      "mode": "attrs",
+      "extract_all": true,
+      "output": "automations/youtube/data/yt-users.json",
+      "append": true,
+      "key": "href"
+    }
+  ]
+}
+

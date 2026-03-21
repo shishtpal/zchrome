@@ -62,7 +62,7 @@ pub fn decodePng(allocator: Allocator, data: []u8) !PngImage {
     };
 
     // Collect IDAT chunk data
-    var compressed_data: std.ArrayListUnmanaged(u8) = .{};
+    var compressed_data: std.ArrayListUnmanaged(u8) = .{ .items = &.{}, .capacity = 0 };
     defer compressed_data.deinit(allocator);
 
     var chunk_count: usize = 0;
@@ -300,7 +300,7 @@ fn paethPredictor(a: i32, b: i32, c: i32) u8 {
 
 /// Encode RGBA pixels to PNG format (simple implementation)
 pub fn encodePng(allocator: Allocator, pixels: []const u8, width: u32, height: u32) ![]u8 {
-    var output: std.ArrayListUnmanaged(u8) = .{};
+    var output: std.ArrayListUnmanaged(u8) = .{ .items = &.{}, .capacity = 0 };
     errdefer output.deinit(allocator);
 
     // PNG signature
@@ -318,7 +318,7 @@ pub fn encodePng(allocator: Allocator, pixels: []const u8, width: u32, height: u
     try writeChunk(allocator, &output, "IHDR", &ihdr_data);
 
     // IDAT chunk - prepare filtered scanlines
-    var filtered: std.ArrayListUnmanaged(u8) = .{};
+    var filtered: std.ArrayListUnmanaged(u8) = .{ .items = &.{}, .capacity = 0 };
     defer filtered.deinit(allocator);
 
     const scanline_len = width * 4;
@@ -329,7 +329,7 @@ pub fn encodePng(allocator: Allocator, pixels: []const u8, width: u32, height: u
     }
 
     // Compress with zlib/deflate
-    var compressed: std.ArrayListUnmanaged(u8) = .{};
+    var compressed: std.ArrayListUnmanaged(u8) = .{ .items = &.{}, .capacity = 0 };
     defer compressed.deinit(allocator);
 
     // zlib header
@@ -374,7 +374,7 @@ fn writeChunk(allocator: Allocator, output: *std.ArrayListUnmanaged(u8), chunk_t
     try output.appendSlice(allocator, data);
 
     // CRC32
-    var crc_data: std.ArrayListUnmanaged(u8) = .{};
+    var crc_data: std.ArrayListUnmanaged(u8) = .{ .items = &.{}, .capacity = 0 };
     defer crc_data.deinit(allocator);
     try crc_data.appendSlice(allocator, chunk_type);
     try crc_data.appendSlice(allocator, data);

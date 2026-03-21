@@ -50,7 +50,7 @@ pub const ParsedFlags = struct {
     positional: []const []const u8 = &.{},
 
     // Tracks which strings were allocated (for deinit)
-    _allocated: std.ArrayListUnmanaged([]const u8) = .empty,
+    _allocated: std.ArrayListUnmanaged([]const u8) = .{ .items = &.{}, .capacity = 0 },
 
     /// Free all allocated strings and the positional slice.
     pub fn deinit(self: *ParsedFlags, allocator: std.mem.Allocator) void {
@@ -94,7 +94,7 @@ pub fn parseCommandFlags(allocator: std.mem.Allocator, tokens: []const []const u
     var result = ParsedFlags{};
     errdefer result.deinit(allocator);
 
-    var positional: std.ArrayListUnmanaged([]const u8) = .empty;
+    var positional: std.ArrayListUnmanaged([]const u8) = .{ .items = &.{}, .capacity = 0 };
     errdefer positional.deinit(allocator);
 
     var i: usize = 0;

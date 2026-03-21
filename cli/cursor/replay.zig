@@ -52,6 +52,8 @@ pub const ReplayOptions = struct {
     video_mode: video.OutputMode = .{},
     /// Existing video orchestrator (passed to nested goto calls)
     video_orch: ?*video.Orchestrator = null,
+    /// Variables map (passed to nested foreach calls)
+    variables: ?*std.StringHashMap(state.VarValue) = null,
 };
 
 /// Main cursor command entry point
@@ -404,16 +406,17 @@ fn replayCommandsWithOptions(session: *cdp.Session, allocator: std.mem.Allocator
     var total_retries: u32 = 0;
     var has_assertions = false;
 
-    // Variables map for capture action
-    var variables = std.StringHashMap(state.VarValue).init(allocator);
-    defer {
-        var iter = variables.iterator();
+    // Variables map for capture action - use passed variables or create new
+    var owned_variables = std.StringHashMap(state.VarValue).init(allocator);
+    const variables: *std.StringHashMap(state.VarValue) = if (options.variables) |v| v else &owned_variables;
+    defer if (options.variables == null) {
+        var iter = owned_variables.iterator();
         while (iter.next()) |entry| {
             allocator.free(entry.key_ptr.*);
             entry.value_ptr.deinit(allocator);
         }
-        variables.deinit();
-    }
+        owned_variables.deinit();
+    };
 
     // Enable Page domain upfront
     var page = cdp.Page.init(session);
@@ -453,7 +456,7 @@ fn replayCommandsWithOptions(session: *cdp.Session, allocator: std.mem.Allocator
 
         // Handle assert command
         if (cmd.action == .assert) {
-            const assert_result = assertions.executeAssertion(session, allocator, io, cmd, options.session_ctx, &variables) catch false;
+            const assert_result = assertions.executeAssertion(session, allocator, io, cmd, options.session_ctx, variables) catch false;
 
             if (assert_result) {
                 std.debug.print(" OK\n", .{});
@@ -485,13 +488,14 @@ fn replayCommandsWithOptions(session: *cdp.Session, allocator: std.mem.Allocator
                 }
 
                 // Save state for resume
-                const save_state = state.ReplayState{
+                var save_state = state.ReplayState{
                     .macro_file = allocator.dupe(u8, filename) catch null,
                     .last_action_index = last_action_index,
                     .last_attempted_index = i,
                     .retry_count = retry_count,
                     .status = .failed,
                 };
+                defer save_state.deinit(allocator);
                 state.saveState(save_state, allocator, io, options.session_ctx) catch {};
                 return;
             }
@@ -509,7 +513,7 @@ fn replayCommandsWithOptions(session: *cdp.Session, allocator: std.mem.Allocator
         }
 
         // Execute the command based on action type
-        executeCommand(session, allocator, io, cmd, &variables, &page, filename, options, video_orch);
+        executeCommand(session, allocator, io, cmd, variables, &page, filename, options, video_orch);
 
         // Capture video frame after command (if video mode is enabled)
         if (video_orch) |orch| {
@@ -592,7 +596,12 @@ fn executeCommand(
         },
         .navigate => {
             if (cmd.value) |url| {
-                var nav_args: [1][]const u8 = .{url};
+                // Interpolate variables in URL
+                const interpolated_url = interpolateVariables(allocator, url, variables);
+                defer if (interpolated_url) |u| allocator.free(u);
+                const final_url = interpolated_url orelse url;
+
+                var nav_args: [1][]const u8 = .{final_url};
                 const nav_ctx = types.CommandCtx{
                     .allocator = allocator,
                     .io = io,
@@ -650,10 +659,15 @@ fn executeCommand(
                 std.debug.print("    Error: extract requires selector\n", .{});
                 return;
             };
-            const output = cmd.output orelse {
+            const raw_output = cmd.output orelse {
                 std.debug.print("    Error: extract requires output path\n", .{});
                 return;
             };
+            // Interpolate variables in output path
+            const interpolated_output = interpolateVariables(allocator, raw_output, variables);
+            defer if (interpolated_output) |o| allocator.free(o);
+            const output = interpolated_output orelse raw_output;
+
             const dom_mod = @import("../commands/dom.zig");
             const mode: dom_mod.ExtractMode = if (cmd.mode) |m|
                 std.meta.stringToEnum(dom_mod.ExtractMode, m) orelse .dom
@@ -665,11 +679,39 @@ fn executeCommand(
             };
             defer allocator.free(result_json);
             const dir = std.Io.Dir.cwd();
-            dir.writeFile(io, .{ .sub_path = output, .data = result_json }) catch |err| {
-                std.debug.print("    Error writing: {}\n", .{err});
-                return;
-            };
-            std.debug.print(" -> {s}\n", .{output});
+
+            // Handle append mode with optional deduplication
+            if (cmd.append orelse false) {
+                const final_json = appendWithDedupe(allocator, io, output, result_json, cmd.dedupe_key) catch |err| {
+                    std.debug.print("    Error appending: {}\n", .{err});
+                    return;
+                };
+                defer allocator.free(final_json);
+                dir.writeFile(io, .{ .sub_path = output, .data = final_json }) catch |err| {
+                    std.debug.print("    Error writing: {}\n", .{err});
+                    return;
+                };
+                // Count items added
+                var new_parsed = json.parse(allocator, result_json, .{}) catch null;
+                var final_parsed = json.parse(allocator, final_json, .{}) catch null;
+                if (new_parsed) |*np| {
+                    defer np.deinit(allocator);
+                    if (final_parsed) |*fp| {
+                        defer fp.deinit(allocator);
+                        const new_count = if (np.* == .array) np.array.items.len else 1;
+                        const final_count = if (fp.* == .array) fp.array.items.len else 1;
+                        std.debug.print(" -> {s} (appended, {} total, {} new)\n", .{ output, final_count, new_count });
+                        return;
+                    }
+                }
+                std.debug.print(" -> {s} (appended)\n", .{output});
+            } else {
+                dir.writeFile(io, .{ .sub_path = output, .data = result_json }) catch |err| {
+                    std.debug.print("    Error writing: {}\n", .{err});
+                    return;
+                };
+                std.debug.print(" -> {s}\n", .{output});
+            }
         },
         .dialog => {
             const should_accept = cmd.accept orelse true;
@@ -883,6 +925,454 @@ fn executeCommand(
                     std.debug.print(" {s}=\"{s}\"\n", .{ var_name, str });
                 }
             }
+        },
+        .load => {
+            const file_path = cmd.file orelse {
+                std.debug.print("    Error: load requires file field\n", .{});
+                return;
+            };
+            const var_name = cmd.as_var orelse {
+                std.debug.print("    Error: load requires 'as' field\n", .{});
+                return;
+            };
+
+            // Read the JSON file
+            const dir = std.Io.Dir.cwd();
+            var file_buf: [512 * 1024]u8 = undefined;
+            const content = dir.readFile(io, file_path, &file_buf) catch |err| {
+                std.debug.print("    Error reading file: {}\n", .{err});
+                return;
+            };
+
+            // Parse to determine type (array or object)
+            var parsed = json.parse(allocator, content, .{}) catch |err| {
+                std.debug.print("    Error parsing JSON: {}\n", .{err});
+                return;
+            };
+            defer parsed.deinit(allocator);
+
+            // Store in variables
+            const key = allocator.dupe(u8, var_name) catch return;
+            const json_copy = allocator.dupe(u8, content) catch {
+                allocator.free(key);
+                return;
+            };
+
+            // Remove old value if exists
+            if (variables.fetchRemove(key)) |old| {
+                allocator.free(old.key);
+                var old_val = old.value;
+                old_val.deinit(allocator);
+            }
+
+            // Determine the type
+            const is_array = parsed == .array;
+            const is_object = parsed == .object;
+
+            if (!is_array and !is_object) {
+                allocator.free(json_copy);
+                allocator.free(key);
+                std.debug.print("    Error: file must contain array or object\n", .{});
+                return;
+            }
+
+            const var_val: state.VarValue = if (is_array)
+                .{ .array = json_copy }
+            else
+                .{ .object = json_copy };
+
+            variables.put(key, var_val) catch {
+                allocator.free(key);
+                switch (var_val) {
+                    .array => |a| allocator.free(a),
+                    .object => |o| allocator.free(o),
+                    .string => |s| allocator.free(s),
+                    else => {},
+                }
+                return;
+            };
+
+            const item_count = if (parsed == .array) parsed.array.items.len else 1;
+            std.debug.print(" {s} ({} items)\n", .{ var_name, item_count });
+        },
+        .foreach => {
+            const source_var = cmd.source orelse {
+                std.debug.print("    Error: foreach requires source field\n", .{});
+                return;
+            };
+            const loop_var_name = cmd.as_var orelse {
+                std.debug.print("    Error: foreach requires 'as' field\n", .{});
+                return;
+            };
+            const target_file = cmd.file orelse {
+                std.debug.print("    Error: foreach requires file field\n", .{});
+                return;
+            };
+
+            // Get the source variable (remove $ prefix if present)
+            const var_name = if (source_var.len > 0 and source_var[0] == '$')
+                source_var[1..]
+            else
+                source_var;
+
+            const source_val = variables.get(var_name) orelse {
+                std.debug.print("    Error: variable '{s}' not found\n", .{var_name});
+                return;
+            };
+
+            // Must be an array
+            const array_len = source_val.arrayLen(allocator) orelse {
+                std.debug.print("    Error: '{s}' is not an array\n", .{var_name});
+                return;
+            };
+
+            std.debug.print(" iterating {} items\n", .{array_len});
+
+            const on_error_continue = if (cmd.on_error) |oe|
+                std.mem.eql(u8, oe, "continue")
+            else
+                true; // default is continue
+
+            var success_count: usize = 0;
+            var error_count: usize = 0;
+
+            // Iterate over array items
+            var idx: usize = 0;
+            while (idx < array_len) : (idx += 1) {
+                const item_json = source_val.arrayGet(allocator, idx) orelse continue;
+                defer allocator.free(item_json);
+
+                // Store item as loop variable
+                const loop_key = allocator.dupe(u8, loop_var_name) catch continue;
+
+                // Remove old loop variable if exists
+                if (variables.fetchRemove(loop_key)) |old| {
+                    allocator.free(old.key);
+                    var old_val = old.value;
+                    old_val.deinit(allocator);
+                }
+
+                // Parse to determine if object or other
+                var item_parsed = json.parse(allocator, item_json, .{}) catch {
+                    allocator.free(loop_key);
+                    continue;
+                };
+                defer item_parsed.deinit(allocator);
+
+                const item_copy = allocator.dupe(u8, item_json) catch {
+                    allocator.free(loop_key);
+                    continue;
+                };
+
+                const loop_val: state.VarValue = if (item_parsed == .object)
+                    .{ .object = item_copy }
+                else if (item_parsed == .array)
+                    .{ .array = item_copy }
+                else
+                    .{ .string = item_copy };
+
+                variables.put(loop_key, loop_val) catch {
+                    allocator.free(loop_key);
+                    switch (loop_val) {
+                        .object => |o| allocator.free(o),
+                        .array => |a| allocator.free(a),
+                        .string => |s| allocator.free(s),
+                        else => {},
+                    }
+                    continue;
+                };
+
+                // Execute the nested macro
+                std.debug.print("  [foreach {}/{}] ", .{ idx + 1, array_len });
+
+                // Resolve target file path relative to current macro
+                const resolved_path = blk: {
+                    const current_macro_dir = std.fs.path.dirname(macro_file);
+                    if (current_macro_dir) |dir_path| {
+                        const joined = std.fs.path.join(allocator, &.{ dir_path, target_file }) catch break :blk target_file;
+                        // Check if joined path exists
+                        const test_dir = std.Io.Dir.cwd();
+                        var test_buf: [1]u8 = undefined;
+                        if (test_dir.readFile(io, joined, &test_buf)) |_| {
+                            break :blk joined;
+                        } else |_| {
+                            allocator.free(joined);
+                            break :blk target_file;
+                        }
+                    }
+                    break :blk target_file;
+                };
+                defer if (resolved_path.ptr != target_file.ptr) allocator.free(resolved_path);
+
+                var nested_options = options;
+                nested_options.video_orch = video_orch;
+                nested_options.resume_mode = false;
+                nested_options.start_index = null;
+                nested_options.variables = variables; // Pass parent's variables to nested macro
+
+                replayCommandsWithOptions(session, allocator, io, resolved_path, nested_options) catch |err| {
+                    std.debug.print("    Error in foreach iteration {}: {}\n", .{ idx + 1, err });
+                    error_count += 1;
+                    if (!on_error_continue) {
+                        std.debug.print("  foreach stopped due to error\n", .{});
+                        break;
+                    }
+                    continue;
+                };
+                success_count += 1;
+            }
+
+            std.debug.print("  foreach complete: {} succeeded, {} failed\n", .{ success_count, error_count });
+        },
+    }
+}
+
+/// Interpolate variables in a string (e.g., "$user.name" -> "John")
+/// Returns a new allocated string if any substitution was made, otherwise returns null
+fn interpolateVariables(allocator: std.mem.Allocator, input: []const u8, variables: *const std.StringHashMap(state.VarValue)) ?[]const u8 {
+    // Quick check: if no $ in string, no interpolation needed
+    if (std.mem.indexOf(u8, input, "$") == null) {
+        return null;
+    }
+
+    var result: std.ArrayList(u8) = .empty;
+    errdefer result.deinit(allocator);
+
+    var i: usize = 0;
+    var made_substitution = false;
+
+    while (i < input.len) {
+        if (input[i] == '$' and i + 1 < input.len) {
+            // Found a potential variable reference
+            const var_start = i + 1;
+            var var_end = var_start;
+
+            // Scan variable name (alphanumeric, underscore, dots for field access)
+            while (var_end < input.len and (std.ascii.isAlphanumeric(input[var_end]) or input[var_end] == '_' or input[var_end] == '.' or input[var_end] == '-')) {
+                var_end += 1;
+            }
+
+            if (var_end > var_start) {
+                const var_ref = input[var_start..var_end];
+
+                // Check if it's a field access (e.g., "user.name")
+                if (std.mem.indexOf(u8, var_ref, ".")) |dot_pos| {
+                    const var_name = var_ref[0..dot_pos];
+                    const field_path = var_ref[dot_pos + 1 ..];
+
+                    if (variables.get(var_name)) |var_val| {
+                        if (var_val.getField(allocator, field_path)) |field_val| {
+                            result.appendSlice(allocator, field_val) catch return null;
+                            allocator.free(field_val);
+                            made_substitution = true;
+                            i = var_end;
+                            continue;
+                        }
+                    }
+                } else {
+                    // Simple variable reference
+                    if (variables.get(var_ref)) |var_val| {
+                        const val_str: ?[]const u8 = switch (var_val) {
+                            .string => |s| s,
+                            .int => |int_val| std.fmt.allocPrint(allocator, "{}", .{int_val}) catch null,
+                            .array, .object => null, // Can't interpolate complex types directly
+                        };
+                        if (val_str) |v| {
+                            result.appendSlice(allocator, v) catch return null;
+                            // Free if we allocated (for int case)
+                            if (var_val != .string) allocator.free(v);
+                            made_substitution = true;
+                            i = var_end;
+                            continue;
+                        }
+                    }
+                }
+            }
+        }
+
+        // No substitution, copy character as-is
+        result.append(allocator, input[i]) catch return null;
+        i += 1;
+    }
+
+    if (!made_substitution) {
+        result.deinit(allocator);
+        return null;
+    }
+
+    return result.toOwnedSlice(allocator) catch null;
+}
+
+/// Append new JSON data to existing file with optional deduplication by key path
+fn appendWithDedupe(allocator: std.mem.Allocator, io: std.Io, output_path: []const u8, new_json: []const u8, dedupe_key: ?[]const u8) ![]const u8 {
+    // Parse new data
+    var new_parsed = try json.parse(allocator, new_json, .{});
+    defer new_parsed.deinit(allocator);
+
+    // Try to load existing file
+    const dir = std.Io.Dir.cwd();
+    var file_buf: [512 * 1024]u8 = undefined;
+    const existing_content = dir.readFile(io, output_path, &file_buf) catch |err| {
+        // File doesn't exist, just return the new JSON
+        if (err == error.FileNotFound) {
+            return try allocator.dupe(u8, new_json);
+        }
+        return err;
+    };
+
+    // Parse existing data
+    var existing_parsed = try json.parse(allocator, existing_content, .{});
+    defer existing_parsed.deinit(allocator);
+
+    // Both must be arrays for append to work
+    if (existing_parsed != .array) {
+        // Existing is not an array - wrap it in an array and append
+        return try allocator.dupe(u8, new_json);
+    }
+
+    // Build result array
+    var result_items: std.ArrayList(json.Value) = .empty;
+    defer result_items.deinit(allocator);
+
+    // Add all existing items
+    for (existing_parsed.array.items) |item| {
+        try result_items.append(allocator, item);
+    }
+
+    // Get new items (handle both array and single object)
+    const new_items: []const json.Value = if (new_parsed == .array)
+        new_parsed.array.items
+    else
+        &[_]json.Value{new_parsed};
+
+    // Add new items with optional deduplication
+    for (new_items) |new_item| {
+        if (dedupe_key) |key_path| {
+            // Check if this item's key already exists
+            const new_key_val = getNestedValue(new_item, key_path);
+            var is_duplicate = false;
+
+            for (result_items.items) |existing_item| {
+                const existing_key_val = getNestedValue(existing_item, key_path);
+                if (valuesEqual(new_key_val, existing_key_val)) {
+                    is_duplicate = true;
+                    break;
+                }
+            }
+
+            if (!is_duplicate) {
+                try result_items.append(allocator, new_item);
+            }
+        } else {
+            // No deduplication, just append
+            try result_items.append(allocator, new_item);
+        }
+    }
+
+    // Serialize back to JSON
+    return try serializeJsonArray(allocator, result_items.items);
+}
+
+/// Get a nested value from JSON using dot-separated path (e.g., "attrs.data-user-id")
+fn getNestedValue(value: json.Value, path: []const u8) ?json.Value {
+    var current = value;
+    var remaining = path;
+
+    while (remaining.len > 0) {
+        // Find next dot or end
+        const dot_pos = std.mem.indexOf(u8, remaining, ".");
+        const key = if (dot_pos) |pos| remaining[0..pos] else remaining;
+        remaining = if (dot_pos) |pos| remaining[pos + 1 ..] else &[_]u8{};
+
+        // Navigate into the object
+        if (current != .object) return null;
+        const next_val = current.object.get(key) orelse return null;
+        current = next_val;
+    }
+
+    return current;
+}
+
+/// Compare two JSON values for equality (for deduplication)
+fn valuesEqual(a: ?json.Value, b: ?json.Value) bool {
+    if (a == null and b == null) return true;
+    if (a == null or b == null) return false;
+
+    const av = a.?;
+    const bv = b.?;
+
+    return switch (av) {
+        .string => |s| bv == .string and std.mem.eql(u8, s, bv.string),
+        .integer => |i| bv == .integer and i == bv.integer,
+        .float => |f| bv == .float and f == bv.float,
+        .bool => |bl| bv == .bool and bl == bv.bool,
+        .null => bv == .null,
+        else => false, // Don't compare arrays/objects
+    };
+}
+
+/// Serialize a slice of JSON values as a JSON array string
+fn serializeJsonArray(allocator: std.mem.Allocator, items: []const json.Value) ![]const u8 {
+    var buf: std.ArrayList(u8) = .empty;
+    errdefer buf.deinit(allocator);
+
+    try buf.appendSlice(allocator, "[\n");
+
+    for (items, 0..) |item, i| {
+        if (i > 0) try buf.appendSlice(allocator, ",\n");
+        try buf.appendSlice(allocator, "  ");
+        try serializeJsonValue(allocator, &buf, item, 1);
+    }
+
+    try buf.appendSlice(allocator, "\n]");
+    return try buf.toOwnedSlice(allocator);
+}
+
+/// Serialize a single JSON value to string
+fn serializeJsonValue(allocator: std.mem.Allocator, buf: *std.ArrayList(u8), value: json.Value, depth: usize) !void {
+    switch (value) {
+        .null => try buf.appendSlice(allocator, "null"),
+        .bool => |b| try buf.appendSlice(allocator, if (b) "true" else "false"),
+        .integer => |i| {
+            const s = try std.fmt.allocPrint(allocator, "{}", .{i});
+            defer allocator.free(s);
+            try buf.appendSlice(allocator, s);
+        },
+        .float => |f| {
+            const s = try std.fmt.allocPrint(allocator, "{d}", .{f});
+            defer allocator.free(s);
+            try buf.appendSlice(allocator, s);
+        },
+        .string => |s| {
+            const escaped = try json.escapeString(allocator, s);
+            defer allocator.free(escaped);
+            try buf.append(allocator, '"');
+            try buf.appendSlice(allocator, escaped);
+            try buf.append(allocator, '"');
+        },
+        .array => |arr| {
+            try buf.append(allocator, '[');
+            for (arr.items, 0..) |item, i| {
+                if (i > 0) try buf.appendSlice(allocator, ", ");
+                try serializeJsonValue(allocator, buf, item, depth + 1);
+            }
+            try buf.append(allocator, ']');
+        },
+        .object => |obj| {
+            try buf.append(allocator, '{');
+            var first = true;
+            var iter = obj.iterator();
+            while (iter.next()) |entry| {
+                if (!first) try buf.appendSlice(allocator, ", ");
+                first = false;
+                const escaped = try json.escapeString(allocator, entry.key_ptr.*);
+                defer allocator.free(escaped);
+                try buf.append(allocator, '"');
+                try buf.appendSlice(allocator, escaped);
+                try buf.appendSlice(allocator, "\": ");
+                try serializeJsonValue(allocator, buf, entry.value_ptr.*, depth + 1);
+            }
+            try buf.append(allocator, '}');
         },
     }
 }

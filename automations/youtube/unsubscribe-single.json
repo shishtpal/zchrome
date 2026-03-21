@@ -1,0 +1,41 @@
+{
+  "version": 2,
+  "commands": [
+    {
+      "action": "navigate",
+      "value": "https://www.youtube.com$user.href"
+    },
+    {
+      "description": "Wait for Subscribe button to appear",
+      "action": "assert",
+      "selector": "yt-subscribe-button-view-model button",
+      "text": "Subscribed"
+    },
+    {
+      "action": "click",
+      "selector": "yt-subscribe-button-view-model  button"
+    },
+    {
+      "description": "Wait for Unsubscribe button to appear",
+      "assert": "yt-list-item-view-model button",
+      "text": "Unsubscribe"
+    },
+    {
+      "action": "click",
+      "selector": "yt-list-item-view-model button"
+    },
+    {
+      "description": "Wait for Confirmation Dialog",
+      "assert": "yt-confirm-dialog-renderer #confirm-button button",
+      "text": "Unsubscribe"
+    },
+    {
+      "action": "click",
+      "selector": "yt-confirm-dialog-renderer #confirm-button button"
+    },
+    {
+      "action": "wait",
+      "value": "1500"
+    }
+  ]
+}

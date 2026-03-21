@@ -128,6 +128,7 @@ export default defineConfig({
                         { text: "Network Commands", link: "/cli/network" },
                         { text: "Media Commands", link: "/cli/media" },
                         { text: "Clipboard", link: "/cli/clipboard" },
+                        { text: "Layout Commands", link: "/cli/layout" },                        
                         { text: "Cursor Commands", link: "/cli/cursor" },
                     ],
                 },

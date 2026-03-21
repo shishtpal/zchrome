@@ -17,6 +17,7 @@ pub fn resolveIntVar(val: []const u8, variables: *const std.StringHashMap(state.
             return switch (v) {
                 .int => |i| i,
                 .string => |s| std.fmt.parseInt(i64, s, 10) catch null,
+                .array, .object => null, // Can't convert to int
             };
         }
         return null;
@@ -34,6 +35,7 @@ pub fn resolveStringVar(val: []const u8, variables: *const std.StringHashMap(sta
             return switch (v) {
                 .string => |s| s,
                 .int => val, // Return original if type mismatch
+                .array, .object => val, // Return original for complex types
             };
         }
         return val; // Return original if not found

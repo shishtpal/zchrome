@@ -44,7 +44,7 @@ pub fn diffSnapshots(
     defer result.deinit();
 
     // Generate output with prefixes
-    var diffLines: std.ArrayListUnmanaged(u8) = .{};
+    var diffLines: std.ArrayListUnmanaged(u8) = .{ .items = &.{}, .capacity = 0 };
     errdefer diffLines.deinit(allocator);
 
     for (result.edits) |edit| {

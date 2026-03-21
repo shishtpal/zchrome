@@ -7,14 +7,18 @@ const std = @import("std");
 const json = @import("json");
 const session_mod = @import("../session.zig");
 
-/// Variable value - can be integer or string
+/// Variable value - can be integer, string, array, or object (JSON)
 pub const VarValue = union(enum) {
     int: i64,
     string: []const u8,
+    array: []const u8, // JSON string representation of array
+    object: []const u8, // JSON string representation of object
 
     pub fn deinit(self: *VarValue, allocator: std.mem.Allocator) void {
         switch (self.*) {
             .string => |s| allocator.free(s),
+            .array => |a| allocator.free(a),
+            .object => |o| allocator.free(o),
             .int => {},
         }
     }
@@ -23,9 +27,145 @@ pub const VarValue = union(enum) {
         return switch (self) {
             .int => |i| .{ .int = i },
             .string => |s| .{ .string = try allocator.dupe(u8, s) },
+            .array => |a| .{ .array = try allocator.dupe(u8, a) },
+            .object => |o| .{ .object = try allocator.dupe(u8, o) },
         };
     }
+
+    /// Get a field from a JSON object variable
+    /// Returns the field value as a string, or null if not found/not an object
+    pub fn getField(self: VarValue, allocator: std.mem.Allocator, field_path: []const u8) ?[]const u8 {
+        const json_str = switch (self) {
+            .object => |o| o,
+            .array => return null, // Arrays don't have named fields
+            .int => return null,
+            .string => return null,
+        };
+
+        // Parse the JSON
+        var parsed = json.parse(allocator, json_str, .{}) catch return null;
+        defer parsed.deinit(allocator);
+
+        // Navigate the path
+        var current = parsed;
+        var remaining = field_path;
+
+        while (remaining.len > 0) {
+            const dot_pos = std.mem.indexOf(u8, remaining, ".");
+            const key = if (dot_pos) |pos| remaining[0..pos] else remaining;
+            remaining = if (dot_pos) |pos| remaining[pos + 1 ..] else &[_]u8{};
+
+            if (current != .object) return null;
+            const next_val = current.object.get(key) orelse return null;
+            current = next_val;
+        }
+
+        // Return string representation of the value
+        return switch (current) {
+            .string => |s| allocator.dupe(u8, s) catch null,
+            .integer => |i| std.fmt.allocPrint(allocator, "{}", .{i}) catch null,
+            .float => |f| std.fmt.allocPrint(allocator, "{d}", .{f}) catch null,
+            .bool => |b| allocator.dupe(u8, if (b) "true" else "false") catch null,
+            .null => allocator.dupe(u8, "null") catch null,
+            else => null,
+        };
+    }
+
+    /// Get the length of an array variable
+    pub fn arrayLen(self: VarValue, allocator: std.mem.Allocator) ?usize {
+        const json_str = switch (self) {
+            .array => |a| a,
+            else => return null,
+        };
+
+        var parsed = json.parse(allocator, json_str, .{}) catch return null;
+        defer parsed.deinit(allocator);
+
+        if (parsed != .array) return null;
+        return parsed.array.items.len;
+    }
+
+    /// Get an item from an array variable by index
+    /// Returns the item as a JSON string
+    pub fn arrayGet(self: VarValue, allocator: std.mem.Allocator, index: usize) ?[]const u8 {
+        const json_str = switch (self) {
+            .array => |a| a,
+            else => return null,
+        };
+
+        var parsed = json.parse(allocator, json_str, .{}) catch return null;
+        defer parsed.deinit(allocator);
+
+        if (parsed != .array) return null;
+        if (index >= parsed.array.items.len) return null;
+
+        // Serialize the item back to JSON
+        return serializeValue(allocator, parsed.array.items[index]) catch null;
+    }
 };
+
+/// Serialize a JSON value to string
+fn serializeValue(allocator: std.mem.Allocator, value: json.Value) ![]const u8 {
+    var buf: std.ArrayList(u8) = .empty;
+    errdefer buf.deinit(allocator);
+
+    try serializeValueInto(allocator, &buf, value);
+    return try buf.toOwnedSlice(allocator);
+}
+
+fn serializeValueInto(allocator: std.mem.Allocator, buf: *std.ArrayList(u8), value: json.Value) !void {
+    switch (value) {
+        .null => try buf.appendSlice(allocator, "null"),
+        .bool => |b| try buf.appendSlice(allocator, if (b) "true" else "false"),
+        .integer => |i| {
+            const s = try std.fmt.allocPrint(allocator, "{}", .{i});
+            defer allocator.free(s);
+            try buf.appendSlice(allocator, s);
+        },
+        .float => |f| {
+            const s = try std.fmt.allocPrint(allocator, "{d}", .{f});
+            defer allocator.free(s);
+            try buf.appendSlice(allocator, s);
+        },
+        .string => |s| {
+            try buf.append(allocator, '"');
+            // Simple escape - for full safety use json.escapeString
+            for (s) |c| {
+                switch (c) {
+                    '"' => try buf.appendSlice(allocator, "\\\""),
+                    '\\' => try buf.appendSlice(allocator, "\\\\"),
+                    '\n' => try buf.appendSlice(allocator, "\\n"),
+                    '\r' => try buf.appendSlice(allocator, "\\r"),
+                    '\t' => try buf.appendSlice(allocator, "\\t"),
+                    else => try buf.append(allocator, c),
+                }
+            }
+            try buf.append(allocator, '"');
+        },
+        .array => |arr| {
+            try buf.append(allocator, '[');
+            for (arr.items, 0..) |item, i| {
+                if (i > 0) try buf.appendSlice(allocator, ", ");
+                try serializeValueInto(allocator, buf, item);
+            }
+            try buf.append(allocator, ']');
+        },
+        .object => |obj| {
+            try buf.append(allocator, '{');
+            var first = true;
+            var iter = obj.iterator();
+            while (iter.next()) |entry| {
+                if (!first) try buf.appendSlice(allocator, ", ");
+                first = false;
+                try buf.append(allocator, '"');
+                try buf.appendSlice(allocator, entry.key_ptr.*);
+                try buf.appendSlice(allocator, "\": ");
+                try serializeValueInto(allocator, buf, entry.value_ptr.*);
+            }
+            try buf.append(allocator, '}');
+        },
+    }
+}
 
 /// Replay state persisted between runs
 pub const ReplayState = struct {
@@ -262,6 +402,14 @@ pub fn saveState(state: ReplayState, allocator: std.mem.Allocator, io: std.Io, s
                         try json_buf.appendSlice(allocator, "\"");
                         try appendEscaped(&json_buf, allocator, s);
                         try json_buf.appendSlice(allocator, "\"");
+                    },
+                    .array => |a| {
+                        // Array is already JSON, write it directly
+                        try json_buf.appendSlice(allocator, a);
+                    },
+                    .object => |o| {
+                        // Object is already JSON, write it directly
+                        try json_buf.appendSlice(allocator, o);
                     },
                 }
             }

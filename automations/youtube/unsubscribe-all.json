@@ -1,0 +1,17 @@
+{
+  "version": 2,
+  "commands": [
+    {
+      "action": "load",
+      "file": "automations/youtube/data/yt-users.json",
+      "as": "users"
+    },
+    {
+      "action": "foreach",
+      "source": "$users",
+      "as": "user",
+      "file": "unsubscribe-single.json",
+      "on_error": "continue"
+    }
+  ]
+}

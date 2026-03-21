@@ -29,6 +29,8 @@ pub const ActionType = enum {
     upload,
     capture,
     goto,
+    load, // Load JSON file into variable
+    foreach, // Iterate over array variable
 
     pub fn toString(self: ActionType) []const u8 {
         return switch (self) {
@@ -51,6 +53,8 @@ pub const ActionType = enum {
             .upload => "upload",
             .capture => "capture",
             .goto => "goto",
+            .load => "load",
+            .foreach => "foreach",
         };
     }
 
@@ -74,6 +78,8 @@ pub const ActionType = enum {
         if (std.mem.eql(u8, s, "upload")) return .upload;
         if (std.mem.eql(u8, s, "capture")) return .capture;
         if (std.mem.eql(u8, s, "goto")) return .goto;
+        if (std.mem.eql(u8, s, "load")) return .load;
+        if (std.mem.eql(u8, s, "foreach")) return .foreach;
         return null;
     }
 
@@ -111,6 +117,8 @@ pub const MacroCommand = struct {
     mode: ?[]const u8 = null, // Extraction mode: dom, text, html, attrs, table, form
     output: ?[]const u8 = null, // Output file path for extract
     extract_all: ?bool = null, // Use querySelectorAll for extract
+    append: ?bool = null, // Append to existing JSON array instead of overwrite
+    dedupe_key: ?[]const u8 = null, // Path to unique key for deduplication (e.g., "attrs.data-user-id")
     // Snapshot assertion field
     snapshot: ?[]const u8 = null, // Expected JSON file for snapshot comparison
     // Dialog-specific fields
@@ -134,6 +142,12 @@ pub const MacroCommand = struct {
     value_neq: ?[]const u8 = null, // Input value not equals
     // Goto-specific fields
     file: ?[]const u8 = null, // Target macro JSON file for goto action
+    // Load-specific fields
+    as_var: ?[]const u8 = null, // Variable name to store loaded data (for load action)
+    // Foreach-specific fields
+    source: ?[]const u8 = null, // Variable name containing array to iterate (e.g., "$users")
+    on_error: ?[]const u8 = null, // Error handling: "continue" (default) or "stop"
+    progress_file: ?[]const u8 = null, // File to track progress for resume
 
     pub fn deinit(self: *MacroCommand, allocator: std.mem.Allocator) void {
         if (self.selector) |s| allocator.free(s);
@@ -150,6 +164,7 @@ pub const MacroCommand = struct {
         if (self.fallback) |f| allocator.free(f);
         if (self.mode) |m| allocator.free(m);
         if (self.output) |o| allocator.free(o);
+        if (self.dedupe_key) |dk| allocator.free(dk);
         if (self.snapshot) |sn| allocator.free(sn);
         if (self.files) |f| {
             for (f) |file| allocator.free(file);
@@ -172,6 +187,12 @@ pub const MacroCommand = struct {
         if (self.value_neq) |vn| allocator.free(vn);
         // Goto fields
         if (self.file) |f2| allocator.free(f2);
+        // Load fields
+        if (self.as_var) |av| allocator.free(av);
+        // Foreach fields
+        if (self.source) |src| allocator.free(src);
+        if (self.on_error) |oe| allocator.free(oe);
+        if (self.progress_file) |pf| allocator.free(pf);
     }
 
     pub fn clone(self: *const MacroCommand, allocator: std.mem.Allocator) !MacroCommand {
@@ -211,6 +232,8 @@ pub const MacroCommand = struct {
             .mode = if (self.mode) |m| try allocator.dupe(u8, m) else null,
             .output = if (self.output) |o| try allocator.dupe(u8, o) else null,
             .extract_all = self.extract_all,
+            .append = self.append,
+            .dedupe_key = if (self.dedupe_key) |dk| try allocator.dupe(u8, dk) else null,
             .snapshot = if (self.snapshot) |sn| try allocator.dupe(u8, sn) else null,
             .accept = self.accept,
             .files = cloned_files,
@@ -230,6 +253,12 @@ pub const MacroCommand = struct {
             .value_eq = if (self.value_eq) |ve| try allocator.dupe(u8, ve) else null,
             .value_neq = if (self.value_neq) |vn| try allocator.dupe(u8, vn) else null,
             .file = if (self.file) |f2| try allocator.dupe(u8, f2) else null,
+            // Load fields
+            .as_var = if (self.as_var) |av| try allocator.dupe(u8, av) else null,
+            // Foreach fields
+            .source = if (self.source) |src| try allocator.dupe(u8, src) else null,
+            .on_error = if (self.on_error) |oe| try allocator.dupe(u8, oe) else null,
+            .progress_file = if (self.progress_file) |pf| try allocator.dupe(u8, pf) else null,
         };
     }
 };
@@ -394,6 +423,16 @@ pub fn save(allocator: std.mem.Allocator, io: std.Io, path: []const u8, macro: *
         if (cmd.extract_all) |ea| {
             try json_buf.appendSlice(allocator, if (ea) ", \"extract_all\": true" else ", \"extract_all\": false");
         }
+        if (cmd.append) |ap| {
+            try json_buf.appendSlice(allocator, if (ap) ", \"append\": true" else ", \"append\": false");
+        }
+        if (cmd.dedupe_key) |dk| {
+            const escaped = try escapeString(allocator, dk);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"key\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
         // Snapshot assertion field
         if (cmd.snapshot) |sn| {
             const escaped = try escapeString(allocator, sn);
@@ -516,6 +555,36 @@ pub fn save(allocator: std.mem.Allocator, io: std.Io, path: []const u8, macro: *
             const escaped = try escapeString(allocator, f);
             defer allocator.free(escaped);
             try json_buf.appendSlice(allocator, ", \"file\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
+        // Load-specific field
+        if (cmd.as_var) |av| {
+            const escaped = try escapeString(allocator, av);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"as\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
+        // Foreach-specific fields
+        if (cmd.source) |src| {
+            const escaped = try escapeString(allocator, src);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"source\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
+        if (cmd.on_error) |oe| {
+            const escaped = try escapeString(allocator, oe);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"on_error\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
+        if (cmd.progress_file) |pf| {
+            const escaped = try escapeString(allocator, pf);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"progress_file\": \"");
             try json_buf.appendSlice(allocator, escaped);
             try json_buf.appendSlice(allocator, "\"");
         }
@@ -655,6 +724,12 @@ pub fn load(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !Command
                 if (obj.get("extract_all")) |ea| {
                     if (ea == .bool) cmd.extract_all = ea.bool;
                 }
+                if (obj.get("append")) |ap| {
+                    if (ap == .bool) cmd.append = ap.bool;
+                }
+                if (obj.get("key")) |dk| {
+                    if (dk == .string) cmd.dedupe_key = try allocator.dupe(u8, dk.string);
+                }
                 // Snapshot assertion field
                 if (obj.get("snapshot")) |sn| {
                     if (sn == .string) cmd.snapshot = try allocator.dupe(u8, sn.string);
@@ -727,6 +802,20 @@ pub fn load(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !Command
                 // Goto-specific field
                 if (obj.get("file")) |f| {
                     if (f == .string) cmd.file = try allocator.dupe(u8, f.string);
+                }
+                // Load-specific field
+                if (obj.get("as")) |av| {
+                    if (av == .string) cmd.as_var = try allocator.dupe(u8, av.string);
+                }
+                // Foreach-specific fields
+                if (obj.get("source")) |src| {
+                    if (src == .string) cmd.source = try allocator.dupe(u8, src.string);
+                }
+                if (obj.get("on_error")) |oe| {
+                    if (oe == .string) cmd.on_error = try allocator.dupe(u8, oe.string);
+                }
+                if (obj.get("progress_file")) |pf| {
+                    if (pf == .string) cmd.progress_file = try allocator.dupe(u8, pf.string);
                 }
 
                 try cmds_list.append(allocator, cmd);

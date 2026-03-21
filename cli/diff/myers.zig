@@ -44,7 +44,7 @@ pub fn myersDiff(
     const m: i32 = @intCast(b.len);
     const max: usize = a.len + b.len;
 
-    var result: std.ArrayListUnmanaged(DiffEdit) = .{};
+    var result: std.ArrayListUnmanaged(DiffEdit) = .{ .items = &.{}, .capacity = 0 };
     errdefer result.deinit(allocator);
 
     if (max == 0) {
@@ -87,7 +87,7 @@ pub fn myersDiff(
     @memset(v, -1);
 
     // Trace stores snapshots of V at each edit distance level
-    var trace: std.ArrayListUnmanaged([]i32) = .{};
+    var trace: std.ArrayListUnmanaged([]i32) = .{ .items = &.{}, .capacity = 0 };
     defer {
         for (trace.items) |snapshot| {
             allocator.free(snapshot);
@@ -215,7 +215,7 @@ fn buildEditScript(
 
 /// Split a string into lines
 pub fn splitLines(allocator: Allocator, text: []const u8) ![]const []const u8 {
-    var lines: std.ArrayListUnmanaged([]const u8) = .{};
+    var lines: std.ArrayListUnmanaged([]const u8) = .{ .items = &.{}, .capacity = 0 };
     errdefer lines.deinit(allocator);
 
     var iter = std.mem.splitSequence(u8, text, "\n");

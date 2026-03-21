@@ -204,9 +204,20 @@ const extract_js =
     \\  }
     \\  
     \\  // ═══════════════════════════════════════════════════════════════════
+    \\  // Shadow DOM piercing queryAll (searches through shadow roots)
+    \\  // ═══════════════════════════════════════════════════════════════════
+    \\  function queryAll(r, sel) {
+    \\    var results = Array.from(r.querySelectorAll(sel));
+    \\    r.querySelectorAll('*').forEach(function(el) {
+    \\      if (el.shadowRoot) results = results.concat(queryAll(el.shadowRoot, sel));
+    \\    });
+    \\    return results;
+    \\  }
+    \\  
+    \\  // ═══════════════════════════════════════════════════════════════════
     \\  // Unified extract function
     \\  // ═══════════════════════════════════════════════════════════════════
-    \\  var els = all ? document.querySelectorAll(selector) : [document.querySelector(selector)];
+    \\  var els = all ? queryAll(document, selector) : [document.querySelector(selector)];
     \\  els = Array.prototype.filter.call(els, function(e) { return e !== null; });
     \\  
     \\  if (els.length === 0) return JSON.stringify(null);

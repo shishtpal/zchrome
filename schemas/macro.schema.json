@@ -1,0 +1,443 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/user/zchrome/schemas/macro.schema.json",
+  "title": "ZChrome Macro",
+  "description": "Schema for zchrome cursor replay macro files (version 2)",
+  "type": "object",
+  "required": ["version", "commands"],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 2,
+      "description": "Macro file version (must be 2 for command-based macros)"
+    },
+    "description": {
+      "type": "string",
+      "description": "Optional comment or description for this macro"
+    },
+    "commands": {
+      "type": "array",
+      "description": "List of commands to execute",
+      "items": {
+        "$ref": "#/definitions/MacroCommand"
+      }
+    }
+  },
+  "definitions": {
+    "MacroCommand": {
+      "type": "object",
+      "required": ["action"],
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "Optional comment or description for this command"
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "click",
+            "dblclick",
+            "fill",
+            "type",
+            "check",
+            "uncheck",
+            "select",
+            "multiselect",
+            "press",
+            "scroll",
+            "hover",
+            "navigate",
+            "wait",
+            "assert",
+            "extract",
+            "dialog",
+            "upload",
+            "capture",
+            "goto",
+            "load",
+            "foreach",
+            "mark"
+          ],
+          "description": "The action type to perform"
+        },
+        "selector": {
+          "type": "string",
+          "description": "CSS selector for the target element"
+        },
+        "selectors": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Fallback selectors (tried in order if primary fails)"
+        },
+        "value": {
+          "type": ["string", "integer"],
+          "description": "Text value for fill/select, URL for navigate, prompt text for dialog, milliseconds for wait, or status for mark"
+        },
+        "key": {
+          "type": "string",
+          "description": "Key name for press action (e.g., 'Enter', 'Tab', 'Escape')"
+        },
+        "scrollX": {
+          "type": "integer",
+          "description": "Horizontal scroll delta in pixels"
+        },
+        "scrollY": {
+          "type": "integer",
+          "description": "Vertical scroll delta in pixels (positive = down)"
+        },
+        "attribute": {
+          "type": "string",
+          "description": "Attribute name to check (for assert) or capture (for capture with attr_as)"
+        },
+        "contains": {
+          "type": "string",
+          "description": "Substring to find in element text/attribute (for assert)"
+        },
+        "url": {
+          "type": "string",
+          "description": "URL pattern to match (supports * and ** wildcards)"
+        },
+        "text": {
+          "type": "string",
+          "description": "Text to find on page (for assert) or expected dialog message (for dialog)"
+        },
+        "timeout": {
+          "type": "integer",
+          "description": "Timeout in milliseconds (default: 5000)",
+          "default": 5000
+        },
+
+        "fallback": {
+          "type": "string",
+          "description": "Fallback macro JSON file to run on assertion failure"
+        },
+        "count": {
+          "type": "integer",
+          "description": "Assert exact element count matching selector",
+          "minimum": 0
+        },
+        "count_min": {
+          "type": "integer",
+          "description": "Assert minimum element count",
+          "minimum": 0
+        },
+        "count_max": {
+          "type": "integer",
+          "description": "Assert maximum element count",
+          "minimum": 0
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["dom", "text", "html", "attrs", "table", "form"],
+          "description": "Extraction mode for extract action",
+          "default": "dom"
+        },
+        "output": {
+          "type": "string",
+          "description": "Output file path for extract action"
+        },
+        "extract_all": {
+          "type": "boolean",
+          "description": "Use querySelectorAll to extract multiple elements",
+          "default": false
+        },
+        "append": {
+          "type": "boolean",
+          "description": "Append to existing JSON array instead of overwriting",
+          "default": false
+        },
+        "dedupe_key": {
+          "type": "string",
+          "description": "JSON path for deduplication key (e.g., 'attrs.data-id')"
+        },
+        "fields": {
+          "type": "object",
+          "description": "Multi-field extraction configuration",
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "string",
+                "description": "CSS selector (extracts innerText)"
+              },
+              {
+                "type": "object",
+                "required": ["selector"],
+                "properties": {
+                  "selector": {
+                    "type": "string",
+                    "description": "CSS selector for the field"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["text", "html", "attr", "value"],
+                    "description": "Extraction type",
+                    "default": "text"
+                  },
+                  "attr": {
+                    "type": "string",
+                    "description": "Attribute name (required when type is 'attr')"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "snapshot": {
+          "type": "string",
+          "description": "Expected JSON file path for snapshot comparison (assert)"
+        },
+        "accept": {
+          "type": "boolean",
+          "description": "For dialog: true to accept (OK), false to dismiss (Cancel)"
+        },
+        "files": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "File paths for upload action"
+        },
+        "count_as": {
+          "type": "string",
+          "description": "Variable name to store element count (capture action)"
+        },
+        "text_as": {
+          "type": "string",
+          "description": "Variable name to store element text content (capture action)"
+        },
+        "value_as": {
+          "type": "string",
+          "description": "Variable name to store input value (capture action)"
+        },
+        "attr_as": {
+          "type": "string",
+          "description": "Variable name to store attribute value (capture action, requires 'attribute')"
+        },
+        "count_gt": {
+          "type": "string",
+          "description": "Assert count greater than value or $variable"
+        },
+        "count_lt": {
+          "type": "string",
+          "description": "Assert count less than value or $variable"
+        },
+        "count_gte": {
+          "type": "string",
+          "description": "Assert count greater than or equal to value or $variable"
+        },
+        "count_lte": {
+          "type": "string",
+          "description": "Assert count less than or equal to value or $variable"
+        },
+        "text_eq": {
+          "type": "string",
+          "description": "Assert text equals value or $variable"
+        },
+        "text_neq": {
+          "type": "string",
+          "description": "Assert text not equals value or $variable"
+        },
+        "text_contains": {
+          "type": "string",
+          "description": "Assert text contains value or $variable"
+        },
+        "value_eq": {
+          "type": "string",
+          "description": "Assert input value equals value or $variable"
+        },
+        "value_neq": {
+          "type": "string",
+          "description": "Assert input value not equals value or $variable"
+        },
+        "file": {
+          "type": "string",
+          "description": "Target macro file for goto/foreach, or JSON file to load"
+        },
+        "as": {
+          "type": "string",
+          "description": "Variable name to store loaded data (load action) or loop item (foreach)"
+        },
+        "source": {
+          "type": "string",
+          "description": "Variable name containing array to iterate (foreach, e.g., '$users')"
+        },
+        "on_error": {
+          "type": "string",
+          "enum": ["continue", "stop"],
+          "description": "Error handling for foreach: continue to next item or stop",
+          "default": "continue"
+        },
+        "progress_file": {
+          "type": "string",
+          "description": "File to track foreach progress for resume"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "action": { "const": "click" } }
+          },
+          "then": {
+            "anyOf": [
+              { "required": ["selector"] },
+              { "required": ["selectors"] }
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": { "action": { "const": "dblclick" } }
+          },
+          "then": {
+            "anyOf": [
+              { "required": ["selector"] },
+              { "required": ["selectors"] }
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": { "action": { "const": "fill" } }
+          },
+          "then": {
+            "allOf": [
+              {
+                "anyOf": [
+                  { "required": ["selector"] },
+                  { "required": ["selectors"] }
+                ]
+              },
+              { "required": ["value"] }
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": { "action": { "const": "type" } }
+          },
+          "then": {
+            "allOf": [
+              {
+                "anyOf": [
+                  { "required": ["selector"] },
+                  { "required": ["selectors"] }
+                ]
+              },
+              { "required": ["value"] }
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": { "action": { "const": "press" } }
+          },
+          "then": {
+            "required": ["key"]
+          }
+        },
+        {
+          "if": {
+            "properties": { "action": { "const": "scroll" } }
+          },
+          "then": {
+            "anyOf": [{ "required": ["scrollX"] }, { "required": ["scrollY"] }]
+          }
+        },
+        {
+          "if": {
+            "properties": { "action": { "const": "navigate" } }
+          },
+          "then": {
+            "required": ["value"]
+          }
+        },
+
+        {
+          "if": {
+            "properties": { "action": { "const": "extract" } }
+          },
+          "then": {
+            "allOf": [
+              { "required": ["output"] },
+              {
+                "anyOf": [
+                  { "required": ["selector"] },
+                  { "required": ["fields"] }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": { "action": { "const": "upload" } }
+          },
+          "then": {
+            "allOf": [
+              {
+                "anyOf": [
+                  { "required": ["selector"] },
+                  { "required": ["selectors"] }
+                ]
+              },
+              { "required": ["files"] }
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": { "action": { "const": "capture" } }
+          },
+          "then": {
+            "allOf": [
+              { "required": ["selector"] },
+              {
+                "anyOf": [
+                  { "required": ["count_as"] },
+                  { "required": ["text_as"] },
+                  { "required": ["value_as"] },
+                  { "required": ["attr_as"] }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": { "action": { "const": "goto" } }
+          },
+          "then": {
+            "required": ["file"]
+          }
+        },
+        {
+          "if": {
+            "properties": { "action": { "const": "load" } }
+          },
+          "then": {
+            "required": ["file", "as"]
+          }
+        },
+        {
+          "if": {
+            "properties": { "action": { "const": "foreach" } }
+          },
+          "then": {
+            "required": ["source", "file", "as"]
+          }
+        },
+        {
+          "if": {
+            "properties": { "action": { "const": "mark" } }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "enum": ["success", "failed", "skipped"]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+

@@ -47,6 +47,9 @@ pub const Storage = @import("domains/storage.zig").Storage;
 pub const Tracing = @import("domains/tracing.zig").Tracing;
 pub const Profiler = @import("domains/profiler.zig").Profiler;
 pub const Overlay = @import("domains/overlay.zig").Overlay;
+pub const Security = @import("domains/security.zig").Security;
+pub const CSS = @import("domains/css.zig").CSS;
+pub const Debugger = @import("domains/debugger.zig").Debugger;
 pub const Cookie = @import("domains/storage.zig").Cookie;
 pub const CookieParam = @import("domains/storage.zig").CookieParam;
 
@@ -57,6 +60,22 @@ pub const ProfileNode = @import("domains/profiler.zig").ProfileNode;
 // Overlay types
 pub const HighlightConfig = @import("domains/overlay.zig").HighlightConfig;
 pub const RGBA = @import("domains/overlay.zig").RGBA;
+
+// Security types
+pub const SecurityState = @import("domains/security.zig").SecurityState;
+pub const CertificateErrorAction = @import("domains/security.zig").CertificateErrorAction;
+
+// CSS types
+pub const StyleSheetOrigin = @import("domains/css.zig").StyleSheetOrigin;
+pub const CSSStyleSheetHeader = @import("domains/css.zig").CSSStyleSheetHeader;
+pub const CSSComputedStyleProperty = @import("domains/css.zig").CSSComputedStyleProperty;
+pub const SourceRange = @import("domains/css.zig").SourceRange;
+
+// Debugger types
+pub const DebuggerLocation = @import("domains/debugger.zig").Location;
+pub const PausedReason = @import("domains/debugger.zig").PausedReason;
+pub const PauseOnExceptionsState = @import("domains/debugger.zig").PauseOnExceptionsState;
+pub const ScopeType = @import("domains/debugger.zig").ScopeType;
 
 // Utilities
 pub const json = @import("json");

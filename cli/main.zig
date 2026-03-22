@@ -144,7 +144,7 @@ pub fn main(init: std.process.Init) !void {
 
     const needs_target = switch (args.command) {
         // navigate has its own page selection logic in cmdNavigate
-        .screenshot, .pdf, .evaluate, .network, .cookies, .storage, .snapshot, .layout, .click, .dblclick, .focus, .type, .fill, .select, .multiselect, .hover, .check, .uncheck, .scroll, .scrollintoview, .drag, .get, .upload, .back, .forward, .reload, .press, .keydown, .keyup, .wait, .mouse, .cursor, .set, .dialog, .dev, .diff, .dom, .clipboard, .media => true,
+        .screenshot, .pdf, .evaluate, .network, .cookies, .storage, .snapshot, .layout, .click, .dblclick, .focus, .type, .fill, .select, .multiselect, .hover, .check, .uncheck, .scroll, .scrollintoview, .drag, .get, .upload, .back, .forward, .reload, .press, .keydown, .keyup, .wait, .mouse, .cursor, .set, .dialog, .dev, .diff, .dom, .clipboard, .media, .css, .security, .debug => true,
         .navigate, .tab, .window, .version, .list_targets, .pages, .interactive, .open, .connect, .session, .provider, .extensions, .help => false,
     };
     // For cloud providers, don't use saved last_target as it may be stale across connections
@@ -313,6 +313,9 @@ fn printCommandHelp(command: Args.Command) void {
         .media => impl.printMediaHelp(),
         .session => impl.printSessionHelp(),
         .extensions => impl.printExtensionsHelp(),
+        .css => impl.printCssHelp(),
+        .security => impl.printSecurityHelp(),
+        .debug => impl.printDebugHelp(),
         else => args_mod.printUsage(),
     }
 }

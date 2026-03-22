@@ -375,6 +375,21 @@ pub fn cmdMedia(state: *InteractiveState, args: []const []const u8) !void {
     try impl.media(session, try buildCtx(state, args));
 }
 
+pub fn cmdCss(state: *InteractiveState, args: []const []const u8) !void {
+    const session = try requireSession(state);
+    try impl.cssCmd(session, try buildCtx(state, args));
+}
+
+pub fn cmdSecurity(state: *InteractiveState, args: []const []const u8) !void {
+    const session = try requireSession(state);
+    try impl.securityCmd(session, try buildCtx(state, args));
+}
+
+pub fn cmdDebug(state: *InteractiveState, args: []const []const u8) !void {
+    const session = try requireSession(state);
+    try impl.debugCmd(session, try buildCtx(state, args));
+}
+
 pub fn cmdDom(state: *InteractiveState, args: []const []const u8) !void {
     const session = try requireSession(state);
     // buildCtx now handles --output/-o and --all/-a via flags_mod.parseCommandFlags

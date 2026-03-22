@@ -40,6 +40,9 @@ const extensions_mod = @import("extensions.zig");
 const media_mod = @import("media.zig");
 const tabs_mod = @import("tabs.zig");
 const layout_mod = @import("layout/mod.zig");
+const css_mod = @import("css.zig");
+const security_mod = @import("security.zig");
+const debugger_mod = @import("debugger.zig");
 
 // ─── Type Re-exports ─────────────────────────────────────────────────────────
 
@@ -224,3 +227,18 @@ pub const printMediaHelp = media_mod.printMediaHelp;
 
 pub const layout = layout_mod.layout;
 pub const printLayoutHelp = layout_mod.printLayoutHelp;
+
+// ─── CSS Re-exports ───────────────────────────────────────────────────────────
+
+pub const cssCmd = css_mod.css;
+pub const printCssHelp = css_mod.printCssHelp;
+
+// ─── Security Re-exports ──────────────────────────────────────────────────────
+
+pub const securityCmd = security_mod.security;
+pub const printSecurityHelp = security_mod.printSecurityHelp;
+
+// ─── Debugger Re-exports ──────────────────────────────────────────────────────
+
+pub const debugCmd = debugger_mod.debug;
+pub const printDebugHelp = debugger_mod.printDebugHelp;

@@ -513,104 +513,253 @@ Key structs in `state.zig`:
 3. Add wrapper functions to Session or Browser
 4. Export from `src/root.zig`
 
-### Adding a CLI Command
+### Adding a CLI Command (Complete Checklist)
 
-Commands with subcommands (like `cookies` and `storage`) use positional args
-for dispatch. The first positional becomes the subcommand (`set`, `clear`,
-`local`, `session`) and is parsed inside the `command_impl.zig` function.
+Commands with subcommands (like `cookies`, `css`, `debug`) use positional args
+for dispatch. The first positional becomes the subcommand (`set`, `list`,
+`pause`) and is parsed inside the command function.
 
-Session-level commands (that operate on an existing page) require 4 steps:
+Session-level commands (that operate on an existing page) require **8 steps**:
 
-1. **Add to enum** — `Args.Command` in `cli/main.zig`
-2. **Implement** — Create or add to appropriate file in `cli/commands/` (e.g.
-   `elements.zig` for element actions, `getters.zig` for data retrieval)
-3. **Re-export** — Add re-export in `cli/commands/mod.zig`
-4. **Register dispatch** — Add a `.mycommand => try ...` arm to
-   `dispatchSessionCommand()` in `cli/commands/dispatch.zig`
-5. **Wire up REPL** — Add a `cmdMyCommand()` wrapper in
-   `cli/interactive/commands.zig` and its dispatch entry in
-   `cli/interactive/mod.zig`'s `executeCommand()`
+| Step | File | What to Add |
+|------|------|-------------|
+| 1 | `cli/args.zig` | Add to `Command` enum |
+| 2 | `cli/commands/<name>.zig` | Create command file with implementation + `printXxxHelp()` |
+| 3 | `cli/commands/mod.zig` | Import module and add re-exports |
+| 4 | `cli/commands/dispatch.zig` | Import module and add dispatch case |
+| 5 | `cli/main.zig` | Add to `needs_target` switch (line ~147) |
+| 6 | `cli/main.zig` | Add to `printCommandHelp()` switch (line ~295) |
+| 7 | `cli/interactive/commands.zig` | Add `cmdXxx()` wrapper function |
+| 8 | `cli/interactive/mod.zig` | Add command dispatch in `executeCommand()` |
 
-That's it — `main.zig`'s `else => try withFirstPage(...)` automatically
-handles CLI invocation, `--use`, and page-level URL routing.
+**Step-by-step details:**
 
-**If the command needs custom browser-level setup** (e.g. `navigate` creates
-a page and saves config, `screenshot` accepts an optional URL to navigate to
-first), add an explicit `cmdXxx()` in `main.zig` and list it in the
-`switch (args.command)` block. These are the minority of commands.
+#### Step 1: Add to Command enum (`cli/args.zig`)
+```zig
+pub const Command = enum {
+    // ... existing commands ...
+    mycommand,  // Add here (alphabetical preferred)
+    help,
+};
+```
 
-**Browser-level commands that don't need a session** (e.g. `tab`, `window`)
-use the `Target` domain directly via `browser.connection`. They get their own
-`cmdTab()`/`cmdWindow()` in `main.zig` and equivalent handlers in
-`interactive/commands.zig` (which use `state.browser` instead of a session).
+#### Step 2: Create command file (`cli/commands/mycommand.zig`)
+```zig
+const std = @import("std");
+const cdp = @import("cdp");
+const types = @import("types.zig");
 
-### Example: Adding a "highlight" Command
+pub const CommandCtx = types.CommandCtx;
+
+pub fn mycommand(session: *cdp.Session, ctx: CommandCtx) !void {
+    // Check for --help flag
+    for (ctx.positional) |arg| {
+        if (std.mem.eql(u8, arg, "--help")) {
+            printMyCommandHelp();
+            return;
+        }
+    }
+
+    const args = ctx.positional;
+    if (args.len == 0) {
+        printMyCommandUsage();
+        return;
+    }
+
+    // Subcommand dispatch
+    if (std.mem.eql(u8, args[0], "sub1")) {
+        try sub1Cmd(session, ctx);
+    } else if (std.mem.eql(u8, args[0], "sub2")) {
+        try sub2Cmd(session, ctx);
+    } else {
+        std.debug.print("Unknown subcommand: {s}\n", .{args[0]});
+        printMyCommandUsage();
+    }
+}
+
+fn sub1Cmd(session: *cdp.Session, ctx: CommandCtx) !void {
+    // Implementation...
+}
+
+fn printMyCommandUsage() void {
+    std.debug.print("Usage: mycommand <subcommand>\n", .{});
+    std.debug.print("Subcommands: sub1, sub2\n", .{});
+}
+
+pub fn printMyCommandHelp() void {
+    const help =
+        \\My Command
+        \\==========
+        \\
+        \\Description of what this command does.
+        \\
+        \\USAGE:
+        \\  mycommand <subcommand> [options]
+        \\
+        \\SUBCOMMANDS:
+        \\  sub1    Description of sub1
+        \\  sub2    Description of sub2
+        \\
+        \\EXAMPLES:
+        \\  mycommand sub1 arg1
+        \\
+    ;
+    std.debug.print("{s}", .{help});
+}
+```
+
+#### Step 3: Add re-exports (`cli/commands/mod.zig`)
+```zig
+// Add import at top
+const mycommand_mod = @import("mycommand.zig");
+
+// Add re-exports at bottom
+pub const mycommandCmd = mycommand_mod.mycommand;
+pub const printMyCommandHelp = mycommand_mod.printMyCommandHelp;
+```
+
+#### Step 4: Add dispatch case (`cli/commands/dispatch.zig`)
+```zig
+// Add import at top
+const mycommand_cmd = @import("mycommand.zig");
+
+// Add in dispatchSessionCommand switch:
+.mycommand => try mycommand_cmd.mycommand(session, ctx),
+```
+
+#### Step 5: Add to needs_target switch (`cli/main.zig` ~line 147)
+```zig
+const needs_target = switch (args.command) {
+    // Commands that need a page session - add yours here:
+    .screenshot, .pdf, /* ... */, .mycommand => true,
+    // Commands that don't need a session:
+    .navigate, .tab, /* ... */ => false,
+};
+```
+
+#### Step 6: Add --help support (`cli/main.zig` ~line 295)
+```zig
+fn printCommandHelp(command: Args.Command) void {
+    switch (command) {
+        // ... existing cases ...
+        .mycommand => impl.printMyCommandHelp(),
+        else => args_mod.printUsage(),
+    }
+}
+```
+
+#### Step 7: Add REPL wrapper (`cli/interactive/commands.zig`)
+```zig
+pub fn cmdMyCommand(state: *InteractiveState, args: []const []const u8) !void {
+    const session = try requireSession(state);
+    try impl.mycommandCmd(session, try buildCtx(state, args));
+}
+```
+
+#### Step 8: Add interactive dispatch (`cli/interactive/mod.zig`)
+```zig
+// In executeCommand() function, add:
+} else if (eql(cmd, "mycommand")) {
+    try commands.cmdMyCommand(state, args);
+}
+```
+
+### Memory Management in Commands
+
+When using `Runtime.evaluate()` or other allocating methods:
 
 ```zig
-// 1. cli/main.zig — add to Args.Command enum
-const Command = enum {
+// CORRECT: Use evaluate() which properly cleans up
+var remote_obj = runtime.evaluate(ctx.allocator, js, .{ .return_by_value = true }) catch |err| {
+    std.debug.print("Error: {}\n", .{err});
+    return;
+};
+defer remote_obj.deinit(ctx.allocator);
+
+// Get string value
+const result_str = if (remote_obj.value) |v| v.asString() orelse null else null;
+
+// WRONG: evaluateAs() leaks memory for string types
+// const str = runtime.evaluateAs([]const u8, js);  // LEAKS!
+```
+
+### Example: Complete "highlight" Command
+
+```zig
+// 1. cli/args.zig — add to Args.Command enum
+pub const Command = enum {
     // ... existing commands ...
     highlight,
-    // ...
 };
 
-// 2. cli/commands/elements.zig — implement
+// 2. cli/commands/highlight.zig — create new file
+const std = @import("std");
+const cdp = @import("cdp");
+const types = @import("types.zig");
+
+pub const CommandCtx = types.CommandCtx;
+
 pub fn highlight(session: *cdp.Session, ctx: CommandCtx) !void {
+    for (ctx.positional) |arg| {
+        if (std.mem.eql(u8, arg, "--help")) {
+            printHighlightHelp();
+            return;
+        }
+    }
     if (ctx.positional.len == 0) {
         std.debug.print("Usage: highlight <selector>\n", .{});
         return;
     }
-    // ... implementation using actions_mod or cdp directly ...
+    // Implementation...
     std.debug.print("Highlighted: {s}\n", .{ctx.positional[0]});
 }
 
-// 3. cli/commands/mod.zig — add re-export
-pub const highlight = elements.highlight;
-
-// 4. cli/commands/dispatch.zig — add to dispatchSessionCommand switch
-.highlight => try elements.highlight(session, ctx),
-
-// 5. cli/interactive/commands.zig — add REPL wrapper
-pub fn cmdHighlight(state: *InteractiveState, args: []const []const u8) !void {
-    const session = try requireSession(state);
-    try impl.highlight(session, buildCtx(state, args));
+pub fn printHighlightHelp() void {
+    std.debug.print("Highlight an element on the page.\n\nUsage: highlight <selector>\n", .{});
 }
 
-// 6. cli/interactive/mod.zig — add to executeCommand()
+// 3. cli/commands/mod.zig — add import and re-export
+const highlight_mod = @import("highlight.zig");
+pub const highlightCmd = highlight_mod.highlight;
+pub const printHighlightHelp = highlight_mod.printHighlightHelp;
+
+// 4. cli/commands/dispatch.zig — add import and case
+const highlight_cmd = @import("highlight.zig");
+// In switch:
+.highlight => try highlight_cmd.highlight(session, ctx),
+
+// 5. cli/main.zig — add to needs_target (line ~147)
+.screenshot, .pdf, /* ... */, .highlight => true,
+
+// 6. cli/main.zig — add to printCommandHelp (line ~295)
+.highlight => impl.printHighlightHelp(),
+
+// 7. cli/interactive/commands.zig — add wrapper
+pub fn cmdHighlight(state: *InteractiveState, args: []const []const u8) !void {
+    const session = try requireSession(state);
+    try impl.highlightCmd(session, try buildCtx(state, args));
+}
+
+// 8. cli/interactive/mod.zig — add dispatch
 } else if (eql(cmd, "highlight")) {
     try commands.cmdHighlight(state, args);
 }
 ```
 
-### Example: Subcommand-Style Command (cookies, storage)
+### Subcommand-Style Commands
 
-Commands like `cookies` and `storage` use positional args as subcommands:
+Commands like `cookies`, `css`, `debug`, `security` use positional args as subcommands.
+The pattern is shown in step 2 above. Key points:
 
-```zig
-// In cli/commands/cookies.zig:
-pub fn cookies(session: *cdp.Session, ctx: CommandCtx) !void {
-    if (ctx.positional.len > 0 and std.mem.eql(u8, ctx.positional[0], "set")) {
-        // cookies set <name> <value>
-        ...
-    }
-    if (ctx.positional.len > 0 and std.mem.eql(u8, ctx.positional[0], "clear")) {
-        // cookies clear
-        ...
-    }
-    // Other subcommands: get, delete, export, import
-    // Default: list all cookies
-    ...
-}
+- Check `--help` flag first and call `printXxxHelp()`
+- If no args, call `printXxxUsage()` (brief usage)
+- Dispatch on `args[0]` to subcommand handlers
+- Each subcommand handler is a private function
 
-pub fn webStorage(session: *cdp.Session, ctx: CommandCtx) !void {
-    // positional[0] = "local" or "session"
-    // positional[1..] = subcommand args (set/clear/key)
-    ...
-}
-```
-
-`storage` uses JavaScript `localStorage`/`sessionStorage` APIs via
-`Runtime.evaluate` rather than CDP domain commands.
+Reference implementations:
+- `cli/commands/css.zig` - CSS inspection/modification
+- `cli/commands/cookies.zig` - Cookie management
+- `cli/commands/debugger.zig` - JavaScript debugging
 
 ### Using --use Flag
 

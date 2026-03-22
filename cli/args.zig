@@ -103,6 +103,9 @@ pub const Args = struct {
         provider,
         extensions,
         media,
+        css,
+        security,
+        debug,
         help,
     };
 

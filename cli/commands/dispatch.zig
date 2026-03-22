@@ -27,6 +27,9 @@ const diff_cmd = @import("diff.zig");
 const dom_cmd = @import("dom.zig");
 const clipboard_cmd = @import("clipboard.zig");
 const media_cmd = @import("media.zig");
+const css_cmd = @import("css.zig");
+const security_cmd = @import("security.zig");
+const debugger_cmd = @import("debugger.zig");
 
 pub const CommandCtx = types.CommandCtx;
 
@@ -73,6 +76,9 @@ pub fn dispatchSessionCommand(session: *cdp.Session, command: anytype, ctx: Comm
         .dom => try dom_cmd.dom(session, ctx),
         .clipboard => try clipboard_cmd.clipboardCmd(session, ctx),
         .media => try media_cmd.media(session, ctx),
+        .css => try css_cmd.css(session, ctx),
+        .security => try security_cmd.security(session, ctx),
+        .debug => try debugger_cmd.debug(session, ctx),
         else => {
             std.debug.print("Warning: unhandled command in dispatchSessionCommand\n", .{});
             return false;

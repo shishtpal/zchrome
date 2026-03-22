@@ -297,6 +297,12 @@ fn executeCommand(state: *InteractiveState, line: []const u8) !void {
         try commands.cmdClipboard(state, args);
     } else if (eql(cmd, "media")) {
         try commands.cmdMedia(state, args);
+    } else if (eql(cmd, "css")) {
+        try commands.cmdCss(state, args);
+    } else if (eql(cmd, "security")) {
+        try commands.cmdSecurity(state, args);
+    } else if (eql(cmd, "debug")) {
+        try commands.cmdDebug(state, args);
     } else {
         std.debug.print("Unknown command: {s}\nType 'help' for available commands.\n", .{cmd});
     }

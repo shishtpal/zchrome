@@ -248,7 +248,7 @@ pub const Connection = struct {
 
             if (method_matches and session_matches) {
                 // Found the event in buffer, remove and return it
-                var removed_evt = self.event_buffer.orderedRemove(idx);
+                const removed_evt = self.event_buffer.orderedRemove(idx);
                 self.allocator.free(removed_evt.method);
                 if (removed_evt.session_id) |sid| self.allocator.free(sid);
                 return removed_evt.params; // Caller owns params

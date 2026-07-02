@@ -206,7 +206,7 @@ pub const VideoEncoder = struct {
             if (child.stdin) |stdin| {
                 var write_buf: [4096]u8 = undefined;
                 var writer = stdin.writer(self.io, &write_buf);
-                
+
                 // Write in chunks
                 var offset: usize = 0;
                 while (offset < data.len) {

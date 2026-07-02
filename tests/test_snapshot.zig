@@ -26,23 +26,22 @@ pub const SnapshotOptions = struct {
 
 /// Interactive element roles
 pub const INTERACTIVE_ROLES = [_][]const u8{
-    "button", "link", "textbox", "checkbox", "radio", "combobox",
-    "listbox", "menuitem", "menuitemcheckbox", "menuitemradio",
-    "option", "searchbox", "slider", "spinbutton", "switch",
-    "tab", "treeitem",
+    "button",  "link",       "textbox",          "checkbox",      "radio",    "combobox",
+    "listbox", "menuitem",   "menuitemcheckbox", "menuitemradio", "option",   "searchbox",
+    "slider",  "spinbutton", "switch",           "tab",           "treeitem",
 };
 
 /// Content roles
 pub const CONTENT_ROLES = [_][]const u8{
-    "heading", "cell", "gridcell", "columnheader", "rowheader",
-    "listitem", "article", "region", "main", "navigation",
+    "heading",  "cell",    "gridcell", "columnheader", "rowheader",
+    "listitem", "article", "region",   "main",         "navigation",
 };
 
 /// Structural roles
 pub const STRUCTURAL_ROLES = [_][]const u8{
-    "generic", "group", "list", "table", "row", "rowgroup",
-    "grid", "treegrid", "menu", "menubar", "toolbar", "tablist",
-    "tree", "directory", "document", "application", "presentation", "none",
+    "generic", "group",     "list",     "table",       "row",          "rowgroup",
+    "grid",    "treegrid",  "menu",     "menubar",     "toolbar",      "tablist",
+    "tree",    "directory", "document", "application", "presentation", "none",
 };
 
 fn isInteractive(role: []const u8) bool {

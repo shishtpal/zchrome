@@ -32,6 +32,22 @@ pub const VarValue = union(enum) {
         };
     }
 
+    /// Get the value as an integer (if applicable)
+    pub fn asInt(self: VarValue) ?i64 {
+        return switch (self) {
+            .int => |i| i,
+            else => null,
+        };
+    }
+
+    /// Get the value as a string (if applicable)
+    pub fn asString(self: VarValue) ?[]const u8 {
+        return switch (self) {
+            .string => |s| s,
+            else => null,
+        };
+    }
+
     /// Get a field from a JSON object variable
     /// Returns the field value as a string, or null if not found/not an object
     pub fn getField(self: VarValue, allocator: std.mem.Allocator, field_path: []const u8) ?[]const u8 {

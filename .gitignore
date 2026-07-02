@@ -1,3 +1,6 @@
+.agents
+.letta/
+
 zig-cache/
 .zig-cache/
 zig-out/

@@ -68,7 +68,7 @@ test "decode struct from json value" {
     var parsed = try json.parse(std.testing.allocator, "{\"frameId\":\"F1\",\"loaderId\":\"L1\"}", .{});
     defer parsed.deinit(std.testing.allocator);
 
-    var result = try json.decode(TestStruct, parsed, std.testing.allocator);
+    const result = try json.decode(TestStruct, parsed, std.testing.allocator);
     defer std.testing.allocator.free(result.frame_id);
     defer if (result.loader_id) |l| std.testing.allocator.free(l);
 

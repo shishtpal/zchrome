@@ -246,13 +246,13 @@ pub const ChromePipe = struct {
         var sa: windows.SECURITY_ATTRIBUTES = .{
             .nLength = @sizeOf(windows.SECURITY_ATTRIBUTES),
             .lpSecurityDescriptor = null,
-            .bInheritHandle = windows.TRUE,
+            .bInheritHandle = windows.BOOL.TRUE,
         };
 
         // Create pipe for parent->Chrome (Chrome reads from fd 3)
         var pipe_to_chrome_read: HANDLE = INVALID_HANDLE_VALUE;
         var pipe_to_chrome_write: HANDLE = INVALID_HANDLE_VALUE;
-        if (win32.CreatePipe(&pipe_to_chrome_read, &pipe_to_chrome_write, &sa, 0) == 0) {
+        if (win32.CreatePipe(&pipe_to_chrome_read, &pipe_to_chrome_write, &sa, 0) == .FALSE) {
             return error.PipeCreationFailed;
         }
         errdefer {
@@ -261,14 +261,14 @@ pub const ChromePipe = struct {
         }
 
         // Make write end non-inheritable (parent keeps this)
-        if (win32.SetHandleInformation(pipe_to_chrome_write, win32.HANDLE_FLAG_INHERIT, 0) == 0) {
+        if (win32.SetHandleInformation(pipe_to_chrome_write, win32.HANDLE_FLAG_INHERIT, 0) == .FALSE) {
             return error.SetHandleInfoFailed;
         }
 
         // Create pipe for Chrome->parent (Chrome writes to fd 4)
         var pipe_from_chrome_read: HANDLE = INVALID_HANDLE_VALUE;
         var pipe_from_chrome_write: HANDLE = INVALID_HANDLE_VALUE;
-        if (win32.CreatePipe(&pipe_from_chrome_read, &pipe_from_chrome_write, &sa, 0) == 0) {
+        if (win32.CreatePipe(&pipe_from_chrome_read, &pipe_from_chrome_write, &sa, 0) == .FALSE) {
             return error.PipeCreationFailed;
         }
         errdefer {
@@ -277,7 +277,7 @@ pub const ChromePipe = struct {
         }
 
         // Make read end non-inheritable (parent keeps this)
-        if (win32.SetHandleInformation(pipe_from_chrome_read, win32.HANDLE_FLAG_INHERIT, 0) == 0) {
+        if (win32.SetHandleInformation(pipe_from_chrome_read, win32.HANDLE_FLAG_INHERIT, 0) == .FALSE) {
             return error.SetHandleInfoFailed;
         }
 
@@ -290,7 +290,7 @@ pub const ChromePipe = struct {
         // Layout: int count, u8[count] flags, HANDLE[count] handles
         const fd_count: u32 = 5; // stdin, stdout, stderr, fd3, fd4
         const buffer_size = @sizeOf(u32) + fd_count + fd_count * @sizeOf(HANDLE);
-        var stdio_buffer = try allocator.alloc(u8, buffer_size);
+        const stdio_buffer = try allocator.alloc(u8, buffer_size);
         defer allocator.free(stdio_buffer);
 
         // Write fd count
@@ -358,7 +358,7 @@ pub const ChromePipe = struct {
             @constCast(@as([*:0]u16, cmd_line_w.ptr)), // lpCommandLine
             null, // lpProcessAttributes
             null, // lpThreadAttributes
-            windows.TRUE, // bInheritHandles
+            windows.BOOL.TRUE, // bInheritHandles
             .{}, // dwCreationFlags
             null, // lpEnvironment
             null, // lpCurrentDirectory
@@ -366,7 +366,7 @@ pub const ChromePipe = struct {
             &process_info,
         );
 
-        if (result == 0) {
+        if (result == .FALSE) {
             const err = win32.GetLastError();
             std.debug.print("CreateProcessW failed with error: {}\n", .{err});
             return error.ProcessCreationFailed;
@@ -548,7 +548,7 @@ fn writeAll(handle: NativeHandle, data: []const u8) !void {
             &written,
             null,
         );
-        if (result == 0) return error.WriteError;
+        if (result == .FALSE) return error.WriteError;
     } else {
         var total: usize = 0;
         while (total < data.len) {
@@ -572,7 +572,7 @@ fn readOne(handle: NativeHandle, buf: *[1]u8) !usize {
             &bytes_read,
             null,
         );
-        if (result == 0) return error.ReadError;
+        if (result == .FALSE) return error.ReadError;
         return bytes_read;
     } else {
         return std.posix.read(handle, buf) catch |err| {

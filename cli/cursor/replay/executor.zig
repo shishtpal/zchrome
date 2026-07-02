@@ -109,6 +109,27 @@ pub fn replayCommandsWithOptions(
         owned_variables.deinit();
     };
 
+    // Call stack for circular include detection - use passed or create new
+    var owned_call_stack: std.ArrayList([]const u8) = .empty;
+    const call_stack: *std.ArrayList([]const u8) = if (options.call_stack) |cs| cs else &owned_call_stack;
+    const owns_call_stack = options.call_stack == null;
+    defer if (owns_call_stack) {
+        for (owned_call_stack.items) |item| allocator.free(item);
+        owned_call_stack.deinit(allocator);
+    };
+
+    // Add current file to call stack
+    const filename_copy = allocator.dupe(u8, filename) catch null;
+    if (filename_copy) |fc| {
+        call_stack.append(allocator, fc) catch {};
+    }
+    defer if (filename_copy != null) {
+        // Remove from call stack on exit
+        if (call_stack.pop()) |popped| {
+            allocator.free(popped);
+        }
+    };
+
     // Enable Page domain upfront
     var page = cdp.Page.init(session);
     try page.enable();
@@ -213,6 +234,7 @@ pub fn replayCommandsWithOptions(
             .macro_file = filename,
             .options = options,
             .video_orch = video_orch,
+            .call_stack = call_stack,
         };
 
         actions.executeCommand(action_ctx, cmd) catch |err| {

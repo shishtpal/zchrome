@@ -193,7 +193,7 @@ pub const RecordServer = struct {
 
         // Connect to self to unblock accept
         const addr = std.Io.net.IpAddress.parse("127.0.0.1", self.port) catch return self.storage.getCommands();
-        const conn = std.Io.net.IpAddress.connect(addr, self.io, .{
+        const conn = std.Io.net.IpAddress.connect(&addr, self.io, .{
             .mode = .stream,
             .protocol = .tcp,
         }) catch return self.storage.getCommands();

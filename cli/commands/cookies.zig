@@ -209,7 +209,7 @@ pub fn cookies(session: *cdp.Session, ctx: CommandCtx) !void {
         };
         defer ctx.allocator.free(content);
 
-        var parsed = json.parse(ctx.allocator, content, .{}) catch |err| {
+        const parsed = json.parse(ctx.allocator, content, .{}) catch |err| {
             std.debug.print("Error parsing JSON from {s}: {}\n", .{ path, err });
             return;
         };

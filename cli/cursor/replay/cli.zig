@@ -48,6 +48,8 @@ pub const ReplayOptions = struct {
     video_orch: ?*video.Orchestrator = null,
     /// Variables map (passed to nested foreach calls)
     variables: ?*std.StringHashMap(state.VarValue) = null,
+    /// Call stack for circular include detection
+    call_stack: ?*std.ArrayList([]const u8) = null,
 };
 
 /// Main cursor command entry point

@@ -123,7 +123,10 @@ This makes macros more robust across different page states or minor UI changes.
 | `assert` | See below | Test conditions with retry on failure |
 | `extract` | `selector`, `mode`?, `output` | Extract DOM data as JSON |
 | `capture` | `selector`, capture fields | Capture values into variables for comparison |
-| `goto` | `file` | Chain to another macro JSON file |
+| `goto` | `file`, `params`?, `result_as`? | Chain to another macro JSON file |
+| `if` | condition field, `then_file`?, `else_file`? | Conditional branching based on page state |
+| `repeat` | `repeat_count` or `repeat_count_var`, `file` | Count-based loop |
+| `mark` | `value` | Signal status (success/failed/skipped) for parent macro |
 
 **Note:** `selectors` is an optional array of fallback CSS selectors tried if `selector` fails.
 
@@ -1169,3 +1172,379 @@ zchrome cursor replay scrape-users.json
 | `extract` | Extract DOM data | `selector`, `mode`, `output`, `append`, `key` |
 | `load` | Load JSON into variable | `file`, `as` |
 | `foreach` | Iterate over array | `source`, `as`, `file`, `on_error` |
+| `if` | Conditional branching | `if_exists`, `if_url`, `then_file`, `else_file` |
+| `repeat` | Count-based loop | `repeat_count`, `file` |
+
+## Conditional Logic (`if` action)
+
+Execute different macro files based on page state. The `if` action evaluates a condition and branches to `then_file` or `else_file`.
+
+### Condition Types
+
+| Field | Description | Example |
+|-------|-------------|---------|
+| `if_exists` | Element exists on page | `"#login-btn"` |
+| `if_not_exists` | Element doesn't exist | `"#logged-in-indicator"` |
+| `if_text` | Element text matches (use with `contains` or `text_eq`) | `"#status"` |
+| `if_url` | Current URL matches pattern (supports `*` wildcard) | `"*/dashboard*"` |
+| `if_var` | Variable value check (use with comparison fields) | `"$count"` |
+
+### Basic Examples
+
+**Check if logged in:**
+```json
+{
+  "action": "if",
+  "if_exists": "#logout-btn",
+  "then_file": "skip-login.json",
+  "else_file": "do-login.json"
+}
+```
+
+**Check URL pattern:**
+```json
+{
+  "action": "if",
+  "if_url": "*/login*",
+  "then_file": "perform-login.json"
+}
+```
+
+**Check element text:**
+```json
+{
+  "action": "if",
+  "if_text": "#status",
+  "contains": "logged in",
+  "then_file": "dashboard-actions.json",
+  "else_file": "login-flow.json"
+}
+```
+
+**Check variable value:**
+```json
+{
+  "action": "if",
+  "if_var": "$item_count",
+  "count_gt": "0",
+  "then_file": "process-items.json",
+  "else_file": "empty-state.json"
+}
+```
+
+### Variable Comparison Fields
+
+When using `if_var`, combine with these comparison fields:
+
+| Field | Description |
+|-------|-------------|
+| `count_gt` | Greater than (integer) |
+| `count_lt` | Less than (integer) |
+| `count_gte` | Greater than or equal |
+| `count_lte` | Less than or equal |
+| `text_eq` | String equals |
+| `text_neq` | String not equals |
+
+### Workflow Example: Conditional Login
+
+`main.json`:
+```json
+{
+  "version": 2,
+  "commands": [
+    {"action": "navigate", "value": "https://example.com"},
+    {"action": "if", "if_exists": "#user-menu", "then_file": "go-to-dashboard.json", "else_file": "login.json"},
+    {"action": "goto", "file": "perform-tasks.json"}
+  ]
+}
+```
+
+`login.json`:
+```json
+{
+  "version": 2,
+  "commands": [
+    {"action": "click", "selector": "#login-link"},
+    {"action": "fill", "selector": "#email", "value": "user@example.com"},
+    {"action": "fill", "selector": "#password", "value": "secret"},
+    {"action": "click", "selector": "#submit"},
+    {"action": "assert", "selector": "#user-menu", "timeout": 10000}
+  ]
+}
+```
+
+## Count-Based Loops (`repeat` action)
+
+Execute a macro file multiple times using the `repeat` action.
+
+### Basic Format
+
+```json
+{
+  "action": "repeat",
+  "repeat_count": 5,
+  "file": "click-next.json"
+}
+```
+
+### Using Variables for Count
+
+```json
+{
+  "version": 2,
+  "commands": [
+    {"action": "capture", "selector": ".pagination .total", "text_as": "page_count"},
+    {"action": "repeat", "repeat_count_var": "$page_count", "file": "scrape-page.json", "max_iterations": 100}
+  ]
+}
+```
+
+### Automatic Loop Variables
+
+Inside the repeated macro, these variables are automatically available:
+
+| Variable | Description |
+|----------|-------------|
+| `$_index` | 0-based iteration index (0, 1, 2, ...) |
+| `$_iteration` | 1-based iteration number (1, 2, 3, ...) |
+
+**Example usage in `scrape-page.json`:**
+```json
+{
+  "version": 2,
+  "commands": [
+    {"action": "extract", "selector": "table", "mode": "table", "output": "data/page-$_iteration.json"},
+    {"action": "click", "selector": ".next-page"}
+  ]
+}
+```
+
+### Safety Limits and Break Conditions
+
+| Field | Description |
+|-------|-------------|
+| `max_iterations` | Maximum number of iterations (safety limit) |
+| `break_if_exists` | Stop loop if selector exists |
+| `break_if_not_exists` | Stop loop if selector doesn't exist |
+
+**Example: Pagination with stop condition**
+```json
+{
+  "action": "repeat",
+  "repeat_count": 100,
+  "file": "scrape-and-next.json",
+  "break_if_not_exists": ".next-page:not(.disabled)"
+}
+```
+
+## Enhanced `foreach` Loop
+
+The `foreach` action now supports automatic loop variables and break conditions.
+
+### Loop Variables
+
+Inside the foreach macro, these variables are available:
+
+| Variable | Description |
+|----------|-------------|
+| `$_index` | 0-based index (0, 1, 2, ...) |
+| `$_iteration` | 1-based iteration (1, 2, 3, ...) |
+| `$<as_name>` | Current item from the array |
+
+**Example:**
+```json
+{
+  "action": "foreach",
+  "source": "$users",
+  "as": "user",
+  "file": "process-user.json"
+}
+```
+
+In `process-user.json`, you have access to `$user`, `$_index`, and `$_iteration`.
+
+### Break Conditions
+
+Stop iteration early based on page state:
+
+```json
+{
+  "action": "foreach",
+  "source": "$items",
+  "as": "item",
+  "file": "process.json",
+  "break_if_exists": "#rate-limit-warning",
+  "max_iterations": 50
+}
+```
+
+### Enhanced Foreach Fields
+
+| Field | Description |
+|-------|-------------|
+| `source` | Variable containing array (`$varname`) |
+| `as` | Loop variable name |
+| `file` | Macro to run for each item |
+| `on_error` | `"continue"` (default) or `"stop"` |
+| `break_if_exists` | Stop if selector exists |
+| `break_if_not_exists` | Stop if selector doesn't exist |
+| `max_iterations` | Maximum iterations (safety limit) |
+
+## Enhanced `goto` with Parameters
+
+Pass variables to nested macros and capture their results.
+
+### Passing Parameters
+
+```json
+{
+  "action": "goto",
+  "file": "login.json",
+  "params": {
+    "username": "test@example.com",
+    "password": "secret123"
+  }
+}
+```
+
+In `login.json`, use `$username` and `$password`:
+```json
+{
+  "version": 2,
+  "commands": [
+    {"action": "fill", "selector": "#email", "value": "$username"},
+    {"action": "fill", "selector": "#password", "value": "$password"},
+    {"action": "click", "selector": "#submit"}
+  ]
+}
+```
+
+**Variable references in params:**
+```json
+{
+  "action": "goto",
+  "file": "process-user.json",
+  "params": {
+    "user_id": "$current_user.id",
+    "api_key": "$config.api_key"
+  }
+}
+```
+
+### Capturing Results
+
+Use `result_as` to capture whether the nested macro succeeded:
+
+```json
+{
+  "version": 2,
+  "commands": [
+    {"action": "goto", "file": "try-login.json", "result_as": "login_result"},
+    {"action": "if", "if_var": "$login_result", "text_eq": "success", "then_file": "dashboard.json", "else_file": "retry-login.json"}
+  ]
+}
+```
+
+The `result_as` variable will be:
+- `"success"` - Macro completed or returned `mark success`
+- `"failed"` - Macro returned `mark failed` or had an error
+- `"skipped"` - Macro returned `mark skipped`
+
+### Mark Action for Control Flow
+
+Use `mark` inside nested macros to signal status:
+
+```json
+{
+  "version": 2,
+  "commands": [
+    {"action": "fill", "selector": "#email", "value": "$username"},
+    {"action": "click", "selector": "#check-email"},
+    {"action": "if", "if_exists": ".email-taken", "then_file": "mark-failed.json"},
+    {"action": "mark", "value": "success"}
+  ]
+}
+```
+
+`mark-failed.json`:
+```json
+{
+  "version": 2,
+  "commands": [
+    {"action": "mark", "value": "failed"}
+  ]
+}
+```
+
+## Circular Include Detection
+
+zchrome automatically detects and prevents circular includes. If macro A calls macro B which calls macro A, you'll see:
+
+```
+Error: circular include detected: macros/a.json
+Call stack: macros/main.json -> macros/b.json -> macros/a.json -> macros/b.json
+```
+
+This prevents infinite loops and helps debug complex macro chains.
+
+## Complete Example: Multi-User Workflow
+
+**main.json** - Load users and process each:
+```json
+{
+  "version": 2,
+  "commands": [
+    {"action": "load", "file": "data/users.json", "as": "users"},
+    {
+      "action": "foreach",
+      "source": "$users",
+      "as": "user",
+      "file": "process-user.json",
+      "on_error": "continue",
+      "max_iterations": 100,
+      "break_if_exists": "#maintenance-mode"
+    }
+  ]
+}
+```
+
+**process-user.json** - Check login and perform action:
+```json
+{
+  "version": 2,
+  "commands": [
+    {"action": "navigate", "value": "https://example.com/user/$user.id"},
+    {
+      "action": "if",
+      "if_not_exists": "#profile",
+      "then_file": "skip-user.json"
+    },
+    {
+      "action": "goto",
+      "file": "collect-data.json",
+      "params": {"user_id": "$user.id"},
+      "result_as": "collect_result"
+    },
+    {
+      "action": "if",
+      "if_var": "$collect_result",
+      "text_eq": "failed",
+      "then_file": "log-failure.json"
+    }
+  ]
+}
+```
+
+**skip-user.json**:
+```json
+{
+  "version": 2,
+  "commands": [
+    {"action": "mark", "value": "skipped"}
+  ]
+}
+```
+
+Run with:
+```bash
+zchrome cursor replay main.json --interval=500

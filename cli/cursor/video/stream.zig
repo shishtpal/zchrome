@@ -92,7 +92,7 @@ pub const StreamServer = struct {
         // Bind to port
         const addr = std.Io.net.IpAddress.parse("0.0.0.0", self.config.port) catch
             return error.InvalidAddress;
-        self.server = std.Io.net.IpAddress.listen(addr, self.io, .{
+        self.server = std.Io.net.IpAddress.listen(&addr, self.io, .{
             .reuse_address = true,
         }) catch return error.BindFailed;
 
@@ -217,13 +217,11 @@ pub const StreamServer = struct {
 
         // Send upgrade response
         var response_buf: [512]u8 = undefined;
-        const response = std.fmt.bufPrint(&response_buf,
-            "HTTP/1.1 101 Switching Protocols\r\n" ++
+        const response = std.fmt.bufPrint(&response_buf, "HTTP/1.1 101 Switching Protocols\r\n" ++
             "Upgrade: websocket\r\n" ++
             "Connection: Upgrade\r\n" ++
             "Sec-WebSocket-Accept: {s}\r\n" ++
-            "\r\n"
-        , .{accept_key}) catch return error.BufferTooSmall;
+            "\r\n", .{accept_key}) catch return error.BufferTooSmall;
 
         var write_buf: [1024]u8 = undefined;
         var writer = stream.writer(self.io, &write_buf);
@@ -363,13 +361,11 @@ pub const StreamServer = struct {
     fn serveViewerPage(self: *Self, stream: std.Io.net.Stream) !void {
         const html = getViewerHtml(self.config.interactive, self.config.port);
         var response_buf: [8192]u8 = undefined;
-        const response = std.fmt.bufPrint(&response_buf,
-            "HTTP/1.1 200 OK\r\n" ++
+        const response = std.fmt.bufPrint(&response_buf, "HTTP/1.1 200 OK\r\n" ++
             "Content-Type: text/html\r\n" ++
             "Content-Length: {d}\r\n" ++
             "\r\n" ++
-            "{s}"
-        , .{ html.len, html }) catch return error.BufferTooSmall;
+            "{s}", .{ html.len, html }) catch return error.BufferTooSmall;
 
         var write_buf: [1024]u8 = undefined;
         var writer = stream.writer(self.io, &write_buf);
@@ -380,12 +376,10 @@ pub const StreamServer = struct {
 
     fn sendMjpegFrameToStream(self: *Self, stream: std.Io.net.Stream, jpeg_data: []const u8) !void {
         var header_buf: [128]u8 = undefined;
-        const header = std.fmt.bufPrint(&header_buf,
-            "--frame\r\n" ++
+        const header = std.fmt.bufPrint(&header_buf, "--frame\r\n" ++
             "Content-Type: image/jpeg\r\n" ++
             "Content-Length: {d}\r\n" ++
-            "\r\n"
-        , .{jpeg_data.len}) catch return error.BufferTooSmall;
+            "\r\n", .{jpeg_data.len}) catch return error.BufferTooSmall;
 
         var write_buf: [1024]u8 = undefined;
         var writer = stream.writer(self.io, &write_buf);
@@ -541,64 +535,64 @@ fn getViewerHtml(interactive: bool, port: u16) []const u8 {
     _ = port;
     if (interactive) {
         return
-            \\<!DOCTYPE html>
-            \\<html>
-            \\<head>
-            \\  <title>zchrome Replay Stream (Interactive)</title>
-            \\  <style>
-            \\    body { margin: 0; background: #1a1a2e; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-            \\    #container { position: relative; }
-            \\    #stream { max-width: 100vw; max-height: 100vh; cursor: crosshair; }
-            \\    #status { position: fixed; top: 10px; left: 10px; color: #0f0; font-family: monospace; background: rgba(0,0,0,0.7); padding: 5px 10px; border-radius: 4px; }
-            \\  </style>
-            \\</head>
-            \\<body>
-            \\  <div id="status">Interactive Mode - Click to interact</div>
-            \\  <div id="container">
-            \\    <img id="stream" src="/stream">
-            \\  </div>
-            \\  <script>
-            \\    const ws = new WebSocket('ws://' + location.host + '/ws');
-            \\    const stream = document.getElementById('stream');
-            \\    const status = document.getElementById('status');
-            \\    
-            \\    ws.onopen = () => { status.textContent = 'Connected - Click to interact'; };
-            \\    ws.onclose = () => { status.textContent = 'Disconnected'; };
-            \\    
-            \\    stream.addEventListener('click', (e) => {
-            \\      const rect = stream.getBoundingClientRect();
-            \\      const scaleX = stream.naturalWidth / rect.width;
-            \\      const scaleY = stream.naturalHeight / rect.height;
-            \\      const x = Math.round((e.clientX - rect.left) * scaleX);
-            \\      const y = Math.round((e.clientY - rect.top) * scaleY);
-            \\      ws.send(JSON.stringify({ type: 'click', x, y }));
-            \\      status.textContent = 'Clicked at (' + x + ', ' + y + ')';
-            \\    });
-            \\    
-            \\    document.addEventListener('keydown', (e) => {
-            \\      ws.send(JSON.stringify({ type: 'keydown', key: e.key }));
-            \\    });
-            \\  </script>
-            \\</body>
-            \\</html>
+        \\<!DOCTYPE html>
+        \\<html>
+        \\<head>
+        \\  <title>zchrome Replay Stream (Interactive)</title>
+        \\  <style>
+        \\    body { margin: 0; background: #1a1a2e; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        \\    #container { position: relative; }
+        \\    #stream { max-width: 100vw; max-height: 100vh; cursor: crosshair; }
+        \\    #status { position: fixed; top: 10px; left: 10px; color: #0f0; font-family: monospace; background: rgba(0,0,0,0.7); padding: 5px 10px; border-radius: 4px; }
+        \\  </style>
+        \\</head>
+        \\<body>
+        \\  <div id="status">Interactive Mode - Click to interact</div>
+        \\  <div id="container">
+        \\    <img id="stream" src="/stream">
+        \\  </div>
+        \\  <script>
+        \\    const ws = new WebSocket('ws://' + location.host + '/ws');
+        \\    const stream = document.getElementById('stream');
+        \\    const status = document.getElementById('status');
+        \\    
+        \\    ws.onopen = () => { status.textContent = 'Connected - Click to interact'; };
+        \\    ws.onclose = () => { status.textContent = 'Disconnected'; };
+        \\    
+        \\    stream.addEventListener('click', (e) => {
+        \\      const rect = stream.getBoundingClientRect();
+        \\      const scaleX = stream.naturalWidth / rect.width;
+        \\      const scaleY = stream.naturalHeight / rect.height;
+        \\      const x = Math.round((e.clientX - rect.left) * scaleX);
+        \\      const y = Math.round((e.clientY - rect.top) * scaleY);
+        \\      ws.send(JSON.stringify({ type: 'click', x, y }));
+        \\      status.textContent = 'Clicked at (' + x + ', ' + y + ')';
+        \\    });
+        \\    
+        \\    document.addEventListener('keydown', (e) => {
+        \\      ws.send(JSON.stringify({ type: 'keydown', key: e.key }));
+        \\    });
+        \\  </script>
+        \\</body>
+        \\</html>
         ;
     } else {
         return
-            \\<!DOCTYPE html>
-            \\<html>
-            \\<head>
-            \\  <title>zchrome Replay Stream</title>
-            \\  <style>
-            \\    body { margin: 0; background: #1a1a2e; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-            \\    #stream { max-width: 100vw; max-height: 100vh; }
-            \\    #status { position: fixed; top: 10px; left: 10px; color: #0f0; font-family: monospace; background: rgba(0,0,0,0.7); padding: 5px 10px; border-radius: 4px; }
-            \\  </style>
-            \\</head>
-            \\<body>
-            \\  <div id="status">Streaming...</div>
-            \\  <img id="stream" src="/stream">
-            \\</body>
-            \\</html>
+        \\<!DOCTYPE html>
+        \\<html>
+        \\<head>
+        \\  <title>zchrome Replay Stream</title>
+        \\  <style>
+        \\    body { margin: 0; background: #1a1a2e; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        \\    #stream { max-width: 100vw; max-height: 100vh; }
+        \\    #status { position: fixed; top: 10px; left: 10px; color: #0f0; font-family: monospace; background: rgba(0,0,0,0.7); padding: 5px 10px; border-radius: 4px; }
+        \\  </style>
+        \\</head>
+        \\<body>
+        \\  <div id="status">Streaming...</div>
+        \\  <img id="stream" src="/stream">
+        \\</body>
+        \\</html>
         ;
     }
 }

@@ -172,7 +172,7 @@ pub const MockCDPServer = struct {
             // Check for masked frame
             const masked = (buf[1] & 0x80) != 0;
             if (masked) {
-                const mask_key = buf[payload_start..payload_start + 4];
+                const mask_key = buf[payload_start .. payload_start + 4];
                 payload_start += 4;
 
                 // Unmask

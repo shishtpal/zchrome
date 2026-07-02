@@ -1,6 +1,5 @@
 /// CDP primitive type aliases
 /// These provide semantic meaning to string IDs used throughout CDP
-
 /// Session identifier for target-attached sessions
 pub const SessionId = []const u8;
 

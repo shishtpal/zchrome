@@ -128,7 +128,7 @@ fn cloneJsonValue(allocator: std.mem.Allocator, value: json.Value) !json.Value {
         .float => |f| .{ .float = f },
         .string => |s| .{ .string = try allocator.dupe(u8, s) },
         .array => |arr| blk: {
-            var new_arr: json.Value.Array = .{};
+            var new_arr: json.Value.Array = .empty;
             for (arr.items) |item| {
                 try new_arr.append(allocator, try cloneJsonValue(allocator, item));
             }

@@ -40,7 +40,7 @@ pub const ActionType = enum {
     click,
     dblclick,
     fill,
-    @"type",
+    type,
     check,
     uncheck,
     select,
@@ -59,13 +59,15 @@ pub const ActionType = enum {
     load, // Load JSON file into variable
     foreach, // Iterate over array variable
     mark, // Explicit status marking (stops execution, signals success/failed/skipped)
+    @"if", // Conditional branching based on page state
+    repeat, // Count-based loop
 
     pub fn toString(self: ActionType) []const u8 {
         return switch (self) {
             .click => "click",
             .dblclick => "dblclick",
             .fill => "fill",
-            .@"type" => "type",
+            .type => "type",
             .check => "check",
             .uncheck => "uncheck",
             .select => "select",
@@ -84,6 +86,8 @@ pub const ActionType = enum {
             .load => "load",
             .foreach => "foreach",
             .mark => "mark",
+            .@"if" => "if",
+            .repeat => "repeat",
         };
     }
 
@@ -91,7 +95,7 @@ pub const ActionType = enum {
         if (std.mem.eql(u8, s, "click")) return .click;
         if (std.mem.eql(u8, s, "dblclick")) return .dblclick;
         if (std.mem.eql(u8, s, "fill")) return .fill;
-        if (std.mem.eql(u8, s, "type")) return .@"type";
+        if (std.mem.eql(u8, s, "type")) return .type;
         if (std.mem.eql(u8, s, "check")) return .check;
         if (std.mem.eql(u8, s, "uncheck")) return .uncheck;
         if (std.mem.eql(u8, s, "select")) return .select;
@@ -110,6 +114,8 @@ pub const ActionType = enum {
         if (std.mem.eql(u8, s, "load")) return .load;
         if (std.mem.eql(u8, s, "foreach")) return .foreach;
         if (std.mem.eql(u8, s, "mark")) return .mark;
+        if (std.mem.eql(u8, s, "if")) return .@"if";
+        if (std.mem.eql(u8, s, "repeat")) return .repeat;
         return null;
     }
 
@@ -117,8 +123,8 @@ pub const ActionType = enum {
     /// Used to determine where to retry from on assertion failure
     pub fn isActionCommand(self: ActionType) bool {
         return switch (self) {
-            .click, .dblclick, .fill, .@"type", .check, .uncheck, .select, .multiselect, .hover, .navigate, .upload => true,
-            .press, .scroll, .wait, .assert, .extract, .dialog, .capture, .goto, .load, .foreach, .mark => false,
+            .click, .dblclick, .fill, .type, .check, .uncheck, .select, .multiselect, .hover, .navigate, .upload => true,
+            .press, .scroll, .wait, .assert, .extract, .dialog, .capture, .goto, .load, .foreach, .mark, .@"if", .repeat => false,
         };
     }
 };
@@ -179,6 +185,24 @@ pub const MacroCommand = struct {
     source: ?[]const u8 = null, // Variable name containing array to iterate (e.g., "$users")
     on_error: ?[]const u8 = null, // Error handling: "continue" (default) or "stop"
     progress_file: ?[]const u8 = null, // File to track progress for resume
+    // If-specific fields (conditional branching)
+    if_exists: ?[]const u8 = null, // Selector exists check
+    if_not_exists: ?[]const u8 = null, // Selector doesn't exist check
+    if_text: ?[]const u8 = null, // Text content check (uses contains/text_eq)
+    if_url: ?[]const u8 = null, // URL pattern match (supports * wildcard)
+    if_var: ?[]const u8 = null, // Variable value check (uses comparison fields)
+    then_file: ?[]const u8 = null, // File to run if condition true
+    else_file: ?[]const u8 = null, // File to run if condition false
+    // Repeat-specific fields
+    repeat_count: ?u32 = null, // Number of iterations
+    repeat_count_var: ?[]const u8 = null, // Variable reference for count (e.g., "$page_count")
+    // Enhanced foreach fields
+    break_if_exists: ?[]const u8 = null, // Break loop if selector exists
+    break_if_not_exists: ?[]const u8 = null, // Break loop if selector doesn't exist
+    max_iterations: ?u32 = null, // Maximum iteration limit (safety)
+    // Enhanced goto fields
+    params: ?std.StringArrayHashMapUnmanaged([]const u8) = null, // Parameters to pass to nested macro
+    result_as: ?[]const u8 = null, // Variable name to store nested macro result status
 
     pub fn deinit(self: *MacroCommand, allocator: std.mem.Allocator) void {
         if (self.selector) |s| allocator.free(s);
@@ -232,6 +256,28 @@ pub const MacroCommand = struct {
         if (self.source) |src| allocator.free(src);
         if (self.on_error) |oe| allocator.free(oe);
         if (self.progress_file) |pf| allocator.free(pf);
+        // If-specific fields
+        if (self.if_exists) |ie| allocator.free(ie);
+        if (self.if_not_exists) |ine| allocator.free(ine);
+        if (self.if_text) |it| allocator.free(it);
+        if (self.if_url) |iu| allocator.free(iu);
+        if (self.if_var) |iv| allocator.free(iv);
+        if (self.then_file) |tf| allocator.free(tf);
+        if (self.else_file) |ef| allocator.free(ef);
+        // Repeat-specific fields
+        if (self.repeat_count_var) |rcv| allocator.free(rcv);
+        // Enhanced foreach fields
+        if (self.break_if_exists) |bie| allocator.free(bie);
+        if (self.break_if_not_exists) |bine| allocator.free(bine);
+        // Enhanced goto fields
+        if (self.params) |*p| {
+            for (p.keys(), p.values()) |k, v| {
+                allocator.free(k);
+                allocator.free(v);
+            }
+            p.deinit(allocator);
+        }
+        if (self.result_as) |ra| allocator.free(ra);
     }
 
     pub fn clone(self: *const MacroCommand, allocator: std.mem.Allocator) !MacroCommand {
@@ -298,6 +344,32 @@ pub const MacroCommand = struct {
             .source = if (self.source) |src| try allocator.dupe(u8, src) else null,
             .on_error = if (self.on_error) |oe| try allocator.dupe(u8, oe) else null,
             .progress_file = if (self.progress_file) |pf| try allocator.dupe(u8, pf) else null,
+            // If-specific fields
+            .if_exists = if (self.if_exists) |ie| try allocator.dupe(u8, ie) else null,
+            .if_not_exists = if (self.if_not_exists) |ine| try allocator.dupe(u8, ine) else null,
+            .if_text = if (self.if_text) |it| try allocator.dupe(u8, it) else null,
+            .if_url = if (self.if_url) |iu| try allocator.dupe(u8, iu) else null,
+            .if_var = if (self.if_var) |iv| try allocator.dupe(u8, iv) else null,
+            .then_file = if (self.then_file) |tf| try allocator.dupe(u8, tf) else null,
+            .else_file = if (self.else_file) |ef| try allocator.dupe(u8, ef) else null,
+            // Repeat-specific fields
+            .repeat_count = self.repeat_count,
+            .repeat_count_var = if (self.repeat_count_var) |rcv| try allocator.dupe(u8, rcv) else null,
+            // Enhanced foreach fields
+            .break_if_exists = if (self.break_if_exists) |bie| try allocator.dupe(u8, bie) else null,
+            .break_if_not_exists = if (self.break_if_not_exists) |bine| try allocator.dupe(u8, bine) else null,
+            .max_iterations = self.max_iterations,
+            // Enhanced goto fields
+            .params = if (self.params) |p| blk: {
+                var new_params: std.StringArrayHashMapUnmanaged([]const u8) = .{};
+                for (p.keys(), p.values()) |k, v| {
+                    const key = try allocator.dupe(u8, k);
+                    const val = try allocator.dupe(u8, v);
+                    try new_params.put(allocator, key, val);
+                }
+                break :blk new_params;
+            } else null,
+            .result_as = if (self.result_as) |ra| try allocator.dupe(u8, ra) else null,
         };
     }
 };
@@ -627,6 +699,115 @@ pub fn save(allocator: std.mem.Allocator, io: std.Io, path: []const u8, macro: *
             try json_buf.appendSlice(allocator, escaped);
             try json_buf.appendSlice(allocator, "\"");
         }
+        // If-specific fields
+        if (cmd.if_exists) |ie| {
+            const escaped = try escapeString(allocator, ie);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"if_exists\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
+        if (cmd.if_not_exists) |ine| {
+            const escaped = try escapeString(allocator, ine);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"if_not_exists\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
+        if (cmd.if_text) |it| {
+            const escaped = try escapeString(allocator, it);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"if_text\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
+        if (cmd.if_url) |iu| {
+            const escaped = try escapeString(allocator, iu);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"if_url\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
+        if (cmd.if_var) |iv| {
+            const escaped = try escapeString(allocator, iv);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"if_var\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
+        if (cmd.then_file) |tf| {
+            const escaped = try escapeString(allocator, tf);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"then_file\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
+        if (cmd.else_file) |ef| {
+            const escaped = try escapeString(allocator, ef);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"else_file\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
+        // Repeat-specific fields
+        if (cmd.repeat_count) |rc| {
+            const rc_str = try std.fmt.allocPrint(allocator, ", \"repeat_count\": {}", .{rc});
+            defer allocator.free(rc_str);
+            try json_buf.appendSlice(allocator, rc_str);
+        }
+        if (cmd.repeat_count_var) |rcv| {
+            const escaped = try escapeString(allocator, rcv);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"repeat_count_var\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
+        // Enhanced foreach fields
+        if (cmd.break_if_exists) |bie| {
+            const escaped = try escapeString(allocator, bie);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"break_if_exists\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
+        if (cmd.break_if_not_exists) |bine| {
+            const escaped = try escapeString(allocator, bine);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"break_if_not_exists\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
+        if (cmd.max_iterations) |mi| {
+            const mi_str = try std.fmt.allocPrint(allocator, ", \"max_iterations\": {}", .{mi});
+            defer allocator.free(mi_str);
+            try json_buf.appendSlice(allocator, mi_str);
+        }
+        // Enhanced goto fields
+        if (cmd.params) |p| {
+            try json_buf.appendSlice(allocator, ", \"params\": {");
+            var params_first = true;
+            for (p.keys(), p.values()) |k, v| {
+                if (!params_first) try json_buf.appendSlice(allocator, ", ");
+                params_first = false;
+                try json_buf.appendSlice(allocator, "\"");
+                const escaped_key = try escapeString(allocator, k);
+                defer allocator.free(escaped_key);
+                try json_buf.appendSlice(allocator, escaped_key);
+                try json_buf.appendSlice(allocator, "\": \"");
+                const escaped_val = try escapeString(allocator, v);
+                defer allocator.free(escaped_val);
+                try json_buf.appendSlice(allocator, escaped_val);
+                try json_buf.appendSlice(allocator, "\"");
+            }
+            try json_buf.appendSlice(allocator, "}");
+        }
+        if (cmd.result_as) |ra| {
+            const escaped = try escapeString(allocator, ra);
+            defer allocator.free(escaped);
+            try json_buf.appendSlice(allocator, ", \"result_as\": \"");
+            try json_buf.appendSlice(allocator, escaped);
+            try json_buf.appendSlice(allocator, "\"");
+        }
 
         try json_buf.appendSlice(allocator, "}");
     }
@@ -931,6 +1112,74 @@ pub fn load(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !Command
                 }
                 if (obj.get("progress_file")) |pf| {
                     if (pf == .string) cmd.progress_file = try allocator.dupe(u8, pf.string);
+                }
+                // If-specific fields
+                if (obj.get("if_exists")) |ie| {
+                    if (ie == .string) cmd.if_exists = try allocator.dupe(u8, ie.string);
+                }
+                if (obj.get("if_not_exists")) |ine| {
+                    if (ine == .string) cmd.if_not_exists = try allocator.dupe(u8, ine.string);
+                }
+                if (obj.get("if_text")) |it| {
+                    if (it == .string) cmd.if_text = try allocator.dupe(u8, it.string);
+                }
+                if (obj.get("if_url")) |iu| {
+                    if (iu == .string) cmd.if_url = try allocator.dupe(u8, iu.string);
+                }
+                if (obj.get("if_var")) |iv| {
+                    if (iv == .string) cmd.if_var = try allocator.dupe(u8, iv.string);
+                }
+                if (obj.get("then_file")) |tf| {
+                    if (tf == .string) cmd.then_file = try allocator.dupe(u8, tf.string);
+                }
+                if (obj.get("else_file")) |ef| {
+                    if (ef == .string) cmd.else_file = try allocator.dupe(u8, ef.string);
+                }
+                // Repeat-specific fields
+                if (obj.get("repeat_count")) |rc| {
+                    if (rc == .integer) cmd.repeat_count = @intCast(rc.integer);
+                }
+                if (obj.get("repeat_count_var")) |rcv| {
+                    if (rcv == .string) cmd.repeat_count_var = try allocator.dupe(u8, rcv.string);
+                }
+                // Enhanced foreach fields
+                if (obj.get("break_if_exists")) |bie| {
+                    if (bie == .string) cmd.break_if_exists = try allocator.dupe(u8, bie.string);
+                }
+                if (obj.get("break_if_not_exists")) |bine| {
+                    if (bine == .string) cmd.break_if_not_exists = try allocator.dupe(u8, bine.string);
+                }
+                if (obj.get("max_iterations")) |mi| {
+                    if (mi == .integer) cmd.max_iterations = @intCast(mi.integer);
+                }
+                // Enhanced goto fields
+                if (obj.get("params")) |params_obj| {
+                    if (params_obj == .object) {
+                        var params_map: std.StringArrayHashMapUnmanaged([]const u8) = .{};
+                        errdefer {
+                            for (params_map.keys(), params_map.values()) |k, v| {
+                                allocator.free(k);
+                                allocator.free(v);
+                            }
+                            params_map.deinit(allocator);
+                        }
+                        var params_iter = params_obj.object.iterator();
+                        while (params_iter.next()) |entry| {
+                            if (entry.value_ptr.* == .string) {
+                                const key = try allocator.dupe(u8, entry.key_ptr.*);
+                                const val = try allocator.dupe(u8, entry.value_ptr.string);
+                                try params_map.put(allocator, key, val);
+                            }
+                        }
+                        if (params_map.count() > 0) {
+                            cmd.params = params_map;
+                        } else {
+                            params_map.deinit(allocator);
+                        }
+                    }
+                }
+                if (obj.get("result_as")) |ra| {
+                    if (ra == .string) cmd.result_as = try allocator.dupe(u8, ra.string);
                 }
 
                 try cmds_list.append(allocator, cmd);

@@ -10,6 +10,18 @@ const session_mod = @import("session.zig");
 
 const Args = args_mod.Args;
 
+/// Disable std's "unexpected error" stack-trace dumps.
+///
+/// On Windows, `std.Io.net.IpAddress.connect` maps STATUS_CONNECTION_REFUSED
+/// (0xc0000236) to `windows.unexpectedStatus`, which prints a full stack trace
+/// to stderr in Debug builds before returning `error.Unexpected`. This happens
+/// for the perfectly-normal case of probing a port before Chrome is running
+/// (e.g. `zchrome open`), so we suppress the noise here. The error is still
+/// returned and handled by callers via `catch`.
+pub const std_options: std.Options = .{
+    .unexpected_error_tracing = false,
+};
+
 pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
 

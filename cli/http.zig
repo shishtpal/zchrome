@@ -20,7 +20,7 @@ pub fn get(allocator: std.mem.Allocator, io: std.Io, host: []const u8, port: u16
         return error.ConnectionFailed;
 
     // TCP connect
-    const stream = std.Io.net.IpAddress.connect(address, io, .{
+    const stream = std.Io.net.IpAddress.connect(&address, io, .{
         .mode = .stream,
         .protocol = .tcp,
     }) catch return error.ConnectionFailed;
@@ -163,7 +163,7 @@ pub fn tryDirectWsConnection(allocator: std.mem.Allocator, io: std.Io, port: u16
 pub fn isChromeRunning(io: std.Io, port: u16) bool {
     const address = std.Io.net.IpAddress.parse("127.0.0.1", port) catch return false;
 
-    const stream = std.Io.net.IpAddress.connect(address, io, .{
+    const stream = std.Io.net.IpAddress.connect(&address, io, .{
         .mode = .stream,
         .protocol = .tcp,
     }) catch return false;

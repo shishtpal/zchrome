@@ -29,5 +29,3 @@ pub fn jsStringLiteral(allocator: std.mem.Allocator, s: []const u8) ![]const u8 
     try result.append(allocator, '"');
     return result.toOwnedSlice(allocator);
 }
-
-

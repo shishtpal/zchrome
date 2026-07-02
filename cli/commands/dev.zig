@@ -273,7 +273,7 @@ fn console(session: *cdp.Session, ctx: CommandCtx) !void {
     const json_str = result.asString() orelse "[]";
 
     // Parse and display messages
-    var parsed = json.parse(ctx.allocator, json_str, .{}) catch {
+    const parsed = json.parse(ctx.allocator, json_str, .{}) catch {
         std.debug.print("No console messages captured\n", .{});
         return;
     };
@@ -350,7 +350,7 @@ fn errors(session: *cdp.Session, ctx: CommandCtx) !void {
 
     const json_str = result.asString() orelse "[]";
 
-    var parsed = json.parse(ctx.allocator, json_str, .{}) catch {
+    const parsed = json.parse(ctx.allocator, json_str, .{}) catch {
         std.debug.print("No errors captured\n", .{});
         return;
     };

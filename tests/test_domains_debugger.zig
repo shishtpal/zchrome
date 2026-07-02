@@ -92,7 +92,8 @@ test "Debugger - struct has expected layout" {
     };
     var dummy: u8 = 0;
     const client = DebuggerClient{ .session = @ptrCast(&dummy) };
-    try std.testing.expect(client.session != undefined);
+    // Verify pointer was set correctly
+    try std.testing.expect(@intFromPtr(client.session) != 0);
 }
 
 // ─── JSON Parsing Tests ─────────────────────────────────────────────────────

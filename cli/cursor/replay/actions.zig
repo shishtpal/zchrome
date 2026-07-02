@@ -48,6 +48,7 @@ pub const ActionContext = struct {
     macro_file: []const u8,
     options: ReplayOptions,
     video_orch: ?*video.Orchestrator,
+    call_stack: *std.ArrayList([]const u8),
 };
 
 /// Execute a command based on action type
@@ -56,7 +57,7 @@ pub fn executeCommand(ctx: ActionContext, cmd: macro.MacroCommand) anyerror!void
         .click => executeClick(ctx, cmd),
         .dblclick => executeDblclick(ctx, cmd),
         .fill => executeFill(ctx, cmd),
-        .@"type" => executeType(ctx, cmd),
+        .type => executeType(ctx, cmd),
         .check => executeCheck(ctx, cmd),
         .uncheck => executeUncheck(ctx, cmd),
         .select => executeSelect(ctx, cmd),
@@ -75,6 +76,8 @@ pub fn executeCommand(ctx: ActionContext, cmd: macro.MacroCommand) anyerror!void
         .load => executeLoad(ctx, cmd),
         .foreach => try executeForeach(ctx, cmd),
         .mark => return executeMark(cmd),
+        .@"if" => try executeIf(ctx, cmd),
+        .repeat => try executeRepeat(ctx, cmd),
     }
 }
 
@@ -427,17 +430,143 @@ fn executeGoto(ctx: ActionContext, cmd: macro.MacroCommand) anyerror!void {
     defer if (resolved_path.ptr != target_file.ptr) ctx.allocator.free(resolved_path);
 
     std.debug.print(" -> {s}\n", .{resolved_path});
+
+    // Save original values and apply params (temporary override)
+    var saved_values: std.StringHashMap(state.VarValue) = std.StringHashMap(state.VarValue).init(ctx.allocator);
+    defer {
+        // Restore original values
+        var iter = saved_values.iterator();
+        while (iter.next()) |entry| {
+            // Remove the param-set value
+            if (ctx.variables.fetchRemove(entry.key_ptr.*)) |old| {
+                ctx.allocator.free(old.key);
+                var old_val = old.value;
+                old_val.deinit(ctx.allocator);
+            }
+            // Restore original value
+            const key = ctx.allocator.dupe(u8, entry.key_ptr.*) catch continue;
+            const val = entry.value_ptr.clone(ctx.allocator) catch {
+                ctx.allocator.free(key);
+                continue;
+            };
+            ctx.variables.put(key, val) catch {
+                ctx.allocator.free(key);
+                var tmp = val;
+                tmp.deinit(ctx.allocator);
+            };
+        }
+        // Clean up saved values
+        var save_iter = saved_values.iterator();
+        while (save_iter.next()) |entry| {
+            entry.value_ptr.deinit(ctx.allocator);
+        }
+        saved_values.deinit();
+    }
+
+    if (cmd.params) |params| {
+        for (params.keys(), params.values()) |key, val| {
+            // Save original value if exists
+            if (ctx.variables.get(key)) |orig| {
+                const saved_key = ctx.allocator.dupe(u8, key) catch continue;
+                const saved_val = orig.clone(ctx.allocator) catch {
+                    ctx.allocator.free(saved_key);
+                    continue;
+                };
+                saved_values.put(saved_key, saved_val) catch {
+                    ctx.allocator.free(saved_key);
+                    var tmp = saved_val;
+                    tmp.deinit(ctx.allocator);
+                    continue;
+                };
+            }
+
+            // Resolve value (if starts with $ it's a variable reference)
+            const resolved_val = if (val.len > 0 and val[0] == '$') blk: {
+                const var_name = val[1..];
+                const var_val = ctx.variables.get(var_name) orelse break :blk val;
+                break :blk var_val.asString() orelse val;
+            } else val;
+
+            // Set the param value
+            const new_key = ctx.allocator.dupe(u8, key) catch continue;
+            const new_val = ctx.allocator.dupe(u8, resolved_val) catch {
+                ctx.allocator.free(new_key);
+                continue;
+            };
+
+            // Remove old if exists
+            if (ctx.variables.fetchRemove(new_key)) |old| {
+                ctx.allocator.free(old.key);
+                var old_val = old.value;
+                old_val.deinit(ctx.allocator);
+            }
+
+            ctx.variables.put(new_key, .{ .string = new_val }) catch {
+                ctx.allocator.free(new_key);
+                ctx.allocator.free(new_val);
+            };
+        }
+    }
+
+    // Check for circular include
+    for (ctx.call_stack.items) |stack_file| {
+        if (std.mem.eql(u8, stack_file, resolved_path)) {
+            std.debug.print("    Error: circular include detected: {s}\n", .{resolved_path});
+            return;
+        }
+    }
+
     // Pass full options to nested call (preserves interval, retries, video, etc.)
     var nested_options = ctx.options;
     nested_options.video_orch = ctx.video_orch; // Ensure orchestrator is passed
     nested_options.resume_mode = false; // Don't resume nested calls
     nested_options.start_index = null;
+    nested_options.variables = ctx.variables;
+    nested_options.call_stack = ctx.call_stack;
+
+    var result_status: []const u8 = "success";
+
     executor.replayCommandsWithOptions(ctx.session, ctx.allocator, ctx.io, resolved_path, nested_options) catch |err| {
         switch (err) {
-            error.MarkSuccess, error.MarkFailed, error.MarkSkipped => return err,
-            else => std.debug.print("    Error replaying {s}: {}\n", .{ resolved_path, err }),
+            error.MarkSuccess => {
+                result_status = "success";
+                if (cmd.result_as == null) return err;
+            },
+            error.MarkFailed => {
+                result_status = "failed";
+                if (cmd.result_as == null) return err;
+            },
+            error.MarkSkipped => {
+                result_status = "skipped";
+                if (cmd.result_as == null) return err;
+            },
+            else => {
+                result_status = "failed";
+                std.debug.print("    Error replaying {s}: {}\n", .{ resolved_path, err });
+            },
         }
     };
+
+    // Capture result status if result_as is set
+    if (cmd.result_as) |var_name| {
+        const key = ctx.allocator.dupe(u8, var_name) catch return;
+        const val = ctx.allocator.dupe(u8, result_status) catch {
+            ctx.allocator.free(key);
+            return;
+        };
+
+        if (ctx.variables.fetchRemove(key)) |old| {
+            ctx.allocator.free(old.key);
+            var old_val = old.value;
+            old_val.deinit(ctx.allocator);
+        }
+
+        ctx.variables.put(key, .{ .string = val }) catch {
+            ctx.allocator.free(key);
+            ctx.allocator.free(val);
+        };
+        std.debug.print("    {s}={s}\n", .{ var_name, result_status });
+    }
 }
 
 fn executeCapture(ctx: ActionContext, cmd: macro.MacroCommand) void {
@@ -668,6 +797,9 @@ fn executeForeach(ctx: ActionContext, cmd: macro.MacroCommand) anyerror!void {
     else
         true; // default is continue
 
+    const max_iter = cmd.max_iterations orelse @as(u32, @intCast(array_len));
+    const actual_count = @min(array_len, max_iter);
+
     // Initialize report for tracking
     var report = state.ForeachReport{
         .source_var = ctx.allocator.dupe(u8, source_var) catch null,
@@ -680,7 +812,24 @@ fn executeForeach(ctx: ActionContext, cmd: macro.MacroCommand) anyerror!void {
 
     // Iterate over array items
     var idx: usize = 0;
-    while (idx < array_len) : (idx += 1) {
+    while (idx < actual_count) : (idx += 1) {
+        // Set loop index variables ($_index and $_iteration)
+        setLoopIndexVars(ctx, @intCast(idx));
+
+        // Check break conditions before each iteration
+        if (cmd.break_if_exists) |sel| {
+            if (elementExists(ctx, sel)) {
+                std.debug.print("  foreach stopped: break_if_exists matched\n", .{});
+                break;
+            }
+        }
+        if (cmd.break_if_not_exists) |sel| {
+            if (!elementExists(ctx, sel)) {
+                std.debug.print("  foreach stopped: break_if_not_exists matched\n", .{});
+                break;
+            }
+        }
+
         const item_json = source_val.arrayGet(ctx.allocator, idx) orelse {
             report.addResult(ctx.allocator, .{
                 .index = idx,
@@ -781,6 +930,7 @@ fn executeForeach(ctx: ActionContext, cmd: macro.MacroCommand) anyerror!void {
         nested_options.resume_mode = false;
         nested_options.start_index = null;
         nested_options.variables = ctx.variables;
+        nested_options.call_stack = ctx.call_stack;
 
         const end_ns = std.Io.Timestamp.now(ctx.io, .real).nanoseconds;
         const duration_ms: u64 = @intCast(@divTrunc(end_ns - start_ns, 1_000_000));
@@ -819,6 +969,9 @@ fn executeForeach(ctx: ActionContext, cmd: macro.MacroCommand) anyerror!void {
         report.addResult(ctx.allocator, .{ .index = idx, .item_id = item_id, .status = .success, .duration_ms = duration_ms }) catch {};
     }
 
+    // Clean up loop index variables
+    cleanupLoopIndexVars(ctx);
+
     report.completed_at = state.getTimestamp(ctx.allocator, ctx.io);
 
     const report_path = blk: {
@@ -851,5 +1004,335 @@ fn executeMark(cmd: macro.MacroCommand) anyerror {
         return error.MarkSkipped;
     } else {
         return error.MarkFailed;
+    }
+}
+
+fn executeIf(ctx: ActionContext, cmd: macro.MacroCommand) anyerror!void {
+    const condition_met = evaluateCondition(ctx, cmd);
+
+    std.debug.print(" -> {s}\n", .{if (condition_met) "true" else "false"});
+
+    if (condition_met) {
+        if (cmd.then_file) |target| {
+            try executeGotoFile(ctx, target);
+        }
+    } else {
+        if (cmd.else_file) |target| {
+            try executeGotoFile(ctx, target);
+        }
+    }
+}
+
+fn evaluateCondition(ctx: ActionContext, cmd: macro.MacroCommand) bool {
+    // if_exists: check if selector matches any elements
+    if (cmd.if_exists) |sel| {
+        return elementExists(ctx, sel);
+    }
+
+    // if_not_exists: check if selector matches NO elements
+    if (cmd.if_not_exists) |sel| {
+        return !elementExists(ctx, sel);
+    }
+
+    // if_text: check text content of selector (uses contains field)
+    if (cmd.if_text) |sel| {
+        const text = getElementText(ctx, sel) orelse return false;
+        defer ctx.allocator.free(text);
+
+        if (cmd.contains) |pattern| {
+            return std.mem.indexOf(u8, text, pattern) != null;
+        }
+        if (cmd.text_eq) |expected| {
+            return std.mem.eql(u8, text, expected);
+        }
+        // If no comparison specified, just check if text is non-empty
+        return text.len > 0;
+    }
+
+    // if_url: check current URL against pattern (supports * wildcard)
+    if (cmd.if_url) |pattern| {
+        const current_url = getCurrentUrl(ctx) orelse return false;
+        defer ctx.allocator.free(current_url);
+        return utils.matchesGlobPattern(current_url, pattern);
+    }
+
+    // if_var: check variable value
+    if (cmd.if_var) |var_ref| {
+        const var_name = if (var_ref.len > 0 and var_ref[0] == '$')
+            var_ref[1..]
+        else
+            var_ref;
+
+        const var_val = ctx.variables.get(var_name) orelse return false;
+
+        // Check comparison fields
+        if (cmd.count_gt) |threshold| {
+            const val_int = var_val.asInt() orelse return false;
+            const thresh_int = parseIntOrVar(ctx, threshold) orelse return false;
+            return val_int > thresh_int;
+        }
+        if (cmd.count_lt) |threshold| {
+            const val_int = var_val.asInt() orelse return false;
+            const thresh_int = parseIntOrVar(ctx, threshold) orelse return false;
+            return val_int < thresh_int;
+        }
+        if (cmd.count_gte) |threshold| {
+            const val_int = var_val.asInt() orelse return false;
+            const thresh_int = parseIntOrVar(ctx, threshold) orelse return false;
+            return val_int >= thresh_int;
+        }
+        if (cmd.count_lte) |threshold| {
+            const val_int = var_val.asInt() orelse return false;
+            const thresh_int = parseIntOrVar(ctx, threshold) orelse return false;
+            return val_int <= thresh_int;
+        }
+        if (cmd.text_eq) |expected| {
+            const val_str = var_val.asString() orelse return false;
+            return std.mem.eql(u8, val_str, expected);
+        }
+        if (cmd.text_neq) |expected| {
+            const val_str = var_val.asString() orelse return false;
+            return !std.mem.eql(u8, val_str, expected);
+        }
+
+        // Default: check if variable exists and is truthy
+        return switch (var_val) {
+            .int => |i| i != 0,
+            .string => |s| s.len > 0,
+            .array, .object => true,
+        };
+    }
+
+    return false;
+}
+
+fn elementExists(ctx: ActionContext, selector: []const u8) bool {
+    const escaped_sel = utils.escapeForJs(ctx.allocator, selector) catch return false;
+    defer ctx.allocator.free(escaped_sel);
+
+    const js = std.fmt.allocPrint(ctx.allocator, "document.querySelector('{s}') !== null", .{escaped_sel}) catch return false;
+    defer ctx.allocator.free(js);
+
+    var runtime = cdp.Runtime.init(ctx.session);
+    var result = runtime.evaluate(ctx.allocator, js, .{ .return_by_value = true }) catch return false;
+    defer result.deinit(ctx.allocator);
+
+    return result.asBool() orelse false;
+}
+
+fn getElementText(ctx: ActionContext, selector: []const u8) ?[]const u8 {
+    const escaped_sel = utils.escapeForJs(ctx.allocator, selector) catch return null;
+    defer ctx.allocator.free(escaped_sel);
+
+    const js = std.fmt.allocPrint(ctx.allocator, "document.querySelector('{s}')?.textContent?.trim()||''", .{escaped_sel}) catch return null;
+    defer ctx.allocator.free(js);
+
+    var runtime = cdp.Runtime.init(ctx.session);
+    var result = runtime.evaluate(ctx.allocator, js, .{ .return_by_value = true }) catch return null;
+    defer result.deinit(ctx.allocator);
+
+    if (result.asString()) |str| {
+        return ctx.allocator.dupe(u8, str) catch null;
+    }
+    return null;
+}
+
+fn getCurrentUrl(ctx: ActionContext) ?[]const u8 {
+    var runtime = cdp.Runtime.init(ctx.session);
+    var result = runtime.evaluate(ctx.allocator, "window.location.href", .{ .return_by_value = true }) catch return null;
+    defer result.deinit(ctx.allocator);
+
+    if (result.asString()) |str| {
+        return ctx.allocator.dupe(u8, str) catch null;
+    }
+    return null;
+}
+
+fn parseIntOrVar(ctx: ActionContext, value: []const u8) ?i64 {
+    // If starts with $, look up variable
+    if (value.len > 0 and value[0] == '$') {
+        const var_name = value[1..];
+        const var_val = ctx.variables.get(var_name) orelse return null;
+        return var_val.asInt();
+    }
+    // Otherwise parse as integer
+    return std.fmt.parseInt(i64, value, 10) catch null;
+}
+
+fn executeGotoFile(ctx: ActionContext, target_file: []const u8) anyerror!void {
+    const executor = @import("executor.zig");
+
+    // Resolve target file path relative to macro file's directory
+    const resolved_path = blk: {
+        const macro_dir = std.fs.path.dirname(ctx.macro_file);
+        if (macro_dir) |dir| {
+            const joined = std.fs.path.join(ctx.allocator, &.{ dir, target_file }) catch break :blk target_file;
+            const test_dir = std.Io.Dir.cwd();
+            var test_buf: [1]u8 = undefined;
+            if (test_dir.readFile(ctx.io, joined, &test_buf)) |_| {
+                break :blk joined;
+            } else |_| {
+                ctx.allocator.free(joined);
+                break :blk target_file;
+            }
+        }
+        break :blk target_file;
+    };
+    defer if (resolved_path.ptr != target_file.ptr) ctx.allocator.free(resolved_path);
+
+    // Check for circular include
+    for (ctx.call_stack.items) |stack_file| {
+        if (std.mem.eql(u8, stack_file, resolved_path)) {
+            std.debug.print("    Error: circular include detected: {s}\n", .{resolved_path});
+            std.debug.print("    Call stack: ", .{});
+            for (ctx.call_stack.items, 0..) |sf, i| {
+                if (i > 0) std.debug.print(" -> ", .{});
+                std.debug.print("{s}", .{sf});
+            }
+            std.debug.print(" -> {s}\n", .{resolved_path});
+            return error.CircularInclude;
+        }
+    }
+
+    std.debug.print("    -> {s}\n", .{resolved_path});
+
+    var nested_options = ctx.options;
+    nested_options.video_orch = ctx.video_orch;
+    nested_options.resume_mode = false;
+    nested_options.start_index = null;
+    nested_options.variables = ctx.variables;
+    nested_options.call_stack = ctx.call_stack;
+
+    executor.replayCommandsWithOptions(ctx.session, ctx.allocator, ctx.io, resolved_path, nested_options) catch |err| {
+        switch (err) {
+            error.MarkSuccess, error.MarkFailed, error.MarkSkipped => return err,
+            else => {
+                std.debug.print("    Error replaying {s}: {}\n", .{ resolved_path, err });
+                return err;
+            },
+        }
+    };
+}
+
+fn executeRepeat(ctx: ActionContext, cmd: macro.MacroCommand) anyerror!void {
+    const target_file = cmd.file orelse {
+        std.debug.print("    Error: repeat requires file field\n", .{});
+        return;
+    };
+
+    // Get iteration count from repeat_count or repeat_count_var
+    const count: u32 = blk: {
+        if (cmd.repeat_count) |c| break :blk c;
+        if (cmd.repeat_count_var) |var_ref| {
+            const var_name = if (var_ref.len > 0 and var_ref[0] == '$')
+                var_ref[1..]
+            else
+                var_ref;
+            const var_val = ctx.variables.get(var_name) orelse {
+                std.debug.print("    Error: variable '{s}' not found\n", .{var_name});
+                return;
+            };
+            const int_val = var_val.asInt() orelse {
+                std.debug.print("    Error: variable '{s}' is not an integer\n", .{var_name});
+                return;
+            };
+            if (int_val < 0) {
+                std.debug.print("    Error: repeat count cannot be negative\n", .{});
+                return;
+            }
+            break :blk @intCast(int_val);
+        }
+        std.debug.print("    Error: repeat requires repeat_count or repeat_count_var\n", .{});
+        return;
+    };
+
+    std.debug.print(" {} iterations\n", .{count});
+
+    const max_iter = cmd.max_iterations orelse count;
+    const actual_count = @min(count, max_iter);
+
+    var idx: u32 = 0;
+    while (idx < actual_count) : (idx += 1) {
+        // Set loop index variables
+        setLoopIndexVars(ctx, idx);
+
+        std.debug.print("  [repeat {}/{}]\n", .{ idx + 1, count });
+
+        // Check break conditions
+        if (cmd.break_if_exists) |sel| {
+            if (elementExists(ctx, sel)) {
+                std.debug.print("  repeat stopped: break_if_exists matched\n", .{});
+                break;
+            }
+        }
+        if (cmd.break_if_not_exists) |sel| {
+            if (!elementExists(ctx, sel)) {
+                std.debug.print("  repeat stopped: break_if_not_exists matched\n", .{});
+                break;
+            }
+        }
+
+        executeGotoFile(ctx, target_file) catch |err| {
+            switch (err) {
+                error.MarkSuccess => continue,
+                error.MarkSkipped => continue,
+                error.MarkFailed => {
+                    std.debug.print("  repeat stopped due to mark failed\n", .{});
+                    break;
+                },
+                else => {
+                    std.debug.print("    Error in repeat iteration {}: {}\n", .{ idx + 1, err });
+                    break;
+                },
+            }
+        };
+    }
+
+    // Clean up loop index variables
+    cleanupLoopIndexVars(ctx);
+    std.debug.print("  repeat complete: {} iterations\n", .{idx});
+}
+
+fn setLoopIndexVars(ctx: ActionContext, idx: u32) void {
+    // Set $_index (0-based) and $_iteration (1-based)
+    const index_key = ctx.allocator.dupe(u8, "_index") catch return;
+    const iter_key = ctx.allocator.dupe(u8, "_iteration") catch {
+        ctx.allocator.free(index_key);
+        return;
+    };
+
+    // Remove old values if exist
+    if (ctx.variables.fetchRemove(index_key)) |old| {
+        ctx.allocator.free(old.key);
+        var old_val = old.value;
+        old_val.deinit(ctx.allocator);
+    }
+    if (ctx.variables.fetchRemove(iter_key)) |old| {
+        ctx.allocator.free(old.key);
+        var old_val = old.value;
+        old_val.deinit(ctx.allocator);
+    }
+
+    ctx.variables.put(index_key, .{ .int = @intCast(idx) }) catch {
+        ctx.allocator.free(index_key);
+        ctx.allocator.free(iter_key);
+        return;
+    };
+    ctx.variables.put(iter_key, .{ .int = @intCast(idx + 1) }) catch {
+        ctx.allocator.free(iter_key);
+        return;
+    };
+}
+
+fn cleanupLoopIndexVars(ctx: ActionContext) void {
+    if (ctx.variables.fetchRemove("_index")) |old| {
+        ctx.allocator.free(old.key);
+        var old_val = old.value;
+        old_val.deinit(ctx.allocator);
+    }
+    if (ctx.variables.fetchRemove("_iteration")) |old| {
+        ctx.allocator.free(old.key);
+        var old_val = old.value;
+        old_val.deinit(ctx.allocator);
     }
 }

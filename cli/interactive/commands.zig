@@ -29,7 +29,7 @@ pub fn requireSession(state: *InteractiveState) !*cdp.Session {
 fn buildCtx(state: *InteractiveState, args: []const []const u8) !impl.CommandCtx {
     // Free allocations from the previous command's buildCtx call
     state.freePendingFlags();
-    var flags = try flags_mod.parseCommandFlags(state.allocator, args);
+    const flags = try flags_mod.parseCommandFlags(state.allocator, args);
     // Store flags for deferred cleanup (freed at next buildCtx or state.deinit)
     state._pending_flags = flags;
     return .{
